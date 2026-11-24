@@ -3,21 +3,23 @@
 //   words -> a plan -> the answers still open -> look for an install -> every row as the provider settles it -> wait for it to answer -> what it came to
 //
 // A dry run goes the same way and changes nothing. Nothing is kept on this computer, and the token is in no line and no value.
+// A provider that needs one more answer once it has read the account says so before it makes anything: the answer is asked for, and the run starts again.
 
-import type { Found, Installed, Run, Startable, Whole } from "../../../../core/src/install/installer";
+import type { Found, Installed, Run, Startable, Unanswered, Whole } from "../../../../core/src/install/installer";
 import { exitCode } from "../../commands/exit-codes";
 import { logIn } from "../../commands/install/login";
 import { publishWays } from "../../commands/install/publish-ways";
 import { problemLines } from "../../commands/problems";
 import type { Io } from "../../commands/records";
 import { installAnswers } from "./answers";
-import { lookFor, STOPPED, settle } from "../ask";
+import { askWhere, lookFor, STOPPED, settle } from "../ask";
 import { showLine } from "../../commands/text";
 import { runCommand, type Show, stopped } from "../ends";
 import { installHelp } from "./help";
 import { parseInstall } from "./parse";
 import type { Careful, InstallEnds, InstallRequest, Next, Plan, Provider, Stop } from "../records";
 import { carefulOf, carried, changesIn, dryRunLines, type FollowUp, followed, heldStop, letInNext, NEXT, optionalLines, placeOf, REFUSED_AS, refusedWords, repairAfter, rowWording, leftOutLines, runLines, runValue, UNCHANGED, unusedLine } from "../report";
+import { lacking, missingOf } from "../words";
 
 /** What the look for an install is called while it runs. */
 const LOOKING = "Checking the account for an install";
@@ -31,8 +33,8 @@ const FOUND_WORDS: Readonly<Partial<Record<Found<unknown, unknown>["state"], str
 /** The command as it is typed after `poplin`, what runs it again, and the careful choice it takes. `--adopt` is none: it is a consent, given anew as a removal's proof is, and a line without it changes nothing. */
 const COMMAND = { name: "install", again: NEXT.install, careful: ["--dry-run"] } as const;
 
-/** What follows the name of a run that named no release: it went on with a program that was there, and uploaded none. */
-const UNCHECKED = "Its code predates this run and was not checked against a release";
+/** What follows the name of an install whose program states no release. Its own update is named with its address, where a login of another install is refused, and promises no release: that update says what it can take. */
+const UNKNOWN_VERSION = "Its version is unknown. To update it once logged in: npx poplin update";
 
 /** What a look came to that a run goes on from, with the place the provider was last asked about. */
 interface Ground {
@@ -201,13 +203,14 @@ async function nextAfter(installed: Extract<Installed, { readonly ok: true }>, g
 /**
  * Say what a run that left nothing undone is called: installed, with the note that its address gave no answer yet where it gave none.
  *
- * @param release - the version the run uploaded; `undefined` for a run that went on with code that was there
+ * @param installed - the version the install runs, which is `undefined` where its program states none, and the address of its dashboard
  * @param answers - whether the install answered at its address; `null` for a run that did not wait
  */
-function doneWords(release: string | undefined, answers: boolean | null): string {
+function doneWords(installed: Pick<Extract<Installed, { readonly ok: true }>, "release" | "address">, answers: boolean | null): string {
   const state = answers === false ? "is installed, but its URL does not respond yet" : "is installed";
+  if (installed.release !== undefined) return `poplin ${installed.release} ${state}`;
 
-  return release === undefined ? `poplin ${state}. ${UNCHECKED}.` : `poplin ${release} ${state}`;
+  return `poplin ${state}. ${[UNKNOWN_VERSION, ...(installed.address === undefined ? [] : ["--server", installed.address])].join(" ")}`;
 }
 
 /**
@@ -240,7 +243,7 @@ async function ended(installed: Extract<Installed, { readonly ok: true }>, groun
   const answers = await waited(installed, mode, ends, show);
   const value = runValue(installed, mode.mode, ground.found.state, answers, next);
   const code = exitCode({ kind: value.ok === true ? "done" : "failed" });
-  const done = doneWords(installed.release, answers);
+  const done = doneWords(installed, answers);
   const lines = mode.mode === "dry-run" ? dryRunLines(installed) : runLines(installed, answers, { done, next, again: NEXT.install(request.provider), repair });
 
   const { unused } = installed;
@@ -257,26 +260,62 @@ async function ended(installed: Extract<Installed, { readonly ok: true }>, groun
   return { code, value: { ...value, ...login } };
 }
 
+/**
+ * Get an answer of the provider's own that a run stopped for before it made anything. A person is asked, after the line that says why the answer they gave was not taken.
+ *
+ * @returns the place to run at again; or the stop of a run that asks nothing, which names the option that gives the answer, or of a person who ended the question
+ */
+async function answered(open: Unanswered<unknown>, request: InstallRequest, ends: InstallEnds, show: Show): Promise<{ readonly where: unknown } | Stop> {
+  const { question, refused } = open;
+  if (request.asking === "terminal") {
+    if (refused !== undefined) show.aside("warning", refused);
+
+    return (await askWhere([question], ends.screen)) ?? STOPPED;
+  }
+
+  return refused === undefined ? lacking([missingOf(question)]) : { problem: "answer_refused", exit: 1, words: `${followed(refused, `${UNCHANGED}.`)} Fix: ${question.give}` };
+}
+
+/**
+ * Work through the provider's install, each row shown as it is settled. A run that stops for an answer of the provider's own gets it, and runs again at the place the answer gave.
+ *
+ * @returns what the run came to, with the place it ran at; or the stop of a provider that gave no answer, or of an answer nobody gave
+ */
+async function installedAt(ground: Ground, request: InstallRequest, ends: InstallEnds, show: Show): Promise<{ readonly installed: Extract<Installed, { readonly ok: true }>; readonly ground: Ground } | Stop> {
+  const { provider, mode } = request;
+  const doing = mode.mode === "dry-run" ? "Planning the install" : "Installing";
+  const worded = rowWording(mode.mode);
+  let { where } = ground;
+
+  for (;;) {
+    show.working(doing);
+    const installed = await provider.install(ground.found, where, request.login, mode.mode, ends.reach, (row) => {
+      const { tone, text, hang } = worded(row);
+      show.line(tone, text, hang);
+      show.working(doing);
+    });
+    if (installed.ok) return { installed, ground: { ...ground, where } };
+
+    if (installed.why === "unreachable") return { problem: "unreachable", exit: 5, words: installed.words };
+
+    const next = await answered(installed, request, ends, show);
+    if ("problem" in next) return next;
+
+    ({ where } = next);
+  }
+}
+
 /** Run a request: look, make or say what would be made, and say what it came to. */
 async function work(request: InstallRequest, io: Io, ends: InstallEnds, show: Show): Promise<number> {
   const { provider, mode } = request;
-  const ground = await look(request, ends, show);
+  const looked = await look(request, ends, show);
   const at = { command: COMMAND, careful: carefulOf(mode.mode), provider, place: placeOf(provider, request.where), run: mode.mode };
-  if ("problem" in ground) return stopped(ground, show, at);
+  if ("problem" in looked) return stopped(looked, show, at);
 
-  const doing = mode.mode === "dry-run" ? "Planning the install" : "Installing";
-  show.working(doing);
+  const ran = await installedAt(looked, request, ends, show);
+  if ("problem" in ran) return stopped(ran, show, at);
 
-  const worded = rowWording(mode.mode);
-  const installed = await provider.install(ground.found, ground.where, request.login, mode.mode, ends.reach, (row) => {
-    const { tone, text, hang } = worded(row);
-    show.line(tone, text, hang);
-    show.working(doing);
-  });
-
-  if (!installed.ok) return stopped({ problem: "unreachable", exit: 5, words: installed.words }, show, at);
-
-  const { code, value } = await ended(installed, ground, request, io, ends, show);
+  const { code, value } = await ended(ran.installed, ran.ground, request, io, ends, show);
   show.value(value);
 
   return code;

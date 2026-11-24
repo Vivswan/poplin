@@ -45,6 +45,11 @@ const PROVIDER = standIn(emptyAccount()) as Installer<unknown, unknown>;
 /** A second provider beside it, for a build that carries two. */
 const OTHER = standIn(emptyAccount(), "other") as Installer<unknown, unknown>;
 
+/** A provider's options but its one of an install alone, which the help of no other command lists. */
+function everyWork(provider: Installer<unknown, unknown>): readonly OptionRow[] {
+  return provider.options.filter((row) => row.flag !== "--alias");
+}
+
 /** Every help text poplin prints, by the line that asks for it, with the options its Options part must list where the command reads rows of them. */
 const HELPS: readonly { readonly line: string; readonly text: (look?: Look) => string; readonly options?: readonly OptionRow[] }[] = [
   { line: "poplin --help", text: (look) => helpText(undefined, look) },
@@ -52,10 +57,10 @@ const HELPS: readonly { readonly line: string; readonly text: (look?: Look) => s
   { line: "poplin install --help", text: (look) => installHelp([PROVIDER], undefined, look), options: SHARED_OPTIONS },
   { line: "poplin install stand-in --help", text: (look) => installHelp([PROVIDER], PROVIDER, look), options: [...PROVIDER.options, ...SHARED_OPTIONS] },
   { line: "poplin uninstall --help", text: (look) => uninstallHelp([PROVIDER], undefined, look), options: UNINSTALL_OPTIONS },
-  { line: "poplin uninstall stand-in --help", text: (look) => uninstallHelp([PROVIDER], PROVIDER, look), options: [...PROVIDER.options, ...UNINSTALL_OPTIONS] },
-  { line: "poplin doctor --repair --help", text: (look) => repairHelp([PROVIDER], undefined, look), options: [...PROVIDER.options, ...REPAIR_OPTIONS] },
+  { line: "poplin uninstall stand-in --help", text: (look) => uninstallHelp([PROVIDER], PROVIDER, look), options: [...everyWork(PROVIDER), ...UNINSTALL_OPTIONS] },
+  { line: "poplin doctor --repair --help", text: (look) => repairHelp([PROVIDER], undefined, look), options: [...everyWork(PROVIDER), ...REPAIR_OPTIONS] },
   { line: "poplin doctor --repair --help, two providers", text: (look) => repairHelp([PROVIDER, OTHER], undefined, look), options: REPAIR_OPTIONS },
-  { line: "poplin doctor --repair other --help", text: (look) => repairHelp([PROVIDER, OTHER], OTHER, look), options: [...OTHER.options, ...REPAIR_OPTIONS] },
+  { line: "poplin doctor --repair other --help", text: (look) => repairHelp([PROVIDER, OTHER], OTHER, look), options: [...everyWork(OTHER), ...REPAIR_OPTIONS] },
 ];
 
 /** The rows of a help text, each with the title of its part: a line that goes on under a description is no row. */

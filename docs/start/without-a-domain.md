@@ -32,7 +32,7 @@ you get:   https://poplin.your-name.workers.dev                               yo
 | junk traffic                  | stopped by Cloudflare's rules first      | no rule runs first: the Worker's own limits per visitor and per site count every request |
 | the `block_bots` setting      | blocks AI crawlers on the domain         | does nothing: it needs a domain                               |
 | the account token             | ten permissions, account and domain      | six permissions, account alone                                |
-| what you need                 | a domain that is Active on the account   | the account's `workers.dev` subdomain, of 36 characters at most |
+| what you need                 | a domain that is Active on the account   | nothing more: the command makes the account's `workers.dev` subdomain where it has none |
 
 ## The steps
 
@@ -40,15 +40,15 @@ The five steps of [Install](install.md), each with what differs here:
 
 | Step of Install                  | Here                                                                  |
 | -------------------------------- | --------------------------------------------------------------------- |
-| 1. Switch on what no command can | all three rows of its table, the account's subdomain included        |
-| 2. Run the command               | press Enter at the first question, or add `--no-domain`              |
+| 1. Switch on what no command can | both rows of its table                                                |
+| 2. Run the command               | press Enter at the first question, or add `--no-domain`. On a new account, [the name you give its subdomain](#the-command) is in every address |
 | 3. Make the account token        | [the other link, and six permissions](#the-account-token)            |
 | 4. Read what it made             | [forwarders in place of records and routes](#what-it-prints)         |
 | 5. Log this machine in          | the same question and the same page, at [your own address](#log-in)  |
 
 ## What you need
 
-The table of [Install](install.md#what-you-need), without the row of the domain. The account's subdomain is the `your-name` of every address above.
+The table of [Install](install.md#what-you-need), without the row of the domain. The account's subdomain is the `your-name` of every address above. An account that has one keeps it, and the install is refused where it has more than 36 characters: [When the install stops](../fix/an-install-step-fails.md#before-any-change) has that line.
 
 ## The command
 
@@ -63,6 +63,14 @@ Or give the answer as an option, and the question is not asked:
 ```sh
 npx poplin install cloudflare --no-domain
 ```
+
+**On an account that has no subdomain yet**, as a new account has none, the command asks for its name after the token, and makes it first:
+
+```text
+workers.dev subdomain (this account has none; every address of the install is under it):
+```
+
+Type the word you want as `your-name`, by [the rule of Install](install.md#2-run-the-command). `--subdomain your-name` answers it on the line.
 
 ## The account token
 
@@ -124,6 +132,7 @@ To take it at once, add `--all-permissions` to the install's line: the command l
 
 ```text
 This account has no install
+created    Account subdomain     your-name.workers.dev
 created    R2 bucket             poplin-sites
 created    D1 database           poplin
 created    Worker                poplin, runs 0.1.0
@@ -142,7 +151,7 @@ The account token was not stored
 Log this machine in now?
 ```
 
-The sample shows a few of the rows. Two pieces are of this kind alone:
+The sample shows a few of the rows, on a new account: one that had its subdomain says `unchanged` in the first. Two pieces are of this kind alone:
 
 | Piece          | It is                                                                                   |
 | -------------- | --------------------------------------------------------------------------------------- |

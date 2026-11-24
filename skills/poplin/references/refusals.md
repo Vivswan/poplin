@@ -44,6 +44,7 @@ Three commands work with the user's account token: `npx poplin install cloudflar
 | `blocked`                | the user must act first, as its list says                  | the table of blocks in [`setup.md`](setup.md)                     |
 | `token_refused`          | Cloudflare refused the token, or it shows no such account  | the user makes the token again, for the right account             |
 | `no_domain`              | the token shows no active domain of that name              | check the domain with the user, and the token's Zone Resources    |
+| `answer_refused`         | Cloudflare did not take an answer of the line: a `workers.dev` subdomain that is taken. Nothing was changed | ask the user for another name, and give it with `--subdomain` |
 | `unreachable`, `crashed` | no answer, or a failure with no word for it                | run it again in a minute                                          |
 | `no_install`             | the repair or the removal found no install in the account; or a removal with `--keep-data` found kept data alone | tell the user what its sentence says: a token of another account, or kept data that a removal without `--keep-data` removes |
 | `other_place`            | the install is of another place than the line named; for the install and the removal, also one started and not finished | give `--domain` and its domain, or `--no-domain`, as the sentence says |

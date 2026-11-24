@@ -1,8 +1,9 @@
 // The Tokens tab of Access: the list of tokens keeps its columns when the removed tokens under it are opened, and Enter in a review's field does what Approve does.
+// And the pointer over a control: which control shows the hand, and which does not.
 
 import { expect, type Page } from "@playwright/test";
 
-import { FIRST_LOAD_MS, test } from "./visit";
+import { FIRST_LOAD_MS, test, toSection } from "./visit";
 
 /** The screens the tables are walked on: the widest, and the narrowest a table fits. */
 const SCREENS = [
@@ -67,4 +68,31 @@ test("Enter in the field of a review's code does what Approve does", async ({ pa
   // The server answered the code, which only Approve sends: its refusal stands at the field, and the review stays for the next try.
   await expect(review.getByRole("alert")).toHaveText(WRONG.refusal);
   await expect(field).toBeFocused();
+});
+
+// Drift: the CSS framework leaves a button with the arrow, so the pointer stayed an arrow over the tabs Users and Tokens of Access.
+test("the pointer is a hand over a tab, a button, a line of a menu, and a switch, and not over a button that is off, a field, or the grip of a column", async ({ page }) => {
+  await page.goto("tokens/list");
+  const review = page.getByRole("dialog", { name: "Approve this login?", exact: true });
+  const opensReview = page.getByRole("button", { name: "Review", exact: true }).filter({ visible: true }).first();
+  await expect(opensReview).toBeVisible({ timeout: FIRST_LOAD_MS });
+
+  await expect(page.getByRole("tab", { name: "Users", exact: true })).toHaveCSS("cursor", "pointer");
+  await expect(opensReview).toHaveCSS("cursor", "pointer");
+
+  await page.getByRole("button", { name: /^More for / }).first().click();
+  await expect(page.getByRole("menuitem", { name: "Revoke", exact: true })).toHaveCSS("cursor", "pointer");
+  await page.keyboard.press("Escape");
+
+  // Approve is off until the code is typed. Browsers differ in the pointer they give a button that is off and a field, so only the hand is ruled out.
+  await opensReview.click();
+  await expect(review.getByRole("button", { name: "Approve", exact: true })).not.toHaveCSS("cursor", "pointer");
+  await expect(review.getByRole("textbox", { name: "Code from your terminal", exact: true })).not.toHaveCSS("cursor", "pointer");
+  await page.keyboard.press("Escape");
+
+  await toSection(page, "Settings");
+  await expect(page.getByRole("switch", { name: "Keep logs", exact: true })).toHaveCSS("cursor", "pointer");
+
+  await toSection(page, "Sites");
+  await expect(page.getByRole("button", { name: /^Move the .+ column$/ }).first()).toHaveCSS("cursor", "grab");
 });

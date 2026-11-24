@@ -80,6 +80,7 @@ type Mending = { readonly mend: "nothing" | "something" } | { readonly mend: "un
  * Why a command stopped before its work was done. `exit` is the command's exit code.
  *
  * `usage` is a line written wrong, and `missing_answer` a run that asks nothing and lacks one. The rest are what the provider's account holds, or that it gave no answer.
+ * `answer_refused` is an answer the line gave that the provider did not take once it looked at the account, in a run that asks nothing.
  * `no_install`, `other_place`, `not_confirmed`, and `changed` are a removal's: nothing to remove, an install of another place than the one named, a typed name that is not the install's, and an account that changed since the look.
  * A repair has `no_install`, `other_place`, and `changed` too, and an install that is `unfinished`, or whose records are of `another_version` of the product.
  * A stop carries `next` where what goes on from it is another command than the one that stopped; from every other stop, the same command goes on.
@@ -93,7 +94,7 @@ export type Stop =
   | { readonly problem: "leftover"; readonly exit: 1; readonly words: string; readonly address: string }
   | { readonly problem: "name_held"; readonly exit: 1; readonly words: string; readonly address: string; readonly next: Next }
   | { readonly problem: "blocked"; readonly exit: 1; readonly blocked: readonly Blocked[] }
-  | { readonly problem: "token_refused" | "no_domain" | "stopped" | "crashed" | "other_place" | "not_confirmed" | "changed"; readonly exit: 1; readonly words: string }
+  | { readonly problem: "token_refused" | "no_domain" | "answer_refused" | "stopped" | "crashed" | "other_place" | "not_confirmed" | "changed"; readonly exit: 1; readonly words: string }
   | { readonly problem: "unreachable"; readonly exit: 5; readonly words: string };
 
 /**

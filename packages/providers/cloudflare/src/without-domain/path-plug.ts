@@ -10,10 +10,10 @@
 import type { DomainPlug, DomainReading, ReadSettings } from "@poplin/app/src/console/domain/records";
 import { parseLogins } from "@poplin/core/src/auth/logins";
 import { alertAddresses } from "@poplin/core/src/records/settings";
-import { BaseSubdomains } from "cloudflare/resources/workers/subdomains";
 import type { KeptKey } from "../shared/install/key/kept-key";
 import type { AccountAddresses } from "./address-layout";
-import { type Connection, callCloudflare } from "../shared/install/client";
+import type { Connection } from "../shared/install/client";
+import { readFreeAddress } from "../shared/install/pieces/free-address/free-address";
 import { syncForwarders } from "./pieces/forwarders/forwarders";
 import { syncJobs } from "../shared/install/pieces/jobs/jobs";
 import type { Mode } from "../shared/install/sync";
@@ -50,19 +50,27 @@ type PathParts = Known & {
 };
 
 /**
- * Prove that the account is the one the install answers under: the install's own, or for an install with nothing set the one the token was found in.
+ * Prove that the account is the one the install answers under.
+ *
+ * An install with nothing set has nothing to prove yet: it goes to the account its token was found in, under the free address the install read there, or makes there.
  *
  * @returns the account's id where its free address is the install's; a token that may not read it, and an account with another free address or none, are refused alike
  */
 async function findAccount(parts: PathParts, connection: Connection): Promise<string | DomainReading> {
-  const known = parts.first === undefined ? parts.accountId : parts.first.accountId;
-  const address = await callCloudflare(connection, (api) => new BaseSubdomains(api).get({ account_id: known }));
-  if (address.ok && address.value.subdomain === parts.layout.account) return known;
+  if (parts.first !== undefined) return parts.first.accountId;
+
+  const { accountId } = parts;
+  const address = await readFreeAddress(connection, accountId);
+  if (address.ok && address.value === parts.layout.account) return accountId;
 
   return address.ok || address.failure === "refused" ? REFUSED : UNREACHABLE;
 }
 
-/** Prove a token: one that is malformed, refused, or shows no account whose free address is the install's gets its refusal, and nothing of the install is read with it. */
+/**
+ * Prove a token: one that is malformed, refused, or shows no account whose free address is the install's gets its refusal, and nothing of the install is read with it.
+ *
+ * Where an install is being made, only the token's form is checked here: `findAccount` reads nothing for it.
+ */
 async function prove(parts: PathParts, token: string): Promise<{ readonly connection: Connection; readonly placed: Placed } | DomainReading> {
   if (!TOKEN.test(token)) return REFUSED;
 
@@ -151,8 +159,9 @@ export async function givePathKey(parts: Extract<PathParts, { readonly accountId
 /**
  * Build the plug of an install without a domain on Cloudflare.
  *
- * @returns a plug whose `check` sends no change. Both refuse, alike and before reading anything, a token that is malformed, that Cloudflare refuses, or that does not show the install's free address as the one of `accountId`.
- * With no `accountId` the account is the one `first` names. The settings are read only after that.
+ * @returns a plug whose `check` sends no change.
+ * For an install that stands, both refuse, alike and before reading anything of the install, a token that is malformed, that Cloudflare refuses, or that does not show the install's free address as the one of `accountId`.
+ * With no `accountId` the account is the one `first` names, where an install is being made: its token found that account, so only the token's form is checked there. The settings are read only after that.
  * With `kept` the plug has `ownCheck`, which reads the same pieces with that key and no token
  */
 export function createPathPlug(parts: PathParts): DomainPlug {

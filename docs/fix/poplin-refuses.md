@@ -51,7 +51,7 @@ A run's object, and a stopped run's, names what to run next in `next`: [Install]
 
 | Problem             | Means                                                              | What to do                                                      |
 | ------------------- | ------------------------------------------------------------------ | --------------------------------------------------------------- |
-| `missing_answer`    | a run that asks nothing lacks an answer; `missing` lists each: where, user, token, account, provider, confirm | give its option or variable: [Every answer as an option](../start/install.md#every-answer-as-an-option) |
+| `missing_answer`    | a run that asks nothing lacks an answer; `missing` lists each: where, user, token, account, subdomain, provider, confirm | give its option or variable: [Every answer as an option](../start/install.md#every-answer-as-an-option) |
 | `usage`             | the line is written wrong; `words` says how                        | the command's own help: `npx poplin install --help`             |
 | `already_installed` | the account holds an install; `found` has its version, its address, and in `mend` whether it needs mending | nothing was changed: run what `next` names, the login for `mend` nothing, and for the rest the repair as `next.command` writes it |
 | `leftover`          | a bucket or a database named like poplin's, and no install         | run again with `--adopt` to use it; or delete it at `address`    |
@@ -59,6 +59,7 @@ A run's object, and a stopped run's, names what to run next in `next`: [Install]
 | `blocked`           | a person must act first; `blocked` lists what, with the address to open | the table below                                            |
 | `token_refused`     | Cloudflare refused the token, or it shows no such account          | make the token again, for the account the install goes to       |
 | `no_domain`         | the token shows no active domain of that name                      | correct `--domain`, or the token's Zone Resources               |
+| `answer_refused`    | Cloudflare did not take an answer the line gave, in a run that asks nothing: a `workers.dev` subdomain that is taken. Nothing was changed; `words` says which | give another with the option `words` names: `--subdomain` |
 | `no_provider`       | this build of poplin carries no provider to install at             | run the published package: `npx poplin install`                 |
 | `unreachable`       | Cloudflare or poplin's website gave no answer                      | run it again in a minute                                        |
 | `stopped`, `crashed` | the command was stopped, or failed with no word for it            | run it again                                                    |
@@ -83,7 +84,7 @@ Each entry of `blocked` names what blocks in `what`:
 | `storage_off`   | R2 is not switched on, or the token may not use it              | switch R2 on; check the token has Workers R2 Storage: Edit       |
 | `login_off`     | Zero Trust is not switched on: nobody could log in              | pick the Free plan at `address`, before the run                  |
 | `right_lacking` | the token lacks the permission in `right`                       | [add it to the token](an-install-step-fails.md#add-a-permission-to-the-token) |
-| `no_address`    | without a domain: the account has no `workers.dev` subdomain, or one of more than 36 characters | set one of 36 characters at most, under Workers & Pages |
+| `no_address`    | without a domain: the account's own `workers.dev` subdomain has more than 36 characters | [When the install stops](an-install-step-fails.md#before-any-change) has the two ways on |
 | `no_release`    | poplin's website names no version to install: its list of releases is empty for the moment | run it again in a few minutes |
 | `newer_release` | the newest version needs a newer command                        | `npx poplin@latest install cloudflare`                           |
 | `bad_release`   | the release's files are not the ones poplin's website names; nothing was uploaded | run it again; if it comes back, [report it](https://github.com/Vivswan/poplin/issues) |

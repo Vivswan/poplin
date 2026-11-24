@@ -5,17 +5,24 @@ import { join } from "node:path";
 import { parseCommand } from "../packages/cli/src/commands/line/parse-command";
 import { publishedPins } from "../packages/core/src/records/release";
 import { publishedRelease } from "../packages/core/src/records/update";
+import { SKILL_LINE } from "../website/src/lib/agents";
 import { newestRelease } from "../website/src/lib/changelog";
 import { demoEntry } from "../website/src/lib/demo";
 import { INSTALLS } from "../website/src/lib/installs";
 import { SETUP_PROMPT } from "../website/src/lib/prompt";
 import { providerRefusal } from "./support/install-words";
+import { readPage } from "./support/markdown-page";
 
 const ROOT = join(import.meta.dir, "..");
 
 const NOW = Date.UTC(2026, 0, 1);
 
-const PROMPT_PAGES = ["README.md", "docs/start/with-an-agent.md", "skills/poplin/README.md"];
+const COPY_PAGES = ["README.md", "docs/start/with-an-agent.md", "skills/poplin/README.md"];
+
+const COPIED: readonly (readonly [what: string, line: string])[] = [
+  ["the sentence to paste into an agent", SETUP_PROMPT],
+  ["the line that installs the skill", SKILL_LINE],
+];
 
 const WEBSITE = join(ROOT, "website");
 
@@ -260,9 +267,11 @@ describe("the built website", () => {
   }, 120_000);
 });
 
-describe("the sentence to paste into an agent", () => {
-  test.each(PROMPT_PAGES)("is on %s in the website's own words: without this a person copies one wording from the site and reads another on the page", (page) => {
-    expect(readFileSync(join(ROOT, page), "utf8").split("\n")).toContain(SETUP_PROMPT);
+describe.each(COPIED)("%s", (_what, line) => {
+  test.each(COPY_PAGES)("is on %s in the website's own words, alone in a block a person copies: without this a person copies one wording from the site and reads another on the page", (page) => {
+    const blocks = readPage(readFileSync(join(ROOT, page), "utf8")).blocks.map((block) => block.text.trim());
+
+    expect(blocks).toContain(line);
   });
 });
 

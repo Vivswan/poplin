@@ -1,5 +1,6 @@
 // `poplin install cloudflare`: an install made with an account token, from a terminal, in one run.
 //
+//   the subdomain    the account's own name at workers.dev, read first: left, or made in an account that has none, under the name a person gives
 //   the release      releases.json at the project's website, then the release's files, each digest checked
 //   the bucket       made, or left
 //   the database     made, or left
@@ -10,12 +11,13 @@
 // A dry run reads the same things and sends no change, so its rows are the rows of the run after it: the same objects, in the same order.
 // Every piece reads before it writes, so a run that stopped is run again and goes on from what stands.
 // This file asks nothing and prints nothing: the command asks the questions it declares, and words the rows it answers.
+// A run on an account with no subdomain that was given no name for one makes nothing, and answers the question for it.
 
 import type { Login } from "@poplin/core/src/auth/logins";
-import type { Blocked, Given, Installed, Installer, OptionRow, Question, Reach, Read, Row, Run, Startable, Step, Token } from "@poplin/core/src/install/installer";
+import type { Blocked, Given, Installed, Installer, OptionRow, Question, Reach, Read, Row, Run, Startable, Step, Token, Unanswered } from "@poplin/core/src/install/installer";
+import { isAbove } from "@poplin/core/src/records/release";
 import { defaultSettings, type SettingValues } from "@poplin/core/src/records/settings";
 import { BaseSubdomain } from "cloudflare/resources/workers/scripts/subdomain";
-import { BaseSubdomains } from "cloudflare/resources/workers/subdomains";
 import { homepage } from "../../../../../../cli/package.json";
 import { newestRelease, type Release } from "../../release/update/newest-release";
 import { putCrons, putFirst, readCrons } from "../../release/update/upload";
@@ -23,6 +25,7 @@ import { type AccountAddresses, parseAccountAddresses } from "../../../without-d
 import { syncBucket } from "../pieces/bucket/bucket";
 import { type CloudflareFailure, type CloudflareResult, callCloudflare } from "../client";
 import { holderWords, readHolder, syncDatabase } from "../pieces/database/database";
+import { makeFreeAddress, readFreeAddress, SUBDOMAIN_ROW } from "../pieces/free-address/free-address";
 import { BY_NAME, INSTALL_OBJECTS } from "../install-objects";
 import { type DomainLayout, parseDomainLayout } from "../../../with-domain/layout";
 import { createPathPlug } from "../../../without-domain/path-plug";
@@ -33,6 +36,7 @@ import { removeInstall } from "../upkeep/remove/remove";
 import { placeBinding } from "../kind/started-place";
 import { failureWords, LACKS, lackingOf, rowOf, UNDONE } from "./rows";
 import { repair } from "../upkeep/repair/repair";
+import { NEWEST_POPLIN } from "../upkeep/repair/release";
 import { readStored, type Untaken } from "../upkeep/repair/settings";
 
 /** The name of the install's Worker. */
@@ -44,11 +48,15 @@ const NO_DOMAIN = "none";
 /** An account's id, as Cloudflare writes it. */
 const ACCOUNT_ID = /^[0-9a-f]{32}$/;
 
+/** What the account's free address is called in a question and in a sentence. */
+const SUBDOMAIN = "workers.dev subdomain";
+
 /** The provider's own options. */
 const OPTIONS: readonly OptionRow[] = [
   { flag: "--domain", value: "<name>", about: "Custom domain, with an Active zone on the account", variable: "POPLIN_DOMAIN" },
   { flag: "--no-domain", value: null, about: "Use the account's workers.dev subdomain", variable: `POPLIN_DOMAIN=${NO_DOMAIN}` },
   { flag: "--account", value: "<id>", about: "Account id, if the token can access several accounts", variable: "POPLIN_ACCOUNT" },
+  { flag: "--subdomain", value: "<name>", about: "New workers.dev subdomain, if the account has none", variable: "POPLIN_SUBDOMAIN", work: "install" },
 ];
 
 /** What a line of the run says, where no row of a piece's own says it. */
@@ -57,14 +65,20 @@ const WORDS = {
   noName: "--domain requires a domain name, such as example.com",
   account: "--account requires an account id: 32 lowercase hex characters",
   domain: { "bad-domain": "is not a domain name", "domain-too-long": "is too long: a login hostname under it exceeds 63 characters", "bad-public-word": "is not a domain name" },
+  noSubdomain: `A ${SUBDOMAIN} needs a name, such as your-name`,
+  badSubdomain: `is not a ${SUBDOMAIN}: use at most 36 letters, digits, and hyphens, with no hyphen first or last`,
+  asks: { domain: "this account has none; Cloudflare requires one, and no address of the install uses it", "no-domain": "this account has none; every address of the install is under it" },
+  taken: "is taken. Choose another name.",
   noRelease: "The project website lists no release. Rerun in a few minutes.",
   badRelease: "The release files failed validation. Nothing was uploaded.",
   newerRelease: "This release requires a newer CLI: npx poplin@latest install",
-  noAddress: "This account has no workers.dev subdomain, or one too long for the login hostname. Set it under Workers & Pages in the Cloudflare dashboard.",
+  noAddress: `This account's ${SUBDOMAIN} is too long for the login hostname: it can have 36 characters at most. Change it under Workers & Pages in the Cloudflare dashboard.`,
   lacks: LACKS,
   refusedLater: "Cloudflare refused the account token before the install finished",
   notUsed: "not reused, but an install needs a database with this name",
-  unchecked: "its code predates this run and was not checked against a release",
+  unknown: "version unknown",
+  out: "is available: once the install is complete,",
+  deploys: "deploys it",
   allowance: "the D1 free daily quota is exhausted",
   unreadUsers: "its schema does not match this CLI, so its users were not read and --user is used",
 } as const;
@@ -94,6 +108,22 @@ const USERS = new Intl.ListFormat("en", { style: "long", type: "conjunction" });
 /** Where the install answers, with its checked addresses. */
 type Target = { readonly kind: "domain"; readonly layout: DomainLayout } | { readonly kind: "no-domain"; readonly layout: AccountAddresses };
 
+/** What a person said of the account, beside where the install goes. */
+type Said = Pick<Where, "account" | "subdomain">;
+
+/** The account's subdomain as a run goes on with it: the one the account has, or with `stands` false the one a person gave, which the run makes. */
+interface FreeAddress {
+  readonly name: string;
+  readonly stands: boolean;
+}
+
+/** What a run is made from, read before it makes anything. */
+interface Ready {
+  readonly free: FreeAddress;
+  readonly target: Target;
+  readonly release: Release;
+}
+
 /** What one run gathers. `form` is the address of the token's form, where a permission is added. */
 interface Work {
   readonly mode: Mode;
@@ -116,24 +146,65 @@ interface Stood {
 }
 
 /** Read where an install goes from what a person typed for it: a domain, or the word for none. */
-function whereOf(text: string, account: string | undefined): Read<Where> {
+function whereOf(text: string, said: Said): Read<Where> {
   const typed = text.trim().toLowerCase();
-  if (typed === "" || typed === NO_DOMAIN) return { ok: true, where: { kind: "no-domain", account } };
+  if (typed === "" || typed === NO_DOMAIN) return { ok: true, where: { kind: "no-domain", ...said } };
 
   const layout = parseDomainLayout({ domain: typed });
 
-  return layout.ok ? { ok: true, where: { kind: "domain", layout: layout.value, account } } : { ok: false, why: "refused", refused: `${typed} ${WORDS.domain[layout.refusal]}` };
+  return layout.ok ? { ok: true, where: { kind: "domain", layout: layout.value, ...said } } : { ok: false, why: "refused", refused: `${typed} ${WORDS.domain[layout.refusal]}` };
 }
 
 /** The question of where the install answers, for a run that was given neither option. */
-function whichPlace(account: string | undefined): Question<Where> {
+function whichPlace(said: Said): Question<Where> {
   return {
     key: "where",
     name: "domain",
     ask: "Custom domain (Enter for workers.dev):",
     give: "pass --domain <name> or --no-domain, or set POPLIN_DOMAIN",
-    answer: (text) => whereOf(text, account),
+    answer: (text) => whereOf(text, said),
   };
+}
+
+/**
+ * Read a name a person typed for the account's subdomain, by the rule an install without a domain holds an account's name to.
+ *
+ * An install under a domain is held to it too: a name a run makes is one either kind can answer under.
+ */
+function subdomainOf(text: string): { readonly ok: true; readonly name: string } | { readonly ok: false; readonly refused: string } {
+  const name = text.trim().toLowerCase();
+  if (name === "") return { ok: false, refused: WORDS.noSubdomain };
+
+  const layout = parseAccountAddresses({ account_address: name }, SCRIPT);
+
+  return layout.ok ? { ok: true, name } : { ok: false, refused: `${name} ${WORDS.badSubdomain}` };
+}
+
+/** The question of the account's subdomain, for an account that has none and a run that was given no name: its answer is the place with that name. */
+function whichSubdomain(where: Where): Question<Where> {
+  return {
+    key: "subdomain",
+    name: `${SUBDOMAIN} (this account has none)`,
+    ask: `${SUBDOMAIN} (${WORDS.asks[where.kind]}):`,
+    give: "pass --subdomain <name> or set POPLIN_SUBDOMAIN",
+    answer: (text) => {
+      const named = subdomainOf(text);
+
+      return named.ok ? { ok: true, where: { ...where, subdomain: named.name } } : { ok: false, why: "refused", refused: named.refused };
+    },
+  };
+}
+
+/** Read the name a person gave for the account's subdomain, from its option or its variable; `undefined` where neither gave one. */
+function saidSubdomain(given: Given): string | undefined | Extract<Read<Where>, { readonly why: "refused" }> {
+  const flag = given.flags.get("subdomain");
+  const typed = flag === true ? "" : (flag ?? given.env.POPLIN_SUBDOMAIN ?? "");
+  // A variable that is set to nothing is one that was not given. An option with nothing in it is refused.
+  if (flag === undefined && typed.trim() === "") return undefined;
+
+  const named = subdomainOf(typed);
+
+  return named.ok ? named.name : { ok: false, why: "refused", refused: named.refused };
 }
 
 /** Read the provider's own options and variables, once; an option outranks its variable. */
@@ -143,13 +214,17 @@ function read(given: Given): Read<Where> {
 
   if (domain === true || domain?.trim() === "") return { ok: false, why: "refused", refused: WORDS.noName };
 
-  const named = given.flags.get("account") ?? given.env.POPLIN_ACCOUNT;
-  if (named !== undefined && (named === true || !ACCOUNT_ID.test(named))) return { ok: false, why: "refused", refused: WORDS.account };
+  const account = given.flags.get("account") ?? given.env.POPLIN_ACCOUNT;
+  if (account !== undefined && (account === true || !ACCOUNT_ID.test(account))) return { ok: false, why: "refused", refused: WORDS.account };
+
+  const subdomain = saidSubdomain(given);
+  if (typeof subdomain === "object") return subdomain;
 
   // A variable that is set to nothing is one that was not given: only Enter at the question means none.
   const typed = domain ?? (none ? NO_DOMAIN : given.env.POPLIN_DOMAIN);
+  const said = { account, subdomain };
 
-  return typed === undefined || typed.trim() === "" ? { ok: false, why: "open", open: [whichPlace(named)] } : whereOf(typed, named);
+  return typed === undefined || typed.trim() === "" ? { ok: false, why: "open", open: [whichPlace(said)] } : whereOf(typed, said);
 }
 
 /**
@@ -187,8 +262,8 @@ function note(work: Work, row: Row): boolean {
   return !UNDONE.has(row.state);
 }
 
-/** The row of a piece whose call failed: blocked where the token lacks its permission, which the row names. A piece of the Worker's needs the permission its variables need. */
-function failed(work: Work, object: "R2 bucket" | "D1 database" | "Worker" | "Cron trigger" | "workers.dev route", detail: string, failure: NotWritten): false {
+/** The row of a piece whose call failed: blocked where the token lacks its permission, which the row names. A piece of the Worker's, and the account's subdomain, need the permission the Worker's variables need. */
+function failed(work: Work, object: typeof SUBDOMAIN_ROW | "R2 bucket" | "D1 database" | "Worker" | "Cron trigger" | "workers.dev route", detail: string, failure: NotWritten): false {
   const right = rightFor(object === "R2 bucket" || object === "D1 database" ? object : "Worker variable");
   if (lacksRight(failure)) note(work, { object, state: "block", detail: `${detail}: ${WORDS.lacks} ${right}`, right });
   else note(work, { object, state: "fail", detail: `${detail}: ${whyOf(failure)}` });
@@ -234,24 +309,51 @@ function sameCrons(one: readonly string[], other: readonly string[]): boolean {
   return left.size === right.size && [...left].every((cron) => right.has(cron));
 }
 
-/** Read where the install answers: the domain's own layout, or the three hosts on the account's free address, whose name is read here. */
-async function targetOf(place: Place, where: Where, form: string): Promise<Target | Blocked | CloudflareFailure> {
-  if (where.kind === "domain") return { kind: "domain", layout: where.layout };
+/**
+ * Read the account's subdomain, which a run of either kind needs before it makes anything.
+ *
+ * @returns the one the account has, or for an account that has none the one a person gave; with neither, the question for it; or a token that may not read it, as a block
+ */
+async function freeAddressOf(place: Place, where: Where, form: string): Promise<FreeAddress | Unanswered<Where> | Blocked | CloudflareFailure> {
+  const read = await readFreeAddress(place.connection, place.accountId);
+  if (!read.ok && lacksRight(read)) {
+    const right = rightFor("Worker variable");
 
-  const address = await callCloudflare(place.connection, (api) => new BaseSubdomains(api).get({ account_id: place.accountId }));
-  if (!address.ok && lacksRight(address)) {
-    const right = rightFor("Forwarder");
-
-    return { what: "right_lacking", right, words: `Free address: ${WORDS.lacks} ${right}`, address: form };
+    return { what: "right_lacking", right, words: `${SUBDOMAIN_ROW}: ${WORDS.lacks} ${right}`, address: form };
   }
 
-  if (!address.ok) return address;
+  if (!read.ok) return read;
 
-  // An account that never set its free address answers with no name.
-  const layout = typeof address.value.subdomain === "string" && address.value.subdomain !== "" ? parseAccountAddresses({ account_address: address.value.subdomain }, SCRIPT) : undefined;
-  if (layout?.ok === true) return { kind: "no-domain", layout: layout.value };
+  if (read.value !== undefined) return { name: read.value, stands: true };
 
-  return { what: "no_address", words: WORDS.noAddress, address: `https://dash.cloudflare.com/${place.accountId}/workers-and-pages` };
+  return where.subdomain === undefined ? { ok: false, why: "answer", question: whichSubdomain(where), refused: undefined } : { name: where.subdomain, stands: false };
+}
+
+/** Where the install answers: the domain's own layout, or the three hosts under the account's subdomain. A subdomain the account has that is too long for those hosts is a block. */
+function targetOf(where: Where, free: FreeAddress, accountId: string): Target | Blocked {
+  if (where.kind === "domain") return { kind: "domain", layout: where.layout };
+
+  const layout = parseAccountAddresses({ account_address: free.name }, SCRIPT);
+  if (layout.ok) return { kind: "no-domain", layout: layout.value };
+
+  return { what: "no_address", words: WORDS.noAddress, address: `https://dash.cloudflare.com/${accountId}/workers-and-pages` };
+}
+
+/**
+ * Settle the account's subdomain, the first piece of a run: left where the account has one, made where it has none.
+ *
+ * @returns whether the run goes on; a name Cloudflare gives no account makes nothing and tells no row, and is the question for another
+ */
+async function freeAddressPiece(work: Work, free: FreeAddress, where: Where): Promise<boolean | Unanswered<Where>> {
+  const detail = `${free.name}.workers.dev`;
+  if (free.stands) return note(work, { object: SUBDOMAIN_ROW, state: "leave", detail });
+
+  const made = work.mode === "apply" ? await makeFreeAddress(work.place.connection, work.place.accountId, free.name) : ({ ok: true } as const);
+  if (made.ok) return note(work, { object: SUBDOMAIN_ROW, state: "make", detail });
+
+  if (made.failure === "taken") return { ok: false, why: "answer", question: whichSubdomain(where), refused: `${detail} ${WORDS.taken}` };
+
+  return failed(work, SUBDOMAIN_ROW, detail, made);
 }
 
 /** Fetch the newest release the project published, with every digest checked; a release there is none of is the block that says why. */
@@ -262,6 +364,22 @@ async function releaseOf(reach: Reach): Promise<Release | Blocked | "unreachable
   if (release === "no_release") return { what: release, words: WORDS.noRelease, address: homepage };
 
   return release === "newer_release" ? { what: release, words: WORDS.newerRelease, address: homepage } : { what: release, words: WORDS.badRelease, address: homepage };
+}
+
+/**
+ * What the row of a Worker that stood before the run says: the release its code states, or that it states none, which the command's last line then says what to do about.
+ *
+ * A Worker that is behind the release this run would upload is told the repair that takes it there: the newest poplin's, which places the newest release whatever its schema, at the install's place and with the run's own token.
+ *
+ * @param runs - the release the Worker's own binding states, as the look read it; `undefined` for a Worker that states none
+ * @param newest - the release this run would upload
+ */
+function stoodWorker(runs: string | undefined, newest: string, target: Target): string {
+  if (runs === undefined) return `${SCRIPT}, ${WORDS.unknown}`;
+
+  if (!isAbove(newest, runs)) return `${SCRIPT}, runs ${runs}`;
+
+  return `${SCRIPT}, runs ${runs}; ${newest} ${WORDS.out} ${[NEWEST_POPLIN.update, ...placeWords(target)].join(" ")} ${WORDS.deploys}`;
 }
 
 /** The Worker's own pieces, in order: its code, its sweep trigger, and whether its free address is switched on. Each stops the ones after it. */
@@ -282,7 +400,7 @@ async function workerPieces(work: Work, target: Target, release: Release, made: 
 
   const uploaded = await workerPiece(
     work,
-    { object: "Worker", detail: made.standing ? `${SCRIPT}: ${WORDS.unchecked}` : `${SCRIPT}, runs ${bundle.version}` },
+    { object: "Worker", detail: made.standing ? stoodWorker(work.place.runs, bundle.version, target) : `${SCRIPT}, runs ${bundle.version}` },
     made.standing ? async () => ({ ok: true, value: true }) : undefined,
     async () => {
       if (made.databaseId === undefined) return { ok: false, failure: "no-id" };
@@ -354,17 +472,33 @@ function done(work: Work, known: { readonly release?: string; readonly address?:
   return { ok: true, rows: work.rows, steps: work.steps, blocked, release: known.release, address: known.address, ready, proof: "reads", unused: known.unused };
 }
 
-/** Read what a run is made from, before it makes anything: where the install answers, and the release. A block of either ends the run with nothing changed. */
-async function prepared(work: Work, where: Where, reach: Reach): Promise<{ readonly target: Target; readonly release: Release } | Installed> {
-  const target = await targetOf(work.place, where, work.form);
-  if ("failure" in target) return UNREACHABLE;
+/**
+ * Read what a run is made from, before it makes anything: the account's subdomain, where the install answers, and the release.
+ *
+ * @returns the three; or the run's end with nothing changed: a block of any of them, or the question for a subdomain nobody named
+ */
+async function prepared(work: Work, where: Where, reach: Reach): Promise<Ready | Installed | Unanswered<Where>> {
+  const free = await freeAddressOf(work.place, where, work.form);
+  if ("failure" in free && free.failure === "network") return UNREACHABLE;
 
+  // A read Cloudflare answered and refused is a row that failed, as any other piece's: it is no missing answer of Cloudflare's.
+  if ("failure" in free) {
+    note(work, { object: SUBDOMAIN_ROW, state: "fail", detail: failureWords(free) });
+
+    return done(work, {});
+  }
+
+  if ("why" in free) return free;
+
+  if ("what" in free) return done({ ...work, blocked: [...work.blocked, free] }, {});
+
+  const target = targetOf(where, free, work.place.accountId);
   if ("what" in target) return done({ ...work, blocked: [...work.blocked, target] }, {});
 
   const release = await releaseOf(reach);
   if (release === "unreachable") return UNREACHABLE;
 
-  return "what" in release ? done({ ...work, blocked: [...work.blocked, release] }, {}) : { target, release };
+  return "what" in release ? done({ ...work, blocked: [...work.blocked, release] }, {}) : { free, target, release };
 }
 
 /** Say that the users a kept database holds were not read, and name the repair that mends the login to them, at the place of the install. */
@@ -435,16 +569,21 @@ function keptUsersRow(login: Login, kept: SettingValues | undefined): Row | unde
 }
 
 /**
- * Make what the install's own repair cannot: the bucket, the database, and the Worker with its trigger and its address. Each stops the ones after it.
+ * Make what the install's own repair cannot: the account's subdomain, the bucket, the database, and the Worker with its trigger and its address. Each stops the ones after it.
  *
- * @returns `false` once a piece stopped the run; else the settings a database that stood before the run holds, which the install is finished to
+ * @param where - the place of the run, which the question for another subdomain is asked at
+ * @returns `false` once a piece stopped the run; the question for a subdomain where the one named is taken; else the settings a database that stood before the run holds, which the install is finished to
  */
-async function madeFirst(work: Work, target: Target, release: Release, login: Login, stood: { readonly standing: boolean; readonly adopted: boolean }): Promise<false | { readonly kept: SettingValues | undefined }> {
+async function madeFirst(work: Work, ready: Ready, where: Where, login: Login, stood: { readonly standing: boolean; readonly adopted: boolean }): Promise<false | Unanswered<Where> | { readonly kept: SettingValues | undefined }> {
   const { connection, accountId } = work.place;
   const { standing } = stood;
-  // A database that is somebody else's stops the run before the bucket is made beside it. One this run makes holds nothing to read.
+  const { free, target, release } = ready;
+  // A database that is somebody else's stops the run before anything is made beside it. One this run makes holds nothing to read.
   const left = stood.adopted || standing ? await stoodDatabase(work, stood.adopted, target) : undefined;
   if (left === false) return false;
+
+  const named = await freeAddressPiece(work, free, where);
+  if (named !== true) return named;
 
   const bucket = await syncBucket(connection, accountId, work.mode);
   const taken = stood.adopted && bucket.ok && bucket.report.changedNothing;
@@ -464,7 +603,7 @@ async function madeFirst(work: Work, target: Target, release: Release, login: Lo
 }
 
 /** Make the install, or with a dry run say what a run would make. */
-async function install(found: Startable<Place>, where: Where, login: Login, run: Run, reach: Reach, say: (row: Row) => void): Promise<Installed> {
+async function install(found: Startable<Place>, where: Where, login: Login, run: Run, reach: Reach, say: (row: Row) => void): Promise<Installed | Unanswered<Where>> {
   const { tokenLink: form } = tokenFacts(where.kind === "domain" ? "domain" : "noDomain", MADE_FIRST);
   const work: Work = { mode: run === "apply" ? "apply" : "plan", place: found.place, form, rows: [], steps: [], blocked: [...found.notes], say };
   const ready = await prepared(work, where, reach);
@@ -473,9 +612,12 @@ async function install(found: Startable<Place>, where: Where, login: Login, run:
   const { target, release } = ready;
   const address = `https://${target.kind === "domain" ? target.layout.adminHostname : target.layout.adminHost}`;
   const standing = found.state === "started";
-  const known = { release: standing ? undefined : release.bundle.version, address };
-  const made = await madeFirst(work, target, release, login, { standing, adopted: found.state === "adopted" });
+  // A Worker that stood before the run goes on running the release its code states: the run uploads none.
+  const known = { release: standing ? found.place.runs : release.bundle.version, address };
+  const made = await madeFirst(work, ready, where, login, { standing, adopted: found.state === "adopted" });
   if (made === false) return done(work, known);
+
+  if ("why" in made) return made;
 
   return (await finish(work, target, login, made.kept, reach)) ? done(work, { ...known, unused: unusedLogin(login, made.kept) }) : UNREACHABLE;
 }

@@ -55,6 +55,7 @@ describe("a line that gives every answer", () => {
     ["an option joined to its value", "install stand-in --place=example.com --user=You@Example.com", { ...fixed, where: { kind: "place", name: "example.com" }, mode: apply }],
     ["the shared options before the provider", "install --user you@example.com --json stand-in --no-place", { ...fixed, json: true, where: { kind: "none" }, mode: apply }],
     ["the provider's own second option", `install stand-in ${ANSWERS} --account second`, { ...fixed, where: { kind: "none", account: "second" }, mode: apply }],
+    ["the provider's option of an install alone", `install stand-in ${ANSWERS} --alias mine`, { ...fixed, where: { kind: "none", alias: "mine" }, mode: apply }],
     ["a dry run", `install stand-in ${ANSWERS} --dry-run`, { ...fixed, where: { kind: "none" }, mode: { mode: "dry-run", adopt: "no" } }],
     ["a dry run of a run that adopts", `install stand-in ${ANSWERS} --dry-run --adopt`, { ...fixed, where: { kind: "none" }, mode: { mode: "dry-run", adopt: "yes" } }],
     ["every switch of a run", `install stand-in ${ANSWERS} --adopt --no-wait --log-in --yes`, { ...fixed, where: { kind: "none" }, mode: { mode: "apply", adopt: "yes", wait: false, login: "yes" } }],

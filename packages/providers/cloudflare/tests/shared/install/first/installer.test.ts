@@ -3,7 +3,7 @@
 
 import { describe, expect, test } from "bun:test";
 import { type Login, parseLogin } from "@poplin/core/src/auth/logins";
-import type { Found, Installed, Run, Startable, Token, TokenForm } from "@poplin/core/src/install/installer";
+import type { Found, Installed, Run, Startable, Token, TokenForm, Unanswered } from "@poplin/core/src/install/installer";
 import type { Place, Where } from "../../../../src/shared/install/first/find";
 import { installer } from "../../../../src/shared/install/first/installer";
 import { ACCOUNT, type Account, emptyAccount, KEY_VALUE_START, TOKEN } from "../support/fake-install";
@@ -39,8 +39,20 @@ const LACKING = [
 /** What the row of an alert that is left out says and carries after a run: the permission as every other optional piece's, then that the install makes its alerts by itself too. */
 const ITSELF = "needs Notifications: Edit, or wait a day: the install creates it | Notifications: Edit | alerts";
 
-/** The Worker's own pieces of a new install, which both kinds start with. */
+/** The Worker's own pieces of a new install, which both kinds make after the account's subdomain. */
 const OWN = ["R2 bucket | make | poplin-sites", "D1 database | make | poplin", `Worker | make | poplin, runs ${RELEASE}`, "Cron trigger | make | */15 * * * *"];
+
+/** A name for the subdomain of an account that has none. */
+const NAMED = "your-name";
+
+/** The call that gives an account its subdomain. */
+const NAMING = `PUT /accounts/${ACCOUNT}/workers/subdomain`;
+
+/** The call that gives the Worker its cron trigger. */
+const SCHEDULING = `PUT /accounts/${ACCOUNT}/workers/scripts/poplin/schedules`;
+
+/** What the row of a call Cloudflare refuses for the missing subdomain says, in place of its codes. */
+const SET_ONE = "this account has no workers.dev subdomain. Set one under Workers & Pages in the Cloudflare dashboard";
 
 /** The login, the variables, and the keys, which both kinds make alike; `host` and `sites` are what the login stands in front of. */
 function shared(host: string, sites: string): string[] {
@@ -62,42 +74,54 @@ function shared(host: string, sites: string): string[] {
   ];
 }
 
-/** Every row of a new install of each kind, in the order of the work. */
-const ROWS: Readonly<Record<keyof typeof KINDS, readonly string[]>> = {
-  domain: [
-    ...OWN,
-    "workers.dev route | change | disabled",
-    "Public word | leave | page (public sites answer at <name>-page.example.com)",
-    "DNS record | make | *.example.com",
-    "DNS record | make | poplin.example.com",
-    "Worker route | make | *-page.example.com/*",
-    "Worker route | make | *-poplin.example.com/*",
-    "Worker route | make | poplin.example.com/*",
-    ...shared("poplin.example.com", "*-p-poplin.example.com"),
-    "Redirect rule | make | https redirect",
-    "WAF rule | make | bots rule: also stops every method but GET and HEAD, and the paths *.php, /.env, /.env.*, /.git/, /wp-admin/, /cgi-bin/, /phpmyadmin",
-    "WAF rule | make | outside pages rule",
-    "Rate rule | make | rate rule",
-    "Bot settings | change | zone bot switches",
+/**
+ * Every row of a new install of a kind, in the order of the work.
+ *
+ * @param subdomain - the account's subdomain, and whether the run leaves it or makes it
+ */
+function rowsOf(kind: keyof typeof KINDS, subdomain: { readonly name: string; readonly state: "leave" | "make" } = { name: "example", state: "leave" }): string[] {
+  const { name, state } = subdomain;
+  const first = [`Account subdomain | ${state} | ${name}.workers.dev`, ...OWN];
+
+  if (kind === "domain")
+    return [
+      ...first,
+      "workers.dev route | change | disabled",
+      "Public word | leave | page (public sites answer at <name>-page.example.com)",
+      "DNS record | make | *.example.com",
+      "DNS record | make | poplin.example.com",
+      "Worker route | make | *-page.example.com/*",
+      "Worker route | make | *-poplin.example.com/*",
+      "Worker route | make | poplin.example.com/*",
+      ...shared("poplin.example.com", "*-p-poplin.example.com"),
+      "Redirect rule | make | https redirect",
+      "WAF rule | make | bots rule: also stops every method but GET and HEAD, and the paths *.php, /.env, /.env.*, /.git/, /wp-admin/, /cgi-bin/, /phpmyadmin",
+      "WAF rule | make | outside pages rule",
+      "Rate rule | make | rate rule",
+      "Bot settings | change | zone bot switches",
+      "Budget alert | make | poplin: usage charges reached 1 dollar",
+      "Certificate alert | make | poplin: certificates of every domain of the account",
+      "Workflow | make | poplin-jobs",
+    ];
+
+  return [
+    ...first,
+    `workers.dev route | change | enabled: poplin.${name}.workers.dev`,
+    `Forwarder | make | poplin-private: https://poplin-private.${name}.workers.dev (private sites)`,
+    `Forwarder | make | poplin-sites: https://poplin-sites.${name}.workers.dev (unlisted and public sites)`,
+    ...shared(`poplin.${name}.workers.dev`, `poplin-private.${name}.workers.dev`),
     "Budget alert | make | poplin: usage charges reached 1 dollar",
-    "Certificate alert | make | poplin: certificates of every domain of the account",
     "Workflow | make | poplin-jobs",
-  ],
-  "no-domain": [
-    ...OWN,
-    "workers.dev route | change | enabled: poplin.example.workers.dev",
-    "Forwarder | make | poplin-private: https://poplin-private.example.workers.dev (private sites)",
-    "Forwarder | make | poplin-sites: https://poplin-sites.example.workers.dev (unlisted and public sites)",
-    ...shared("poplin.example.workers.dev", "poplin-private.example.workers.dev"),
-    "Budget alert | make | poplin: usage charges reached 1 dollar",
-    "Workflow | make | poplin-jobs",
-  ],
-};
+  ];
+}
+
+/** Every row of a new install of each kind on an account that has its subdomain. */
+const ROWS: Readonly<Record<keyof typeof KINDS, readonly string[]>> = { domain: rowsOf("domain"), "no-domain": rowsOf("no-domain") };
 
 /** The calls each kind sends, pinned: to find an install, for a dry run, and for a run, with how many of the run's change something. */
 const CALLS: Readonly<Record<keyof typeof KINDS, { readonly find: number; readonly dry: number; readonly run: number; readonly writes: number }>> = {
-  domain: { find: 6, dry: 22, run: 54, writes: 26 },
-  "no-domain": { find: 6, dry: 16, run: 42, writes: 20 },
+  domain: { find: 6, dry: 23, run: 55, writes: 26 },
+  "no-domain": { find: 6, dry: 15, run: 41, writes: 20 },
 };
 
 function loginOf(text: string): Login {
@@ -133,7 +157,7 @@ function fresh(changes: Partial<Account> = {}): Account {
   return { ...emptyAccount(), bindings: [], noWorker: true, ...changes };
 }
 
-function shown(done: Installed): string[] {
+function shown(done: Installed | Unanswered<Where>): string[] {
   if (!done.ok) return [`not run: ${done.why}`];
 
   return done.rows.map((row) => `${row.object} | ${row.state} | ${row.detail}`);
@@ -150,17 +174,16 @@ function startable(found: Found<Where, Place>): Startable<Place> {
 
 /** What one find and one run left behind: what was found, what the run came to and told on the way, and every call of each. */
 interface Outcome {
-  readonly done: Installed;
+  readonly done: Installed | Unanswered<Where>;
   readonly found: Found<Where, Place>;
   readonly calls: { readonly find: number; readonly run: number; readonly writes: string[] };
   readonly world: Awaited<ReturnType<typeof worldOf>>;
   readonly said: string[];
 }
 
-/** Find, then run, in one stand-in world. */
-async function installed(account: Account, kind: keyof typeof KINDS, run: Run, meets: Parameters<typeof worldOf>[1] = {}): Promise<Outcome> {
+/** Find, then run, in one stand-in world, at the place of the kind unless another is given. */
+async function installed(account: Account, kind: keyof typeof KINDS, run: Run, meets: Parameters<typeof worldOf>[1] = {}, where: Where = KINDS[kind].where): Promise<Outcome> {
   const world = await worldOf(account, meets);
-  const { where } = KINDS[kind];
   const found = await installer.find(KEY, where, world.reach, "install");
   const sought = world.asked.length;
   const said: string[] = [];
@@ -218,18 +241,19 @@ describe.each(Object.keys(KINDS) as (keyof typeof KINDS)[])("a new install, %s",
   });
 
   // Drift: an install that could not be run twice would leave a person with half an install and no way on but to delete it by hand.
-  test("a run that stops at one piece says which, and the run after it goes on from what stands: nothing is made twice, and the install is then found whole, with its version", async () => {
-    const account = fresh({ refuse: `PUT /accounts/${ACCOUNT}/workers/scripts/poplin/schedules`, refuseAs: { status: 400, code: 10001 } });
+  // The Worker that stands was uploaded by the run before, from the same release: a row that called its code unchecked would send a person looking for a fault there is none of.
+  test("a run that stops at one piece says which, and the run after it goes on from what stands: nothing is made twice, the Worker is told with the release it runs, and the install is then found whole, with its version", async () => {
+    const account = fresh({ refuse: SCHEDULING, refuseAs: { status: 400, code: 10001 } });
     const stopped = await installed(account, kind, APPLY);
 
-    expect([shown(stopped.done).slice(2), stopped.done.ok && stopped.done.ready]).toEqual([[`Worker | make | poplin, runs ${RELEASE}`, "Cron trigger | fail | */15 * * * *: refused with status 400 and codes 10001"], false]);
+    expect([shown(stopped.done).slice(3), stopped.done.ok && stopped.done.ready]).toEqual([[`Worker | make | poplin, runs ${RELEASE}`, "Cron trigger | fail | */15 * * * *: refused with status 400 and codes 10001"], false]);
 
     delete account.refuse;
     const again = await installed(account, kind, APPLY);
-    const stood = ["R2 bucket | leave | poplin-sites", "D1 database | leave | poplin", "Worker | leave | poplin: its code predates this run and was not checked against a release", "Cron trigger | change | */15 * * * *"];
+    const stood = ["Account subdomain | leave | example.workers.dev", "R2 bucket | leave | poplin-sites", "D1 database | leave | poplin", `Worker | leave | poplin, runs ${RELEASE}`, "Cron trigger | change | */15 * * * *"];
 
-    expect([again.found.state, shown(again.done).slice(0, 4), shown(again.done).slice(5), again.done.ok && again.done.ready]).toEqual(["started", stood, ROWS[kind].slice(5), true]);
-    expect([account.uploads.length, account.buckets.length, account.databases.length]).toEqual([1, 1, 1]);
+    expect([again.found.state, shown(again.done).slice(0, 5), shown(again.done).slice(6), again.done.ok && again.done.ready]).toEqual(["started", stood, ROWS[kind].slice(6), true]);
+    expect([account.uploads.length, account.buckets.length, account.databases.length, again.done.ok && again.done.release]).toEqual([1, 1, 1, RELEASE]);
 
     const world = await worldOf(account);
 
@@ -312,10 +336,11 @@ describe.each(Object.keys(KINDS) as (keyof typeof KINDS)[])("a new install, %s",
     const bound = upload?.metadata.bindings.find((binding) => binding.name === "DB")?.id;
 
     expect(found).toMatchObject({ state: "leftover", words, address: `https://dash.cloudflare.com/${ACCOUNT}/workers/d1` });
-    expect([shown(done)[1], done.ok && done.ready, account.databases, bound]).toEqual(["D1 database | leave | poplin (empty; matched by its name alone)", true, [{ uuid: "database-9", name: "poplin" }], "database-9"]);
+    expect([shown(done)[2], done.ok && done.ready, account.databases, bound]).toEqual(["D1 database | leave | poplin (empty; matched by its name alone)", true, [{ uuid: "database-9", name: "poplin" }], "database-9"]);
   });
 
   // Drift: the name is a common one. A database that holds tables and none of poplin's schema steps is somebody else's records: a run that took it would let the Worker write its schema beside them, and a later removal would delete all of it.
+  // Its row is the run's first, on an account with no subdomain and a name given for one: nothing is made beside such a database, the account's subdomain neither.
   test.each([
     ["tables that are not poplin's", { tables: ["invoices"] }, [], [`D1 database | block | poplin: ${OTHERS_TABLES}: not reused, but an install needs a database with this name`], false, 0],
     ["an answer that is no list of tables", { tables: "failed" }, [], ["D1 database | fail | poplin: no answer from Cloudflare"], false, 0],
@@ -323,19 +348,21 @@ describe.each(Object.keys(KINDS) as (keyof typeof KINDS)[])("a new install, %s",
       "poplin's schema steps, beside a bucket of the name",
       "records",
       ["poplin-sites"],
-      ["R2 bucket | leave | poplin-sites (matched by its name alone)", "D1 database | leave | poplin (matched by its name alone; poplin's by its schema steps)"],
+      [`Account subdomain | make | ${NAMED}.workers.dev`, "R2 bucket | leave | poplin-sites (matched by its name alone)", "D1 database | leave | poplin (matched by its name alone; poplin's by its schema steps)"],
       true,
       1,
     ],
   ] as const)("a database of poplin's name left behind with %s: the dry run and the run say which, and only poplin's is used", async (_holds, holds, buckets, rows, ready, uploads) => {
     // A database of poplin's is read for the settings it holds, so this one holds the records of an install whose user is the first login.
     const held = holds === "records" ? { store: await storeOf(LOGIN) } : holds;
-    const account = fresh({ databases: [{ uuid: "database-9", name: "poplin" }], buckets: buckets.map((name) => ({ name })), ...held });
-    const dry = await installed(account, kind, DRY);
-    const run = await installed(account, kind, APPLY);
+    const account = fresh({ subdomain: undefined, databases: [{ uuid: "database-9", name: "poplin" }], buckets: buckets.map((name) => ({ name })), ...held });
+    const named: Where = { ...KINDS[kind].where, subdomain: NAMED };
+    const dry = await installed(account, kind, DRY, {}, named);
+    const run = await installed(account, kind, APPLY, {}, named);
 
     expect([shown(dry.done).slice(0, rows.length), dry.done.ok && dry.done.ready]).toEqual([[...rows], ready]);
     expect([shown(run.done).slice(0, rows.length), run.done.ok && run.done.ready, account.uploads.length, account.buckets.length]).toEqual([[...rows], ready, uploads, uploads]);
+    expect(account.subdomain).toBe(ready ? NAMED : undefined);
   });
 
   // Drift: the key's value and the token are secrets of the run. A row, a step, or a block that held one would print it.
@@ -380,7 +407,7 @@ describe.each(Object.keys(KINDS) as (keyof typeof KINDS)[])("an install on the d
 
     // A question to the database is sent as a POST, and each one here only reads.
     expect([shown(dry.done), dry.calls.writes.filter((call) => !call.endsWith("/query"))]).toEqual([rows, []]);
-    expect(rows.slice(0, 3)).toEqual(["R2 bucket | leave | poplin-sites (matched by its name alone)", "D1 database | leave | poplin (matched by its name alone; poplin's by its schema steps)", unused]);
+    expect(rows.slice(1, 4)).toEqual(["R2 bucket | leave | poplin-sites (matched by its name alone)", "D1 database | leave | poplin (matched by its name alone; poplin's by its schema steps)", unused]);
     expect([usersAt(account), run.done.ok && run.done.ready]).toEqual([{ login: [first, second], alerts }, true]);
     // The command ends with the repair that lets the person in, and offers no login, by this: the dry run says it as the run does.
     expect([dry.done, run.done].map((done) => done.ok && done.unused)).toEqual([LOGIN, LOGIN]);
@@ -424,12 +451,12 @@ describe.each(Object.keys(KINDS) as (keyof typeof KINDS)[])("an install on the d
 
   // Drift: a run that stopped after its upload is found as one that was started, with no word that its database was kept. Finished to the typed login, it would be the same wrong install by two runs.
   test("a run on kept data that stopped after its upload is finished to the stored users by the run after it", async () => {
-    const account = await keptData({ refuse: `PUT /accounts/${ACCOUNT}/workers/scripts/poplin/schedules`, refuseAs: { status: 400, code: 10001 } });
+    const account = await keptData({ refuse: SCHEDULING, refuseAs: { status: 400, code: 10001 } });
     await installed(account, kind, APPLY);
     delete account.refuse;
     const again = await installed(account, kind, APPLY);
 
-    expect([again.found.state, shown(again.done).slice(1, 3), usersAt(account), again.done.ok && again.done.ready]).toEqual(["started", ["D1 database | leave | poplin", unused], { login: [first, second], alerts }, true]);
+    expect([again.found.state, shown(again.done).slice(2, 4), usersAt(account), again.done.ok && again.done.ready]).toEqual(["started", ["D1 database | leave | poplin", unused], { login: [first, second], alerts }, true]);
   });
 
   // Drift: the users are what the run mends to. A database whose users cannot be read must not be finished as if it held none, with no word of it.
@@ -441,7 +468,7 @@ describe.each(Object.keys(KINDS) as (keyof typeof KINDS)[])("an install on the d
       "D1 database | leave | poplin (matched by its name alone; poplin's by its schema steps; its schema does not match this CLI, so its users were not read and --user is used. " +
       `When the install responds, npx poplin doctor --repair ${kind === "domain" ? "--domain example.com" : "--no-domain"} syncs the login to its stored users)`;
 
-    expect([shown(done)[1], shown(done).filter((row) => row.startsWith("First user")), usersAt(other).login]).toEqual([unread, [], [LOGIN]]);
+    expect([shown(done)[2], shown(done).filter((row) => row.startsWith("First user")), usersAt(other).login]).toEqual([unread, [], [LOGIN]]);
 
     const refused = await keptData();
     const { call } = refused.store;
@@ -505,34 +532,160 @@ test.each(["domain", "no-domain"] as const)("a run that stopped after its upload
   expect([looks, world.asked.filter((entry) => entry.method !== "GET")]).toEqual([["started", "blocked", "blocked"], []]);
 });
 
+// Drift: Cloudflare gives a new account no subdomain, and takes no cron trigger in an account without one, also for a Worker that answers under a domain. An install that made its Worker first stopped at the trigger, and so did every run after it.
+describe.each(Object.keys(KINDS) as (keyof typeof KINDS)[])("an account with no workers.dev subdomain, %s", (kind) => {
+  const named: Where = { ...KINDS[kind].where, subdomain: NAMED };
+
+  test("a run that was given no name makes nothing and asks for one, a dry run alike: the question names its option, says what the name is for at that kind of install, and takes a name by the rule of an install without a domain", async () => {
+    const account = fresh({ subdomain: undefined });
+    const before = structuredClone(account);
+    const runs = [await installed(account, kind, DRY), await installed(account, kind, APPLY)];
+    const [question] = runs.flatMap(({ done }) => (!done.ok && done.why === "answer" ? [done.question] : []));
+    const long = "a".repeat(37);
+    const hint = kind === "domain" ? "Cloudflare requires one, and no address of the install uses it" : "every address of the install is under it";
+
+    expect(runs.map(({ done, calls, said }) => [done, calls.writes, said])).toMatchObject([
+      [{ ok: false, why: "answer", refused: undefined }, [], []],
+      [{ ok: false, why: "answer", refused: undefined }, [], []],
+    ]);
+    expect(account).toEqual(before);
+    expect([question?.key, question?.name, question?.give]).toEqual(["subdomain", "workers.dev subdomain (this account has none)", "pass --subdomain <name> or set POPLIN_SUBDOMAIN"]);
+    expect(question?.ask).toBe(`workers.dev subdomain (this account has none; ${hint}):`);
+    expect([question?.answer(" Your-Name "), question?.answer(" "), question?.answer(long), question?.answer("-name")]).toEqual([
+      { ok: true, where: named },
+      { ok: false, why: "refused", refused: "A workers.dev subdomain needs a name, such as your-name" },
+      { ok: false, why: "refused", refused: `${long} is not a workers.dev subdomain: use at most 36 letters, digits, and hyphens, with no hyphen first or last` },
+      { ok: false, why: "refused", refused: "-name is not a workers.dev subdomain: use at most 36 letters, digits, and hyphens, with no hyphen first or last" },
+    ]);
+  });
+
+  test("a run that was given a name makes the subdomain with its first change, then the whole install, with one call more than on an account that has one; its dry run lists the same rows and sends no change", async () => {
+    const account = fresh({ subdomain: undefined });
+    const before = structuredClone(account);
+    const dry = await installed(account, kind, DRY, {}, named);
+    const rows = rowsOf(kind, { name: NAMED, state: "make" });
+
+    expect([shown(dry.done), dry.calls, account]).toEqual([rows, { find: CALLS[kind].find, run: CALLS[kind].dry, writes: [] }, before]);
+
+    const run = await installed(account, kind, APPLY, {}, named);
+    const [first] = run.world.asked.filter((entry) => entry.method !== "GET");
+
+    expect([run.said, run.done.ok && run.done.ready, account.subdomain]).toEqual([rows, true, NAMED]);
+    expect([`${first?.method} ${first?.path}`, first?.body]).toEqual([NAMING, { subdomain: NAMED }]);
+    expect([run.calls.run, run.calls.writes.length]).toEqual([CALLS[kind].run + 1, CALLS[kind].writes + 1]);
+  });
+
+  test("a name Cloudflare gives no account makes nothing and tells no row: the run asks for another in one line, and the name given next is made, and the install with it", async () => {
+    const account = fresh({ subdomain: undefined, takenNames: [NAMED] });
+    const refused = await installed(account, kind, APPLY, {}, named);
+    const next = !refused.done.ok && refused.done.why === "answer" ? refused.done.question.answer("another-name") : undefined;
+
+    expect(refused.done).toMatchObject({ ok: false, why: "answer", refused: `${NAMED}.workers.dev is taken. Choose another name.` });
+    // The fake refuses the name as a conflict, which Cloudflare's SDK sends again by itself: the one call may be sent more than once.
+    expect([refused.said, [...new Set(refused.calls.writes)], account.buckets, account.databases, account.uploads, account.subdomain]).toEqual([[], [NAMING], [], [], [], undefined]);
+
+    const again = next?.ok === true ? await installed(account, kind, APPLY, {}, next.where) : undefined;
+
+    expect([again?.said[0], again?.done.ok === true && again.done.ready, account.subdomain]).toEqual(["Account subdomain | make | another-name.workers.dev", true, "another-name"]);
+  });
+
+  // Drift: the fix must reach the installs that are stopped there already: the same command, run again, has to go on from the Worker that stands.
+  test.each([
+    ["makes the subdomain under the name it is given", NAMED, undefined, "make"],
+    ["leaves the one a person set by hand meanwhile, and needs no name", undefined, "set-by-hand", "leave"],
+  ] as const)("an install that stopped at its cron trigger for the missing subdomain is gone on with by the same command: the run %s, makes the trigger and the rest, and the install is whole", async (_what, given, byHand, state) => {
+    // The account as the run of an earlier poplin left it: the Worker uploaded, no trigger, and no subdomain. That run read no subdomain, so here the account loses its own once this run has read it, and the trigger meets the account without one.
+    const account = fresh();
+    const stopped = await installed(account, kind, APPLY, { website: (address) => void (address.endsWith("worker.js") && Object.assign(account, { subdomain: undefined })) });
+    account.subdomain = byHand;
+    const look = await worldOf(account);
+    const repairs = await installer.find(KEY, KINDS[kind].where, look.reach, "repair");
+    const unnamed = await installed(account, kind, DRY);
+    const again = await installed(account, kind, APPLY, {}, { ...KINDS[kind].where, subdomain: given });
+    const name = given ?? byHand ?? "";
+    const stood = [`Account subdomain | ${state} | ${name}.workers.dev`, "R2 bucket | leave | poplin-sites", "D1 database | leave | poplin", `Worker | leave | poplin, runs ${RELEASE}`, "Cron trigger | change | */15 * * * *"];
+
+    expect([shown(stopped.done).at(-1), stopped.done.ok && stopped.done.ready]).toEqual([`Cron trigger | fail | */15 * * * *: ${SET_ONE}`, false]);
+    // A repair's look finds the start as it did before a run made a subdomain: it reads none, and stops for none.
+    expect([repairs.state, look.asked.filter((entry) => entry.path.includes("/workers/subdomain"))]).toEqual(["started", []]);
+    expect(!unnamed.done.ok && unnamed.done.why).toBe(byHand === undefined ? "answer" : false);
+    expect([again.found.state, shown(again.done).slice(0, 5), shown(again.done).slice(5), again.done.ok && again.done.ready]).toEqual(["started", stood, rowsOf(kind, { name, state }).slice(5), true]);
+    expect([account.uploads.length, account.crons, account.address, account.subdomain]).toEqual([1, ["*/15 * * * *"], { enabled: kind === "no-domain", previews_enabled: false }, name]);
+
+    const world = await worldOf(account);
+
+    expect(await installer.find(KEY, KINDS[kind].where, world.reach, "install")).toMatchObject({ state: "whole", version: RELEASE });
+  });
+});
+
+// Drift: a run goes on with a Worker that stands and uploads none. Only the release its code states says whether it is the one this run would have uploaded, and a row that says nothing of one that is behind leaves the install behind unseen.
+// The repair its row names is of this install alone, by its place: a bare update would run on whichever install the machine is logged in to.
+test.each([
+  ["an older release", "0.2.0", `Worker | leave | poplin, runs 0.2.0; ${RELEASE} is available: once the install is complete, npx poplin@latest doctor --repair --update --domain example.com deploys it`, "0.2.0"],
+  ["a newer release", "0.4.0", "Worker | leave | poplin, runs 0.4.0", "0.4.0"],
+  ["no release", undefined, "Worker | leave | poplin, version unknown", undefined],
+] as const)("a run that goes on with a Worker whose code states %s leaves it, and its row names the release it runs, the repair that takes one that is behind to the newest, or that the version is unknown", async (_what, stated, row, release) => {
+  const account = fresh({ refuse: SCHEDULING, refuseAs: { status: 400, code: 10001 } });
+  await installed(account, "domain", APPLY);
+  delete account.refuse;
+  const others = account.bindings.filter((binding) => binding.name !== "RELEASE");
+  account.bindings = stated === undefined ? others : [...others, { name: "RELEASE", type: "plain_text", text: stated }];
+  const again = await installed(account, "domain", APPLY);
+
+  expect([shown(again.done)[3], again.done.ok && again.done.release, again.done.ok && again.done.ready, account.uploads.length]).toEqual([row, release, true, 1]);
+});
+
 describe("what stops a run before it changes anything", () => {
   // Drift: the release is read first, so a website that is down, or a release this code cannot place, must leave the account as it was.
+  // The account has no subdomain, and the run is given a name for it: the subdomain is the run's first change, and it too waits for the release.
   test.each([
     ["the project's website gives no answer", (address: string) => (address.endsWith("releases.json") ? new Response("down", { status: 503 }) : undefined), { ok: false, why: "unreachable" }],
     ["a website that names no release", (address: string) => (address.endsWith("releases.json") ? new Response("{}") : undefined), { ok: true, ready: false, rows: [], blocked: [{ what: "no_release" }] }],
     ["the release's module is not the one that was published", (address: string) => (address.endsWith("worker.js") ? new Response("export default 1;\n") : undefined), { ok: true, ready: false, rows: [], blocked: [{ what: "bad_release" }] }],
-  ] as const)("%s: nothing is made", async (_, website, outcome) => {
-    const account = fresh();
+  ] as const)("%s: nothing is made, the account's subdomain neither", async (_, website, outcome) => {
+    const account = fresh({ subdomain: undefined });
     const before = structuredClone(account);
-    const { done, calls } = await installed(account, "domain", APPLY, { website });
+    const { done, calls } = await installed(account, "domain", APPLY, { website }, { ...KINDS.domain.where, subdomain: NAMED });
 
     expect(done).toMatchObject(outcome);
     expect([calls.writes, account]).toEqual([[], before]);
   });
 
-  // Drift: an install without a domain answers at the account's free address, which the account must have set: the three hosts are made from its name.
-  test("an account with no free address is told to set it, and nothing is made", async () => {
-    const account = fresh({ noFreeAddress: true });
+  // Drift: an install without a domain answers under the account's subdomain, and the login takes no hostname of more than 63 characters. A subdomain the account has is never changed: its other Workers answer under it.
+  test("an account whose subdomain is too long for an install without a domain is told so, and nothing is made; under a domain the same account is installed, and the subdomain left", async () => {
+    const long = "a".repeat(37);
+    const account = fresh({ subdomain: long });
     const { done, calls } = await installed(account, "no-domain", APPLY);
 
     expect(done).toMatchObject({ ok: true, ready: false, rows: [], address: undefined, blocked: [{ what: "no_address", address: `https://dash.cloudflare.com/${ACCOUNT}/workers-and-pages` }] });
     expect([calls.writes, account.uploads]).toEqual([[], []]);
+
+    const under = await installed(account, "domain", APPLY);
+
+    expect([shown(under.done)[0], under.done.ok && under.done.ready, account.subdomain]).toEqual([`Account subdomain | leave | ${long}.workers.dev`, true, long]);
+  });
+
+  // Drift: the subdomain is the first thing a run reads. A token that may not read it must be told the permission, where "no answer from Cloudflare" would send a person to wait.
+  test.each(Object.keys(KINDS) as (keyof typeof KINDS)[])("a token that may not read the account's subdomain is blocked before anything is made, %s, and the block names the permission", async (kind) => {
+    const account = fresh({ refuse: `GET /accounts/${ACCOUNT}/workers/subdomain`, refuseMessage: "Authentication error" });
+    const { done, calls } = await installed(account, kind, APPLY);
+    const right = "Workers Scripts: Edit";
+
+    expect(done).toMatchObject({ ok: true, ready: false, rows: [], blocked: [{ what: "right_lacking", right, words: `Account subdomain: The account token lacks ${right}` }] });
+    expect([calls.writes, account.uploads]).toEqual([[], []]);
+  });
+
+  // Drift: a refusal of that read for anything else is Cloudflare's answer, not its silence. Told as no answer from Cloudflare or the project's website, it would hide which read failed, and exit as a network failure does.
+  test("a read of the account's subdomain that Cloudflare refuses for no missing permission is a row that failed, as any other piece's, and nothing is made", async () => {
+    const { done, calls } = await installed(fresh({ refuse: `GET /accounts/${ACCOUNT}/workers/subdomain`, refuseAs: { status: 400, code: 10001 } }), "domain", APPLY);
+
+    expect([shown(done), done.ok && done.ready, calls.writes]).toEqual([["Account subdomain | fail | refused with status 400 and codes 10001"], false, []]);
   });
 
   // Drift: a token without a needed permission stops the pieces after the one it is refused at, and the run must name the permission, as a block too.
   test("a token that may not read the records is blocked at them: the row and the block name the permission, and nothing after the row is run", async () => {
     const { done } = await installed(fresh({ refuse: "GET /zones/zone-1/dns_records", refuseMessage: "Authentication error" }), "domain", DRY);
-    const rows = shown(done).slice(6);
+    const rows = shown(done).slice(7);
 
     expect(rows[0]).toBe("DNS record | block | refused with status 403 and codes 10000. The account token lacks DNS: Edit");
     expect([...new Set(rows.slice(1).map((row) => row.split(" | ")[1]))]).toEqual(["not-run"]);
@@ -552,7 +705,7 @@ describe("what stops a run before it changes anything", () => {
     const run = await installed(account, kind, APPLY);
     const left = run.done.ok ? run.done.rows.filter((row) => row.state === "leave-out").map((row) => `${row.object} | ${row.detail} | ${row.right} | ${row.extra}`) : [];
 
-    const states = (done: Installed): string[][] => shown(done).map((row) => row.split(" | ").slice(0, 2));
+    const states = (done: Installed | Unanswered<Where>): string[][] => shown(done).map((row) => row.split(" | ").slice(0, 2));
 
     expect([left, states(run.done), run.done.ok && [run.done.ready, run.done.blocked]]).toEqual([[...optional], states(dry.done), [true, []]]);
   });
@@ -568,10 +721,13 @@ describe("the provider's own answers", () => {
     ["an option over its variable", { flags: [["no-domain", true]], env: { POPLIN_DOMAIN: "example.com" } }, { kind: "no-domain", account: undefined }],
     ["an account by its option", { flags: [["no-domain", true], ["account", ACCOUNT]] }, { kind: "no-domain", account: ACCOUNT }],
     ["an account by the variable", { flags: [["domain", "example.com"]], env: { POPLIN_ACCOUNT: ACCOUNT } }, { kind: "domain", domain: "example.com", account: ACCOUNT }],
+    ["a subdomain by its option, in lowercase", { flags: [["no-domain", true], ["subdomain", "Your-Name"]] }, { kind: "no-domain", account: undefined, subdomain: NAMED }],
+    ["a subdomain by the variable", { flags: [["domain", "example.com"]], env: { POPLIN_SUBDOMAIN: NAMED } }, { kind: "domain", domain: "example.com", account: undefined, subdomain: NAMED }],
+    ["a subdomain variable that is set to nothing as none given", { flags: [["no-domain", true]], env: { POPLIN_SUBDOMAIN: "" } }, { kind: "no-domain", account: undefined, subdomain: undefined }],
   ] as const)("reads %s", (_, given, where) => {
     const read = placeOf(given);
 
-    expect<unknown>(read.kind === "domain" ? { kind: read.kind, domain: read.layout.domain, account: read.account } : read).toEqual(where);
+    expect<unknown>(read.kind === "domain" ? { kind: read.kind, domain: read.layout.domain, account: read.account, subdomain: read.subdomain } : read).toEqual(where);
   });
 
   // Drift: a command named as the next step carries these words, and the next run reads them. Words that read back as another place would send that run to an install that is not there.
@@ -592,6 +748,7 @@ describe("the provider's own answers", () => {
     ["a domain option with an empty name, which is not the word for none", { flags: [["domain", ""]] }, "--domain requires a domain name, such as example.com"],
     ["text that is no domain", { flags: [["domain", "not a domain"]] }, "not a domain is not a domain name"],
     ["an account that is no id", { flags: [["no-domain", true], ["account", "mine"]] }, "--account requires an account id: 32 lowercase hex characters"],
+    ["a subdomain option with an empty name", { flags: [["no-domain", true], ["subdomain", ""]] }, "A workers.dev subdomain needs a name, such as your-name"],
   ] as const)("refuses %s", (_, given, refused) => {
     expect(installer.read({ flags: new Map<string, string | true>(given.flags), env: {} })).toEqual({ ok: false, why: "refused", refused });
   });

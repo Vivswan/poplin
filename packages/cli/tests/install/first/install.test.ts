@@ -5,7 +5,7 @@ import type { Blocked, Found, Installer, Row, Token } from "../../../../core/src
 import { TOKEN_VARIABLE } from "../../../src/install/ask";
 import { pasted } from "../../../src/local/invoked";
 import { jsonOf } from "../../commands/support/harness";
-import { ADDRESS, type Account, accountQuestion, emptyAccount, FORM, FRESH, installedOf, type Place, type Ran, repairedOf, runLine, standIn, TOKEN, type Where } from "../support/stand-in";
+import { ADDRESS, type Account, accountQuestion, aliasQuestion, emptyAccount, FORM, FRESH, installedOf, type Place, type Ran, repairedOf, runLine, standIn, TOKEN, type Where } from "../support/stand-in";
 
 /** The environment of a run whose token is in its variable. */
 const HELD = { [TOKEN_VARIABLE]: TOKEN };
@@ -290,14 +290,14 @@ describe("what a look finds", () => {
     expect(account.runs[0]?.found.state).toBe("started");
   });
 
-  // Drift: a run that goes on with a program that was there uploads nothing, so it names no release. A last line that still read as this run's own install would vouch for code nobody checked.
-  test("a run that names no release ends by saying the program's code was not this run's: the last line and the JSON value both", async () => {
+  // Drift: a run that goes on with a program that was there names the release that program states. One that states none must not read as a known version, and its last line has to say what brings it to one.
+  test("a run that names no release ends by saying the version is unknown, and names the update of this install by its address: the last line and the JSON value both", async () => {
     const account = accountWith({ state: "started", place: PLACE, notes: [] });
     account.installed = { ...installedOf(FRESH), release: undefined };
     const ran = await runLine(`${RUN} --no-wait`, account, { env: HELD });
     const said = await runLine(`${RUN} --no-wait --json`, { ...account, runs: [] }, { env: HELD });
 
-    expect([ran.code, ran.out.at(-4), jsonOf(said).release]).toEqual([0, "poplin is installed. Its code predates this run and was not checked against a release.", null]);
+    expect([ran.code, ran.out.at(-4), jsonOf(said).release]).toEqual([0, `poplin is installed. Its version is unknown. To update it once logged in: npx poplin update --server ${ADDRESS}`, null]);
   });
 
   test.each([
@@ -324,6 +324,52 @@ describe("what a look finds", () => {
     expect(ran.code).toBe(2);
     expect(jsonOf(ran)).toMatchObject({ ok: false, problem: "missing_answer", missing: ["account"] });
     expect(ran.err).toEqual(["Missing account", "Fix: pass --account <id> or set POPLIN_ACCOUNT"]);
+  });
+});
+
+// Drift: some answers only the account shows the need of, once the token has read it. A provider that could not ask for one would have to make half an install and fail, or guess the answer.
+describe("an answer the provider asks for once it has read the account", () => {
+  const open = { ok: false, why: "answer", question: aliasQuestion({ kind: "none" }), refused: undefined } as const;
+  const taken = { ...open, refused: "The name mine is taken. Choose another." } as const;
+  const asked = "Name for the account (it has none):";
+
+  test("a run that asks nothing stops before any change and names the option that gives the answer, exit 2", async () => {
+    const account = { ...emptyAccount(), unanswered: [open] };
+    const ran = await runLine(`${RUN} --json`, account, { env: HELD });
+
+    expect([ran.code, ran.err, ran.asked]).toEqual([2, ["Missing account name (this account has none)", "Fix: pass --alias <name> or set POPLIN_ALIAS"], []]);
+    expect(jsonOf(ran)).toMatchObject({ ok: false, problem: "missing_answer", missing: ["alias"], next: AGAIN, run: "apply", ready: false });
+    expect([account.runs.length, account.changes]).toEqual([1, 0]);
+  });
+
+  test("on a terminal the answer is asked for, again where what was typed is refused, and the run starts again at the place the answer gave: its rows are printed once", async () => {
+    const account = { ...emptyAccount(), unanswered: [open] };
+    const ran = await runLine("install stand-in --no-place --user you@example.com --no-wait --no-log-in", account, { env: HELD, asks: true, typed: ["", "mine"] });
+
+    expect([ran.code, ran.asked, ran.err]).toEqual([0, [asked, asked], ["The account needs a name"]]);
+    expect(account.runs.map((run) => run.where)).toEqual([{ kind: "none" }, { kind: "none", alias: "mine" }]);
+    expect([ran.out.slice(0, 1), ran.out.filter((line) => MADE.includes(line)), account.changes]).toEqual([["This account has no install"], MADE, 3]);
+  });
+
+  test("an answer the provider tried and did not take is told in one line: a person is asked again after it, and a run that asks nothing stops with that line and the option, exit 1", async () => {
+    const person = { ...emptyAccount(), unanswered: [taken] };
+    const typed = await runLine("install stand-in --no-place --alias mine --user you@example.com --no-wait --no-log-in", person, { env: HELD, asks: true, typed: ["other"] });
+
+    expect([typed.code, typed.shown.slice(1, 3)]).toEqual([0, ["err warning: The name mine is taken. Choose another.", `ask: ${asked}`]]);
+    expect(person.runs.map((run) => run.where)).toEqual([{ kind: "none", alias: "mine" }, { kind: "none", alias: "other" }]);
+
+    const script = { ...emptyAccount(), unanswered: [taken] };
+    const ran = await runLine("install stand-in --no-place --alias mine --user you@example.com --yes --json", script, { env: HELD });
+
+    expect([ran.code, ran.err, script.changes]).toEqual([1, ["The name mine is taken. Choose another. Nothing changed.", "Fix: pass --alias <name> or set POPLIN_ALIAS"], 0]);
+    expect(jsonOf(ran)).toMatchObject({ ok: false, problem: "answer_refused", next: AGAIN, run: "apply", ready: false });
+  });
+
+  test("a person who ends the question stops the command with nothing changed", async () => {
+    const account = { ...emptyAccount(), unanswered: [open] };
+    const ran = await runLine("install stand-in --no-place --user you@example.com", account, { env: HELD, asks: true, typed: [undefined] });
+
+    expect([ran.code, ran.err, account.changes]).toEqual([1, ["Cancelled. Nothing changed."], 0]);
   });
 });
 

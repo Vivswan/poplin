@@ -56,6 +56,7 @@ Step 3 makes the install, in parts a to e. With an install that is there already
 | paste the agent's line there, and press Enter     | the command asks `Open the form in your browser?`    |
 | press Enter for the form, or `n` with a token     | the command asks `Account token (hidden):`           |
 | paste the token at that question, and press Enter | a row of small marks shows, never the letters        |
+| on a new account, type a name at `workers.dev subdomain`, in both runs | the account has no subdomain yet: the dry run lists it, and the install makes it. [Step 2 of Install](install.md#2-run-the-command) has the question |
 | copy all that the command printed into the chat   | it holds no token, so it is safe to paste. The login's code in it is used up once the command says `logged in` |
 
 ```text

@@ -11,8 +11,8 @@ import { RELEASE, worldOf } from "../support/fake-reach";
 
 /** An install under the tests' domain, and one without a domain. */
 const [DOMAIN, NONE]: readonly [Where, Where] = [
-  { kind: "domain", layout: LAYOUT, account: undefined },
-  { kind: "no-domain", account: undefined },
+  { kind: "domain", layout: LAYOUT, account: undefined, subdomain: undefined },
+  { kind: "no-domain", account: undefined, subdomain: undefined },
 ];
 
 /** Each of the two, with the option a command line names it by. */
@@ -271,8 +271,8 @@ describe("what stops an install before it is begun", () => {
   test.each([
     ["a token Cloudflare does not know, without a domain", NONE, "token-nobody-knows-0123456789", { state: "refused", why: "token" }, ["GET /accounts"]],
     ["a token Cloudflare does not know, with a domain", DOMAIN, "token-nobody-knows-0123456789", { state: "refused", why: "token" }, ["GET /zones"]],
-    ["a token that shows no zone of the domain", { kind: "domain", layout: layoutOf({ domain: "example.org" }), account: undefined }, TOKEN, { state: "refused", why: "no_domain" }, ["GET /zones", "GET /zones"]],
-    ["a token that does not show the account that was named", { kind: "no-domain", account: "f".repeat(32) }, TOKEN, { state: "refused", why: "token" }, ["GET /accounts", "GET /accounts"]],
+    ["a token that shows no zone of the domain", { ...DOMAIN, layout: layoutOf({ domain: "example.org" }) }, TOKEN, { state: "refused", why: "no_domain" }, ["GET /zones", "GET /zones"]],
+    ["a token that does not show the account that was named", { ...NONE, account: "f".repeat(32) }, TOKEN, { state: "refused", why: "token" }, ["GET /accounts", "GET /accounts"]],
   ] as const)("%s is refused, and nothing of an install is read", async (_, where, token, state, calls) => {
     const sought = await found(fresh(), where, token);
 
@@ -293,12 +293,12 @@ describe("what stops an install before it is begun", () => {
     expect([calls, question?.key, question?.give]).toEqual([["GET /accounts", "GET /accounts"], "account", "pass --account <id> or set POPLIN_ACCOUNT"]);
     expect(question?.ask).toBe(`The account token can access several accounts:\n  1) An account (${ACCOUNT})\n  2) Another account (${other})\nAccount:`);
     expect([question?.answer("1"), question?.answer(` ${other} `), question?.answer("3"), question?.answer("mine")]).toEqual([
-      { ok: true, where: { kind: "no-domain", account: ACCOUNT } },
-      { ok: true, where: { kind: "no-domain", account: other } },
+      { ok: true, where: { ...NONE, account: ACCOUNT } },
+      { ok: true, where: { ...NONE, account: other } },
       { ok: false, why: "refused", refused: "The input is not one of the account token's accounts" },
       { ok: false, why: "refused", refused: "The input is not one of the account token's accounts" },
     ]);
-    expect((await found(account, { kind: "no-domain", account: ACCOUNT })).found).toMatchObject({ state: "none" });
+    expect((await found(account, { ...NONE, account: ACCOUNT })).found).toMatchObject({ state: "none" });
   });
 });
 
