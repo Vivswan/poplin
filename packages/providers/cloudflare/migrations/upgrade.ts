@@ -239,6 +239,10 @@ async function makeOlder(run: Run, given: Upgrade): Promise<Standing | Stop> {
   const refused = await refuseOtherAccount(run, found.zone);
   if (refused !== undefined) return refused;
 
+  // What stands is read before it is removed, as a run of converge reads it: a database Cloudflare will not read today stops the upgrade with the install in place.
+  const before = await readStanding(run);
+  if (isStop(before)) return before;
+
   const stopped = (await startOver(run, found, given, { pieces: [] }, MADE_ANEW)) ?? (await installOlder(run, given));
   if (stopped !== undefined) return stopped;
 

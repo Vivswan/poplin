@@ -18,33 +18,34 @@ const NAME_HELD = { status: 409, code: 10073 };
 /** The line a person is shown at each wait for a held name. */
 const WAITING = "Cloudflare still holds the bucket name poplin-sites after a removal. Retrying in 15 s";
 
-/** What one sync left behind: what it came to, what it sent that changes something, and each wait it asked for, in milliseconds, with its line. */
+/** That wait, as the order of a run's changes and waits tells it. */
+const WAITED = `wait 15000: ${WAITING}`;
+
+/** What one sync left behind: what it came to, and every change it sent and every wait it asked for, in the order they came. A wait is told with its milliseconds and its line. */
 interface Outcome {
   readonly synced: Awaited<ReturnType<typeof syncBucket>>;
-  readonly writes: string[];
-  readonly slept: number[];
-  readonly told: (string | undefined)[];
+  readonly trace: string[];
 }
 
 /** Run a sync against an account at the fake API, on a clock that takes no time. */
 async function synced(account: Account, mode: "plan" | "apply"): Promise<Outcome> {
   let result: Awaited<ReturnType<typeof syncBucket>> | undefined;
-  const [writes, slept, told]: [string[], number[], (string | undefined)[]] = [[], [], []];
-  const sleep = async (milliseconds: number, why?: string): Promise<void> => {
-    slept.push(milliseconds);
-    told.push(why);
-  };
+  const trace: string[] = [];
+  const sleep = async (milliseconds: number, why?: string): Promise<void> => void trace.push(`wait ${milliseconds}: ${why}`);
 
   await withFake(
-    (asked) => answer(account, asked),
-    async (connection, asked) => {
+    (asked) => {
+      if (asked.method !== "GET") trace.push(`${asked.method} ${asked.path} ${JSON.stringify(asked.body)}`);
+
+      return answer(account, asked);
+    },
+    async (connection) => {
       result = await syncBucket({ ...connection, key: TOKEN, sleep }, ACCOUNT, mode);
-      writes.push(...asked.filter((entry) => entry.method !== "GET").map((entry) => `${entry.method} ${entry.path} ${JSON.stringify(entry.body)}`));
     },
   );
   if (result === undefined) throw new Error("the sync did not run");
 
-  return { synced: result, writes, slept, told };
+  return { synced: result, trace };
 }
 
 // Drift: the list's filter is a search, so a bucket whose name only holds poplin's would be taken for it without the full comparison.
@@ -62,7 +63,7 @@ test("a plan sends no change, a run makes the bucket once, and the run after it 
   const made = await synced(account, "apply");
   const again = await synced(account, "apply");
 
-  expect([planned.synced.ok && planned.synced.report.created, planned.writes, made.writes, again.writes]).toEqual([["poplin-sites"], [], [CREATED], []]);
+  expect([planned.synced.ok && planned.synced.report.created, planned.trace, made.trace, again.trace]).toEqual([["poplin-sites"], [], [CREATED], []]);
   expect([made.synced.ok && made.synced.report.created, again.synced.ok && again.synced.report.left, account.buckets]).toEqual([["poplin-sites"], ["poplin-sites"], [{ name: "poplin-sites" }]]);
 });
 
@@ -71,7 +72,7 @@ test("a list Cloudflare refuses is a failure with its status and its code, and n
   const account = { ...emptyAccount(), refuse: `GET /accounts/${ACCOUNT}/r2/buckets`, refuseMessage: "Authentication error" };
   const refused = await synced(account, "apply");
 
-  expect([refused.synced, refused.writes]).toMatchObject([{ ok: false, failure: "refused", status: 403, errors: [{ code: 10000 }] }, []]);
+  expect([refused.synced, refused.trace]).toMatchObject([{ ok: false, failure: "refused", status: 403, errors: [{ code: 10000 }] }, []]);
 });
 
 // Incident: right after a removal the list held no bucket of the name, and the create was refused with 409 and code 10073 until Cloudflare freed the name.
@@ -79,12 +80,12 @@ test.each([
   ["three creates", 3, { ok: true, report: { created: ["poplin-sites"] } }, [{ name: "poplin-sites" }]],
   ["twelve creates, the last a run sends again", 12, { ok: true, report: { created: ["poplin-sites"] } }, [{ name: "poplin-sites" }]],
   ["every create of a run", undefined, { ok: false, failure: "refused", status: 409, errors: [{ code: 10073 }], failed: "poplin-sites" }, []],
-] as const)("a name Cloudflare holds for %s: each is sent again 15 s later with the line that says why, 12 times at most, and the last answer stands", async (_what, refuseTimes, outcome, buckets) => {
+] as const)("a name Cloudflare holds for %s: a wait of 15 s, with the line that says why, lies between two creates, 12 times at most, and the last answer stands", async (_what, refuseTimes, outcome, buckets) => {
   const account: Account = { ...emptyAccount(), refuse: CREATE, refuseAs: NAME_HELD, ...(refuseTimes === undefined ? {} : { refuseTimes }) };
-  const { synced: done, writes, slept, told } = await synced(account, "apply");
-  const waits = refuseTimes ?? 12;
+  const { synced: done, trace } = await synced(account, "apply");
+  const refused = Array.from({ length: refuseTimes ?? 12 }, () => [CREATED, WAITED]).flat();
 
-  expect([writes, slept, told]).toEqual([Array.from({ length: waits + 1 }, () => CREATED), Array.from({ length: waits }, () => 15_000), Array.from({ length: waits }, () => WAITING)]);
+  expect(trace).toEqual([...refused, CREATED]);
   expect([done, account.buckets]).toMatchObject([outcome, [...buckets]]);
 });
 
@@ -93,7 +94,7 @@ test.each([
   ["the status and another code", { status: 409, code: 10004 }],
   ["the code under another status", { status: 400, code: 10073 }],
 ])("a create refused with %s is never waited for: it is sent once, and its refusal stands", async (_what, refuseAs) => {
-  const { synced: done, writes, slept } = await synced({ ...emptyAccount(), refuse: CREATE, refuseAs }, "apply");
+  const { synced: done, trace } = await synced({ ...emptyAccount(), refuse: CREATE, refuseAs }, "apply");
 
-  expect([writes, slept, done]).toMatchObject([[CREATED], [], { ok: false, status: refuseAs.status, errors: [{ code: refuseAs.code }] }]);
+  expect([trace, done]).toMatchObject([[CREATED], { ok: false, status: refuseAs.status, errors: [{ code: refuseAs.code }] }]);
 });

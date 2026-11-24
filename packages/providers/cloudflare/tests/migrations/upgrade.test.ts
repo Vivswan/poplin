@@ -84,12 +84,13 @@ const HELD = [
 ];
 
 /**
- * One upgrade on an account in memory: its exit code, what its removal said, what the account held of an install when the older build's install first ran, how often that install ran,
+ * One upgrade on an account in memory: its exit code, what its removal said, how many removals it sent, what the account held of an install when the older build's install first ran, how often that install ran,
  * each line between two of its runs, the clock between two of its launches and each rest the upgrade asked for after the last, in milliseconds, what the upgrade said after the last, and the Worker's uploads.
  */
 interface Ran {
   readonly code: number;
   readonly removal: readonly string[];
+  readonly deleted: number;
   readonly handed: { readonly buckets: readonly unknown[]; readonly databases: number; readonly worker: boolean } | undefined;
   readonly installs: number;
   readonly waits: readonly string[];
@@ -103,6 +104,9 @@ interface Ran {
 interface Fault {
   /** Whether an install of this commit's build stands on the account before the upgrade. */
   readonly standing?: true;
+
+  /** Whether Cloudflare refuses every question to the database of the install that stands. */
+  readonly unread?: true;
 
   /** How many runs of the older build's own install end on the row of a bucket name Cloudflare still holds, before one that goes through. */
   readonly held?: number;
@@ -230,13 +234,15 @@ async function upgrade(kind: Found["kind"], fault: Fault = {}): Promise<Ran> {
 
   if (fault.refused !== undefined) Object.assign(harness.account, { refuse: BUCKET_CREATE, refuseAs: { status: 409, code: fault.refused } });
 
+  if (fault.unread === true) Object.assign(harness.account, { refuse: `POST /accounts/${ACCOUNT}/d1/database/*`, refuseAs: { status: 400, code: 7500 } });
+
   const own = ownReach(harness, fault);
   const slept: number[] = [];
   const sleep = async (milliseconds: number): Promise<void> => {
     slept.push(milliseconds);
     await own.sleep(milliseconds);
   };
-  const began = harness.lines.length;
+  const [began, asked] = [harness.lines.length, harness.asked.length];
   const runs: { readonly lines: number; readonly at: number; readonly slept: number }[] = [];
   let [installed, handed]: [number, Ran["handed"]] = [began, undefined];
   const older: Older = {
@@ -260,8 +266,9 @@ async function upgrade(kind: Found["kind"], fault: Fault = {}): Promise<Ran> {
   const waits = harness.lines.filter((line) => line.startsWith(NAME_HELD));
   const gaps = runs.slice(1).map((run, before) => run.at - (runs[before]?.at ?? 0));
   const told = { removal: harness.lines.slice(began, runs[0]?.lines ?? began), waits, lines: harness.lines.slice(installed) };
+  const deleted = harness.asked.slice(asked).filter((call) => call.method === "DELETE").length;
 
-  return { code, ...told, handed, installs: runs.length, gaps, restsAfter: slept.slice(runs.at(-1)?.slept ?? 0), uploads: harness.account.uploads.length };
+  return { code, ...told, deleted, handed, installs: runs.length, gaps, restsAfter: slept.slice(runs.at(-1)?.slept ?? 0), uploads: harness.account.uploads.length };
 }
 
 describe.each(["domain", "account address"] as const)("the live upgrade of an install on its %s, on a fake account in memory", (kind) => {
@@ -270,7 +277,15 @@ describe.each(["domain", "account address"] as const)("the live upgrade of an in
     const ran = await upgrade(kind);
     const removal = [START_OVER, "This account has no install. Nothing changed.", "Removal: nothing of an install is there"];
 
-    expect(ran).toEqual({ code: 0, removal, handed: NO_INSTALL, installs: 1, waits: [], gaps: [], restsAfter: expect.any(Array), lines: HELD, uploads: 2 });
+    expect(ran).toMatchObject({ code: 0, removal, handed: NO_INSTALL, installs: 1, waits: [], gaps: [], lines: HELD, uploads: 2 });
+  });
+
+  // Drift: the older build read what stood before it removed it, and went no further where Cloudflare would not read the database.
+  // A removal with no such read first would take the install on a day nothing can be made in its place.
+  test("an install whose database Cloudflare will not read stops the upgrade before anything is removed, and the older build's install never runs", async () => {
+    const ran = await upgrade(kind, { standing: true, unread: true });
+
+    expect([ran.code, ran.deleted, ran.installs, ran.lines]).toEqual([1, 0, 0, ["::error::The upgrade could not be checked: Cloudflare refused with status 400 and codes 7500."]]);
   });
 
   // Incident: the older build removed the install and made its own right after, by its own code, and Cloudflare still held the bucket's name. An older build's removal is none this commit can mend.

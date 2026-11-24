@@ -28,7 +28,7 @@ const PACKAGE = join("packages", "providers", "cloudflare");
 /** The script of the older build that makes the test install, as its package names it. */
 const INSTALL_SCRIPT = "live:converge";
 
-/** What tells that script to remove nothing first: the upgrade's own removal came before it, and one more would have Cloudflare hold the bucket's name anew. */
+/** What tells that script to remove nothing, whatever the environment it inherits asks: the upgrade's own removal came before it. */
 const NO_START_OVER = { POPLIN_LIVE_START_OVER: "false" } as const;
 
 /** The parts of a build that start an update of an install. */
@@ -65,7 +65,7 @@ export interface Ended {
   /** The exit code of its script. */
   readonly code: number;
 
-  /** Each line the script printed. */
+  /** Each line the script printed on its standard output. */
   readonly said: readonly string[];
 }
 
@@ -118,7 +118,7 @@ export function takeWith(parts: UpdateParts, given: Taking): ReturnType<typeof s
  * Run a script as a child, with what it prints on this process's own as it comes.
  *
  * @param env - what the child is run with
- * @returns its exit code and every line it printed, which an upgrade reads the row of a failed install from
+ * @returns its exit code and every line of its standard output, which an upgrade reads the row of a failed install from; what it prints as errors is shown and not kept
  */
 export async function runChild(command: readonly string[], env: Readonly<Record<string, string | undefined>>): Promise<Ended> {
   const child = Bun.spawn([...command], { env: { ...env }, stdio: ["ignore", "pipe", "inherit"] });
