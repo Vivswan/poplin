@@ -5,11 +5,15 @@
 //
 // The result goes to stdout and everything else to stderr, so a pipe takes the result alone.
 
+import { Readline } from "node:readline/promises";
+import { Writable } from "node:stream";
 import { styleText } from "node:util";
 
+import { getColumns, isAccessible } from "@clack/core";
 import { confirm, isCancel, log, password, select, spinner, text, updateSettings } from "@clack/prompts";
 import { Help } from "commander";
 import { type ConsolaInstance, createConsola, LogLevels } from "consola";
+import libraryWidth from "fast-string-width";
 import stringWidth from "string-width";
 
 /** How wide a stream that names no width is taken to be, in the cells of a terminal: a pipe, a file, and a terminal that does not say. */
@@ -23,6 +27,15 @@ const GUIDE_WIDTH = 3;
 
 /** Paints a text whatever stdout is: a block is painted where stderr shows colour. */
 const ALWAYS = { validateStream: false } as const;
+
+/** How many cells of its row the spinner takes beside its text: the frame, two spaces, up to three dots, and the last cell, which stays free so that no terminal wraps the row. */
+const SPINNER_WIDTH = 7;
+
+/** What takes a text apart into the characters a person sees, each of which a terminal draws whole. */
+const CHARACTERS = new Intl.Segmenter();
+
+/** The two pieces the spinner's library writes before the text of a frame it draws over the last one: the cursor to the start of the row, and the erasing from the cursor on. */
+const FRAME_START: ReadonlySet<string> = new Set(["\u001b[1G", "\u001b[J"]);
 
 /** The narrowest column that is still folded: under it a line is left to the terminal. */
 const MIN_FOLD = 20;
@@ -123,6 +136,75 @@ interface Streams {
   readonly stop: () => void;
 }
 
+/** A piece of work that the spinner says in lines for a screen reader. It holds no row, so nothing of it is cut or given to a line. */
+interface Said {
+  readonly draws: false;
+}
+
+/** A piece of work that the spinner draws on one row of the terminal. */
+interface Drawn {
+  readonly draws: true;
+
+  /** Whether a line took the row in this turn, and the work has not said since that it goes on. */
+  readonly covered: boolean;
+}
+
+/** The piece of work the spinner shows, from the text that starts it to its rest. */
+type Work = Said | Drawn;
+
+/** The spinner of a process, as its screen uses it. */
+interface Spinning {
+  /** Says what is being worked on: it starts the spinner, or gives the one that runs its new text. */
+  readonly working: (text: string) => void;
+
+  /** Gives the spinner's row to the line written next. Work that says in the same turn that it goes on keeps its spinner, and any other is at rest once the turn is over. */
+  readonly cover: () => void;
+
+  /** Ends the spinner. With `left`, that stays as one line. */
+  readonly rest: (left?: string) => void;
+}
+
+/**
+ * A terminal's stream that is handed each frame of the spinner in one piece.
+ *
+ * The spinner's library writes a frame over the last one in three: the cursor to the start of the row, the erasing of the row, and the row's new text.
+ * A terminal that paints between two of them shows the row empty, which is seen as a flicker.
+ * So a piece that is one of the first two, whoever wrote it, is held until the next piece comes.
+ */
+class Joined extends Writable {
+  readonly #to: NodeJS.WriteStream;
+
+  #held = "";
+
+  constructor(to: NodeJS.WriteStream) {
+    super({ decodeStrings: false });
+    this.#to = to;
+  }
+
+  /** Whether the stream behind is a terminal: the library reads the keys of one as a terminal's. */
+  get isTTY(): boolean {
+    return this.#to.isTTY === true;
+  }
+
+  /** How wide the terminal behind is, which the library folds a frame by. */
+  get columns(): number {
+    return this.#to.columns;
+  }
+
+  /** The hook a stream of Node takes each piece through, which fixes its name. */
+  override _write(piece: string | Buffer, _encoding: BufferEncoding, done: () => void): void {
+    const written = String(piece);
+    this.#held += written;
+
+    if (!FRAME_START.has(written)) {
+      this.#to.write(this.#held);
+      this.#held = "";
+    }
+
+    done();
+  }
+}
+
 /** Write one line through consola, by its tone. An error and a warning are kept on one line, with no badge. */
 function say(consola: ConsolaInstance, tone: Tone, line: string): void {
   const ways: Readonly<Record<Tone, () => void>> = {
@@ -166,6 +248,26 @@ export function foldedText(text: string, width: number = ASSUMED_WIDTH): string 
     .split("\n")
     .flatMap((line) => folded(line, width, undefined))
     .join("\n");
+}
+
+/**
+ * Cut a text to so many cells of a terminal, between two characters.
+ *
+ * It fits by two counts: the one a terminal's row is measured with, and the one the spinner's library folds a frame by, which is wider for some characters, a soft hyphen among them.
+ *
+ * @returns the text as it is where it fits, and its start where it does not
+ */
+function cut(text: string, room: number): string {
+  let kept = "";
+  for (const { segment } of CHARACTERS.segment(text)) {
+    const longer = `${kept}${segment}`;
+    // The library counts a text in its composed form.
+    if (Math.max(stringWidth(longer), libraryWidth(longer.normalize())) > room) break;
+
+    kept = longer;
+  }
+
+  return kept;
 }
 
 /**
@@ -258,31 +360,41 @@ export function plainScreen(to: {
 }
 
 /**
- * The screen of this process.
+ * The one spinner of a process, on the stream its questions are on.
  *
- * @param streams - where the result and the rest are written, and whether each shows colour: a stream without is written plain lines
- * @returns a screen whose questions and spinner are on the second stream; a caller asks only where a person is there to answer.
- *   A stop key pressed while the spinner shows stops the command by `stop`, as a Ctrl-C at any other moment does
+ * @returns the ways a screen uses it. A spinner that draws is one row of the terminal, with a longer text cut to it, and each of its frames is written in one piece.
+ *   A stop key pressed while it shows stops the command by `stop`, as a Ctrl-C at any other moment does
  */
-export function processScreen(streams: Streams): Screen {
-  const line = writer(streams.out, streams.colour.out);
-  const aside = writer(streams.err, streams.colour.err);
-  const block = blockWriter(streams.err, streams.colour.err);
-  const common = { output: streams.err };
+function spinning(streams: Streams): Spinning {
+  const said = isAccessible();
+  const pen = new Joined(streams.err);
+  // The width is read once, here, where the library reads it for its spinner: the screen cuts a text to the row the library folds a frame by.
+  const room = getColumns(pen) - SPINNER_WIDTH;
   // The spinner stands alone between lines, so it draws no guide of a question above itself. A signal it hears stops the command, which else would go on.
-  const spin = spinner({ ...common, withGuide: false, cancelMessage: "Cancelled", onCancel: streams.stop });
-  updateSettings({ aliases: { [END_OF_INPUT]: "cancel" } });
-  let spinning = false;
+  const spin = spinner({ output: pen, accessible: said, withGuide: false, cancelMessage: "Cancelled", onCancel: streams.stop });
+  let work: Work | undefined;
+
+  /** A text as the spinner shows it: cut to the row where it draws one, and whole where it says work in lines. */
+  const fitted = (shown: string): string => (said ? shown : cut(shown, room));
+
+  const begin = (shown: string): Work => {
+    spin.start(fitted(shown));
+    // The listener stands before the one the spinner's start put on, so it hears a key first.
+    streams.input.prependListener("data", stopKey);
+
+    return said ? { draws: false } : { draws: true, covered: false };
+  };
 
   const rest = (left?: string): void => {
+    const stays = left !== undefined && streams.colour.err;
     // What is left stays also where a line between took the spinner off: it is started anew to be ended with it.
-    if (left !== undefined && !spinning && streams.colour.err) spin.start(left);
+    if (stays && work === undefined) begin(left);
 
-    if (left !== undefined && streams.colour.err) spin.stop(left);
-    else if (spinning) spin.clear();
+    if (stays) spin.stop(left);
+    else spin.clear();
 
     streams.input.off("data", stopKey);
-    spinning = false;
+    work = undefined;
   };
 
   // The spinner's library ends the process with code 0 at a stop key. The spinner is cleared here first, which takes that listener off, and the command is stopped by its one way.
@@ -293,9 +405,61 @@ export function processScreen(streams: Streams): Screen {
     streams.stop();
   }
 
+  const cover = (): void => {
+    if (work === undefined) return;
+
+    // Work said in lines holds no row to give: a line ends it, and it is said anew after the line.
+    if (!work.draws) {
+      rest();
+
+      return;
+    }
+
+    if (work.covered) return;
+
+    const covered: Work = { draws: true, covered: true };
+    work = covered;
+    queueMicrotask(() => {
+      if (work === covered) rest();
+    });
+    // The cursor to the start of the row and the erasing of the row reach the terminal as one piece.
+    void new Readline(streams.err).cursorTo(0).clearLine(0).commit();
+  };
+
+  const working = (shown: string): void => {
+    if (!streams.colour.err) return;
+
+    if (work === undefined) {
+      work = begin(shown);
+
+      return;
+    }
+
+    if (work.draws) work = { draws: true, covered: false };
+
+    spin.message(fitted(shown));
+  };
+
+  return { working, cover, rest };
+}
+
+/**
+ * The screen of this process.
+ *
+ * @param streams - where the result and the rest are written, and whether each shows colour: a stream without is written plain lines
+ * @returns a screen whose questions and spinner are on the second stream; a caller asks only where a person is there to answer
+ */
+export function processScreen(streams: Streams): Screen {
+  const line = writer(streams.out, streams.colour.out);
+  const aside = writer(streams.err, streams.colour.err);
+  const block = blockWriter(streams.err, streams.colour.err);
+  const common = { output: streams.err };
+  const spin = spinning(streams);
+  updateSettings({ aliases: { [END_OF_INPUT]: "cancel" } });
+
   /** A question is put with the spinner at rest, and a stopped one answers nothing. */
   const asked = async <Answer>(put: () => Promise<Answer | symbol>): Promise<Answer | undefined> => {
-    rest();
+    spin.rest();
     const answer = await put();
 
     return isCancel(answer) ? undefined : (answer as Answer);
@@ -303,15 +467,15 @@ export function processScreen(streams: Streams): Screen {
 
   return {
     line: (tone, shown, hang) => {
-      rest();
+      spin.cover();
       line(tone, shown, hang);
     },
     aside: (tone, shown, hang) => {
-      rest();
+      spin.cover();
       aside(tone, shown, hang);
     },
     block: (title, rows) => {
-      rest();
+      spin.rest();
       block(title, rows);
     },
     link: (shown, address) => {
@@ -319,7 +483,7 @@ export function processScreen(streams: Streams): Screen {
       const linked = streams.link(painted ? styleText("underline", shown, ALWAYS) : shown, address);
       if (linked === undefined) return false;
 
-      rest();
+      spin.rest();
       // A link stands under the guide of the block before it, which only a stream that shows colour draws.
       log.message(linked, { ...common, withGuide: painted, spacing: 0 });
 
@@ -330,20 +494,7 @@ export function processScreen(streams: Streams): Screen {
     confirm: (question, initial) => asked<boolean>(() => confirm({ ...common, message: question, initialValue: initial })),
     choose: (question, picks) =>
       asked<string>(() => select({ ...common, message: question, options: picks.map((pick) => ({ value: pick.value, label: pick.label, hint: pick.hint })) })),
-    working: (shown) => {
-      if (!streams.colour.err) return;
-
-      if (spinning) {
-        spin.message(shown);
-
-        return;
-      }
-
-      spin.start(shown);
-      // The listener stands before the one the spinner's start put on, so it hears a key first.
-      streams.input.prependListener("data", stopKey);
-      spinning = true;
-    },
-    rest,
+    working: spin.working,
+    rest: spin.rest,
   };
 }
