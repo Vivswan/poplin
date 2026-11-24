@@ -158,7 +158,10 @@ test("Files in a site's panel opens as a tree with the folders first, a folder o
   // A folder's row is pressed, so it shows the hand, as every other control does.
   await expect(top.first().locator("[data-slot='tree-label']")).toHaveCSS("cursor", "pointer");
   // The folders stand before the files, and none is open: only what is at the top is shown.
-  expect([await top.evaluateAll((items) => items.slice(0, 3).map((item) => item.textContent)), await tree.getByRole("treeitem", { expanded: true }).count()]).toEqual([[...NESTED.folders], 0]);
+  // Each row is read by the walk's own scripts alone. The panel takes its name from its title's id, and the Firefox that Playwright 1.65 ships (159, build 1572)
+  // ends a page where such a name is read once by the walk's scripts and once among the page's, as `evaluateAll` reads it.
+  const rows = await Promise.all(NESTED.folders.map((_folder, at) => top.nth(at).textContent()));
+  expect([rows, await tree.getByRole("treeitem", { expanded: true }).count()]).toEqual([[...NESTED.folders], 0]);
 
   await tree.getByRole("treeitem", { name: NESTED.folder, exact: true }).click();
   const file = tree.getByRole("treeitem", { name: NESTED.folder, exact: true }).getByRole("link", { name: NESTED.page });
