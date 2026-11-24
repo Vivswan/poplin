@@ -1,13 +1,23 @@
-// Where a site's files sit in the bucket, and how a version's or a site's files are removed.
+// Where a site's files sit in the bucket, how one folder of a version is listed, and how a version's or a site's files are removed.
 
+import { stringToUint8Array } from "uint8array-extras";
+import * as v from "valibot";
+
+import type { Actor } from "../../auth/scopes";
+import { POSITIVE } from "../../records/fields";
 import type { SiteFolder } from "../../records/site";
-import { type CheckedKey, deletePrefix, type ObjectStore, parseObjectKey } from "../../storage/storage";
+import { type CheckedKey, deletePrefix, type ListCursor, MAX_LIST_LIMIT, type ObjectStore, parseObjectKey, sha256Of } from "../../storage/storage";
+import { reachSite } from "../access/reach";
+import { type Install, type Refused, refuse } from "../records";
 
 /** The list pages one removal walks unless told otherwise. */
 const REMOVAL_PAGES = 15;
 
 /** A separator no address reaches: a file stored under a path that holds one would never be served. */
 const BACKSLASH = "\\";
+
+/** What joins the segments of a path, and ends the prefix of a folder. */
+const SEPARATOR = "/";
 
 /** A folder key of the usual length, to measure a path against before the site's own folder is known. */
 const ANY_FOLDER = "0".repeat(16) as SiteFolder;
@@ -18,11 +28,36 @@ const WIDEST_VERSION = Number.MAX_SAFE_INTEGER;
 /** The longest prefix a site's files can have, built once: every path of a long manifest is measured against it. */
 const WIDEST_PREFIX = versionPrefix(ANY_FOLDER, WIDEST_VERSION);
 
+/** What a page of one folder of a version may ask for. */
+const FOLDER_QUERY = v.strictObject({
+  version: POSITIVE,
+  folder: v.optional(v.string(), ""),
+  limit: v.optional(v.pipe(POSITIVE, v.maxValue(MAX_LIST_LIMIT)), MAX_LIST_LIMIT),
+  cursor: v.optional(v.string()),
+});
+
 /** A file's key, or why its path is none: the key rule it breaks, or the backslash it holds. */
 type CheckedFileKey = CheckedKey | { readonly ok: false; readonly refusal: "backslash" };
 
 /** A path a publish takes, or the rule it breaks. */
 type CheckedFilePath = { readonly ok: true } | { readonly ok: false; readonly refusal: Extract<CheckedFileKey, { readonly ok: false }>["refusal"] };
+
+/** One page of what one folder of a version holds, in the store's order. */
+interface ListedFolder {
+  readonly ok: true;
+
+  /** The folders right in the folder, each by its path in the version. */
+  readonly folders: readonly string[];
+
+  /** The files right in the folder, each by its path in the version, with its length in bytes. */
+  readonly files: readonly { readonly path: string; readonly size: number }[];
+
+  /** What `cursor` takes to get the following page of this very listing; absent on the last. */
+  readonly next?: string;
+
+  /** How many files the whole version was published with. */
+  readonly total: number;
+}
 
 /**
  * The prefix of every file of one version: `<folder>/v<number>/`.
@@ -67,6 +102,77 @@ export function checkFilePath(path: string): CheckedFilePath {
 /** The prefix of every file of a site, whatever the version: `<folder>/`. */
 export function sitePrefix(folder: SiteFolder): string {
   return `${folder}/`;
+}
+
+/**
+ * The prefix of everything in one folder of a version: the key a file at the folder's path would have, and the separator after it, so no folder reaches outside its version.
+ *
+ * @param top - the version's own prefix
+ * @param folder - the folder's path in the version; empty for the version's top
+ * @returns the prefix, or `undefined` for a path no file can lie under
+ */
+function folderPrefix(top: string, folder: string): string | undefined {
+  if (folder === "") return top;
+
+  const key = keyUnder(top, folder);
+
+  return key.ok ? `${key.key}${SEPARATOR}` : undefined;
+}
+
+/**
+ * Mark the listing of one prefix: what the `next` of each of its pages starts with, so the `next` of one listing is told from a cursor of another.
+ *
+ * @returns the SHA-256 of the prefix in base64, which is as long for every prefix and names no folder
+ */
+async function listingMark(prefix: string): Promise<string> {
+  return sha256Of(stringToUint8Array(prefix));
+}
+
+/**
+ * List one page of what one folder of a kept version of a site holds, from the store: one listing a call, of that folder alone and of nothing inside its folders.
+ *
+ * @param request - `site` is a reference to the site and `version` one of its kept versions; `folder` is the folder's path in the version, segments joined by `/`, and the version's top when left out;
+ *   `limit` is 1 to 1000, of folders and files together; `cursor` is the `next` of the page before, of the same site, version, and folder
+ * @returns the page, for the site's owner or an admin; a folder the version does not hold has neither folders nor files.
+ *   `no_such_version` for a version the site does not keep, or `bad_argument` naming the key that was refused: `folder` for a path no file can lie under,
+ *   and `cursor` for one without this listing's mark, or with nothing after it: the `next` of another folder, of another version, or of the files before an import stored them anew. What follows the mark is the store's to judge
+ * @throws {Error} the store failed, or refused the cursor
+ */
+export async function listFolder(
+  install: Install,
+  actor: Actor,
+  request: v.InferInput<typeof FOLDER_QUERY> & { readonly site: string },
+): Promise<ListedFolder | Refused<"not_set_up" | "bad_argument" | "not_found" | "not_allowed" | "no_such_version">> {
+  const { site: reference, ...query } = request;
+  const asked = v.safeParse(FOLDER_QUERY, query);
+  if (!asked.success) return refuse("bad_argument", v.getDotPath(asked.issues[0])?.split(".")[0] ?? "query");
+
+  const { version, folder, limit, cursor } = asked.output;
+  const reached = await reachSite(install, actor, reference);
+  if (!reached.ok) return reached;
+
+  const kept = reached.site.versions.find((one) => one.number === version);
+  if (kept === undefined) return refuse("no_such_version");
+
+  const top = versionPrefix(reached.site.folder, version);
+  const prefix = folderPrefix(top, folder);
+  if (prefix === undefined) return refuse("bad_argument", "folder");
+
+  const mark = await listingMark(prefix);
+  // What the store itself gave, after the mark: nothing where the cursor is of another listing, or is the mark alone.
+  const continued = cursor?.startsWith(mark) ? cursor.slice(mark.length) : "";
+  if (cursor !== undefined && continued === "") return refuse("bad_argument", "cursor");
+
+  const paging = cursor === undefined ? {} : { cursor: continued as ListCursor };
+  const page = await install.store.list({ prefix, limit, shallow: true, ...paging });
+  const listed = {
+    folders: page.folders.map((held) => held.slice(top.length, -SEPARATOR.length)),
+    files: page.objects.map((object) => ({ path: object.key.slice(top.length), size: object.size })),
+    total: kept.files,
+  };
+  if (!page.more) return { ok: true, ...listed };
+
+  return { ok: true, ...listed, next: `${mark}${page.cursor}` };
 }
 
 /** Walk one prefix a page at a time while the budget lasts, and answer whether it is empty. A page costs two store calls. */

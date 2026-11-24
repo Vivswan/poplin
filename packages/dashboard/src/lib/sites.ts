@@ -80,6 +80,18 @@ export function plainAddress(address: string): string {
 }
 
 /**
+ * Write the address of one file of a site: the site's address with the file's path after it.
+ *
+ * Each part of the path is percent-encoded, which a site decodes once when it serves a file: a path that holds `#`, `?`, `%`, or a space still names its file.
+ *
+ * @param address - the site's address, as the server gives it
+ * @param path - where the file sits in the site: parts joined by `/`, with none before the first
+ */
+export function fileAddress(address: string, path: string): string {
+  return new URL(path.split("/").map(encodeURIComponent).join("/"), address).href;
+}
+
+/**
  * Split an address of a site into the part every row shares, the site's own part, and the id a screen leaves out.
  *
  * An address another install gave the site holds that install's id, not this one's: it is read from the address itself, so both are split alike.

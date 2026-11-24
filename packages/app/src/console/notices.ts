@@ -89,6 +89,7 @@ const ABOUT_REFUSALS: Readonly<Record<string, Readonly<Record<string, string>>>>
     other: "The copy does not fit a limit of the install: {about}. No copy was made.",
   },
   bad_argument: {
+    cursor: "This list is out of date. Load the page again.",
     expires: "Pick a day that is still ahead.",
     title: "Use one line of 200 characters at most.",
     default_expires: SPAN_RANGE,

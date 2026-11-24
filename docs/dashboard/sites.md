@@ -30,7 +30,7 @@ The table starts with the columns Site, Who can open it, Link, and Updated. Colu
 
 Every heading but Site is dragged to another place, and a heading's edge to another width. Site is always shown. The browser keeps the layout.
 
-For a site that is not in the trash, the panel has the link, who can open it, the versions, and two switches under Settings: Show in search engines, and Allow embedding. It also says the site's Visits, Size, and Updated, and when it Expires. At its foot are New link, Duplicate, and Delete.
+For a site that is not in the trash, the panel has the link, who can open it, the versions, the files of the live version, and two switches under Settings: Show in search engines, and Allow embedding. It also says the site's Visits, Size, and Updated, and when it Expires. At its foot are New link, Duplicate, and Delete.
 
 | In the panel                  | Does, or says                                                                    |
 | ----------------------------- | -------------------------------------------------------------------------------- |
@@ -48,6 +48,19 @@ For a site that is not in the trash, the panel has the link, who can open it, th
 | Never                 | never                                                                                |
 
 For a site that expires, the panel then shows the day and time, and `Then its link stops working, and it moves to the trash.`
+
+Files, under the versions, is folded until you press it. It shows the live version alone, as a tree: the folders first, then the files, each with its size. Once it was opened, the number after Files is how many files that version holds; Size counts every kept version.
+
+| Under Files           | Does                                                                              |
+| --------------------- | --------------------------------------------------------------------------------- |
+| a folder              | opens it, and reads what is in it the first time; a second press closes it        |
+| a file                | opens that file of the site in a new tab                                          |
+| Show more             | reads the next rows of a folder that holds more, up to 200 at a time                |
+| the arrow keys        | move from row to row; Right opens a folder, Left closes it, and Enter opens a file |
+
+Nothing is read while Files is folded, and what was read is kept while the dashboard stays open. A new link starts the site's files over. [What one action costs](../upkeep/cost/what-one-action-costs.md) has the numbers of a read.
+
+Where a site was deleted for good and imported again, a folder of its live version that was read before does not read on: Show more says `This list is out of date. Load the page again.`
 
 | From                | To       | The question says                                                                  | Its button       |
 | ------------------- | -------- | ---------------------------------------------------------------------------------- | ---------------- |

@@ -2,6 +2,7 @@
 
 import { describe, expect, test } from "bun:test";
 
+import { publishSite } from "@poplin/core/src/actions/publish/publish";
 import { fileKey, sitePrefix } from "@poplin/core/src/actions/sites/files";
 
 import { NOW } from "../../sites/support/install";
@@ -26,6 +27,15 @@ interface Changed {
   readonly about?: string | null;
   readonly sentence?: string;
   readonly site?: { readonly expires: unknown } | null;
+}
+
+/** What one folder of a site's files answers, or its refusal, as far as these tests read it. */
+interface Folder {
+  readonly code?: string;
+  readonly about?: string | null;
+  readonly sentence?: string;
+  readonly files?: readonly { readonly path: string; readonly size: number }[];
+  readonly next?: string | null;
 }
 
 // Drift: a public site's own switch for search engines would say "Saved." while the install keeps every search engine out, and nothing at the switch would say that it changes nothing.
@@ -208,5 +218,64 @@ describe.each([
     for (const text of typed) lists.push(await found(text));
 
     expect(lists).toEqual([["guide", "guide-two"], ["guide", "guide-two"], ["shelf"], ["guide-two"], ["guide-two"], [], [], [], [], "bad_argument"]);
+  });
+});
+
+describe("one folder of a site's files", () => {
+  /** A site whose one version holds a page, a folder in a folder, and a folder of one file more than a page of the route holds: 204 files, each holding its own path. Answers the address of its files. */
+  async function stocked(opened: Awaited<ReturnType<typeof openConsole>>): Promise<string> {
+    const many = Array.from({ length: 201 }, (_unused, at) => `many/file-${String(at).padStart(3, "0")}.txt`);
+    const files = ["index.html", "docs/a.html", "docs/deep/b.html", ...many].map((path) => {
+      const bytes = new TextEncoder().encode(path);
+
+      return { path, size: bytes.length, contentType: "text/plain", open: () => new Blob([bytes]).stream() };
+    });
+    const published = await publishSite(opened.base.install, { scope: "admin", holder: opened.base.owner }, { name: "guide", files });
+    if (!published.ok) throw new Error(`the test's site was refused: ${published.code}`);
+
+    return `/data/sites/${published.site.label}/files`;
+  }
+
+  // Drift: the panel's tree asks for one folder with each press; a route that answered what lies in a folder's folders, named a folder by another path than the next press asks it by,
+  // or gave a page no end would list the storage for nothing, and show a tree no press goes on in.
+  test("is answered with the folders and the files right in it, by their paths in the version, 200 a page with the cursor of the page after it", async () => {
+    const opened = await openConsole();
+    const files = await stocked(opened);
+    const folder = async (query: string): Promise<Folder> => (await (await opened.get(`${files}?${query}`)).json()) as Folder;
+
+    const first = await folder("version=1&folder=many");
+    const second = await folder(`version=1&folder=many&cursor=${encodeURIComponent(first.next ?? "")}`);
+
+    expect<unknown>([await folder("version=1"), await folder("version=1&folder=docs"), await folder("version=1&folder=docs%2Fdeep")]).toEqual([
+      { ok: true, folders: ["docs", "many"], files: [{ path: "index.html", size: 10 }], next: null, total: 204 },
+      { ok: true, folders: ["docs/deep"], files: [{ path: "docs/a.html", size: 11 }], next: null, total: 204 },
+      { ok: true, folders: [], files: [{ path: "docs/deep/b.html", size: 16 }], next: null, total: 204 },
+    ]);
+    expect([first.files?.length, first.files?.at(-1)?.path, typeof first.next, second.files, second.next]).toEqual([200, "many/file-199.txt", "string", [{ path: "many/file-200.txt", size: 17 }], null]);
+  });
+
+  // Drift: what names a folder is typed into an address; a version the site does not keep, or a path that leaves the version, would be listed as if it were the site's.
+  test.each([
+    ["a version the site does not keep", "version=2", 404, "no_such_version", null],
+    ["no version", "folder=docs", 400, "bad_argument", "version"],
+    ["a version that is no number", "version=live", 400, "bad_argument", "version"],
+    ["a folder that climbs out of the version", "version=1&folder=..%2Fv2", 400, "bad_argument", "folder"],
+  ])("is refused for %s", async (_what, query, status, code, about) => {
+    const opened = await openConsole();
+    const response = await opened.get(`${await stocked(opened)}?${query}`);
+    const refusal = (await response.json()) as Folder;
+
+    expect([response.status, refusal.code, refusal.about]).toEqual([status, code, about]);
+  });
+
+  // Drift: the panel keeps the pages it read while the dashboard stays open; a cursor that outlived its listing would be answered with rows of another, or in words that name no way on: the row that reads on sends the same cursor again.
+  test("is refused for the cursor of another folder's page, in a sentence that says to load the page again", async () => {
+    const opened = await openConsole();
+    const files = await stocked(opened);
+    const first = (await (await opened.get(`${files}?version=1&folder=many`)).json()) as Folder;
+    const response = await opened.get(`${files}?version=1&folder=docs&cursor=${encodeURIComponent(first.next ?? "")}`);
+    const refusal = (await response.json()) as Folder;
+
+    expect([typeof first.next, response.status, refusal.code, refusal.about, refusal.sentence?.includes("Load the page again")]).toEqual(["string", 400, "bad_argument", "cursor", true]);
   });
 });

@@ -1,5 +1,5 @@
 // A site's panel on the screens between a phone and the widest: it lies over the end of the list, which stays in sight and in reach beside it. And its Edit, which starts from what the site holds every time it is opened.
-// And the fields that take a site's name or a user's email, which keep one that is too long and say so. And where a phone's panel breaks a long link.
+// And the fields that take a site's name or a user's email, which keep one that is too long and say so. And where a phone's panel breaks a long link. And the tree of a site's files.
 
 import { expect } from "@playwright/test";
 
@@ -16,6 +16,9 @@ const SAMPLE = { opened: "Pricing", beside: "Team handbook", long: "Q3 sales rep
 
 /** The lines a phone's panel draws the letters of that site's link on: the name and the dash after the hidden part, then the letter of who can open the site with what follows it. */
 const LINES = ["sales-report---", "p-poplin"];
+
+/** The sample site that holds two other samples beside its own, each under a folder: its folders, and the page one of them holds, by the title of that page. */
+const NESTED = { title: "Team site", folders: ["assets/", "deck/", "report/"], folder: "deck/", page: "index.html", shows: "Glowpod 2 launch plan: Driftwick Outdoor" } as const;
 
 /** What is typed into the Edit of a site and then left. */
 const DRAFT = { title: "Draft X", name: "ab" } as const;
@@ -139,6 +142,34 @@ test.describe("on a phone, in a site's panel", () => {
     // The panel slides in and its font arrives: the lines are read until they hold.
     await expect.poll(lines).toEqual(LINES);
   });
+});
+
+// Drift: the panel would say how many files a site holds and name none of them; or a folder would open on nothing, or a file's row lead to another file than the one it names.
+test("Files in a site's panel opens as a tree with the folders first, a folder opens on what it holds, and a file in it opens that file of the site in a new tab", async ({ page }) => {
+  await arrive(page);
+  await openPanel(page, NESTED.title);
+  const panel = page.getByRole("dialog", { name: NESTED.title, exact: true });
+  const tree = panel.getByRole("tree", { name: "Files", exact: true });
+  await expect(tree).toHaveCount(0);
+
+  await panel.getByRole("button", { name: /^Files/ }).click();
+  const top = tree.locator("[role='treeitem'][aria-level='1']");
+  await expect(top.first()).toBeVisible();
+  // A folder's row is pressed, so it shows the hand, as every other control does.
+  await expect(top.first().locator("[data-slot='tree-label']")).toHaveCSS("cursor", "pointer");
+  // The folders stand before the files, and none is open: only what is at the top is shown.
+  // Each row is read by the walk's own scripts alone. The panel takes its name from its title's id, and the Firefox that Playwright 1.65 ships (159, build 1572)
+  // ends a page where such a name is read once by the walk's scripts and once among the page's, as `evaluateAll` reads it.
+  const rows = await Promise.all(NESTED.folders.map((_folder, at) => top.nth(at).textContent()));
+  expect([rows, await tree.getByRole("treeitem", { expanded: true }).count()]).toEqual([[...NESTED.folders], 0]);
+
+  await tree.getByRole("treeitem", { name: NESTED.folder, exact: true }).click();
+  const file = tree.getByRole("treeitem", { name: NESTED.folder, exact: true }).getByRole("link", { name: NESTED.page });
+  await expect(file).toBeVisible();
+  const [opened] = await Promise.all([page.waitForEvent("popup"), file.click()]);
+
+  await expect(opened).toHaveTitle(NESTED.shows);
+  expect(new URL(opened.url()).pathname.endsWith(`/${NESTED.folder}${NESTED.page}`)).toBe(true);
 });
 
 // Drift: the field of Add a user took 254 characters, so a longer email lost its end with no word and what was left was added as a user.

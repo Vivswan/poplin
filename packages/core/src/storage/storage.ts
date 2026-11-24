@@ -3,7 +3,7 @@
 // `String.prototype.isWellFormed` is newer than the compile target, so this file names the library that types it.
 /// <reference lib="es2024.string" />
 
-import { uint8ArrayToBase64 } from "uint8array-extras";
+import { compareUint8Arrays, uint8ArrayToBase64 } from "uint8array-extras";
 
 /** The most objects one `list` call may ask for: no store is asked for a longer page. */
 export const MAX_LIST_LIMIT = 1000;
@@ -64,7 +64,7 @@ export type ObjectKey = string & { readonly [objectKeyBrand]: true };
  */
 export type Etag = string & { readonly [etagBrand]: true };
 
-/** Where a listing stopped. It continues only a `list` call with the same prefix, on the store that made it. */
+/** Where a listing stopped. It continues only a `list` call with the same prefix and the same `shallow`, on the store that made it. */
 export type ListCursor = string & { readonly [listCursorBrand]: true };
 
 /** Why a string is not an object key. `bad-character` is a control character or a lone surrogate. */
@@ -147,26 +147,34 @@ export interface ListOptions {
   /** Any well-formed string in NFC, not a key: `""` lists the whole store, `"blog/"` one folder. */
   readonly prefix: string;
 
-  /** The most objects in one page: 1 to `MAX_LIST_LIMIT`, which is the default. */
+  /** The most objects and folders in one page, counted together: 1 to `MAX_LIST_LIMIT`, which is the default. */
   readonly limit?: number;
 
   /** The cursor of the previous page; absent for the first. */
   readonly cursor?: ListCursor;
+
+  /** `true` lists one level: an object whose key holds a `/` after the prefix is left out, and the folder it lies in is named in its place. */
+  readonly shallow?: boolean;
 }
 
 /**
  * One page of a listing.
  *
- * Order: `objects` ascend by the UTF-8 bytes of their keys, which is code point order, within a page and from one page to the next.
+ * Order: `objects` ascend by the UTF-8 bytes of their keys, which is code point order, within a page and from one page to the next. `folders` ascend the same way.
  *
  * A page may hold fewer objects than the limit, even none, while more remain: only `more` says whether to go on.
  *
- * A listing is not a snapshot. An object that no write touches during the listing appears exactly once.
+ * A listing is not a snapshot. Of what it lists, an object that no write touches during the listing appears exactly once, and a folder is named exactly once while no write touches an object in it.
  */
-export type ListPage = { readonly objects: readonly ObjectSummary[] } & (
-  | { readonly more: false }
-  | { readonly more: true; readonly cursor: ListCursor }
-);
+export type ListPage = {
+  readonly objects: readonly ObjectSummary[];
+
+  /** The folders of a shallow listing, each as the prefix of every key in it, its last `/` included. Empty for any other listing. */
+  readonly folders: readonly string[];
+} & ({ readonly more: false } | { readonly more: true; readonly cursor: ListCursor });
+
+/** One row of a listing answered from memory: an object, or a folder of a shallow listing. `last` is the last key the row stands for, which the following page goes on after. */
+type HeldRow = { readonly last: string } & ({ readonly object: ObjectSummary } | { readonly folder: string });
 
 /**
  * An object store: a bucket behind a provider's adapter, or memory in tests.
@@ -357,6 +365,58 @@ export function checkListOptions(options: ListOptions): number {
   if (!valid) throw new RangeError(`a list limit is a whole number from 1 to ${MAX_LIST_LIMIT}, not ${limit}`);
 
   return limit;
+}
+
+/** A listing ascends by the UTF-8 bytes of its keys, which is not the order of a string comparison. */
+function compareKeys(left: string, right: string): number {
+  return compareUint8Arrays(UTF8.encode(left), UTF8.encode(right));
+}
+
+/** Fold sorted objects into the rows of one level under a prefix: an object right under it is a row, and the objects of one folder, which stand together, are one. */
+function levelRows(sorted: readonly ObjectSummary[], prefix: string): HeldRow[] {
+  const rows: HeldRow[] = [];
+
+  for (const object of sorted) {
+    const cut = object.key.indexOf(KEY_SEPARATOR, prefix.length);
+    if (cut === -1) {
+      rows.push({ last: object.key, object });
+      continue;
+    }
+
+    const folder = object.key.slice(0, cut + 1);
+    const before = rows.at(-1);
+    if (before !== undefined && "folder" in before && before.folder === folder) rows.pop();
+
+    rows.push({ last: object.key, folder });
+  }
+
+  return rows;
+}
+
+/**
+ * Answer a listing from everything a store holds in memory. Every implementation that holds its objects there lists by it, so each pages a level alike.
+ *
+ * A cursor is the last key its page stands for: the key of its last object, or the last key in its last folder.
+ *
+ * @param held - what the store keeps about each object, in any order; an object may hold more than its summary, and its summary alone is answered
+ * @returns the page, always as full as the limit allows
+ * @throws {TypeError} `checkListOptions` refused the prefix
+ * @throws {RangeError} `checkListOptions` refused the limit
+ */
+export function listHeld(held: Iterable<ObjectSummary>, options: ListOptions): ListPage {
+  const limit = checkListOptions(options);
+  const { prefix, cursor } = options;
+  const listed = [...held].filter(({ key }) => key.startsWith(prefix) && (cursor === undefined || compareKeys(key, cursor) > 0));
+  listed.sort((left, right) => compareKeys(left.key, right.key));
+
+  const rows: readonly HeldRow[] = options.shallow === true ? levelRows(listed, prefix) : listed.map((object) => ({ last: object.key, object }));
+  const page = rows.slice(0, limit);
+  const objects = page.flatMap((row) => ("object" in row ? [{ key: row.object.key, size: row.object.size, etag: row.object.etag }] : []));
+  const folders = page.flatMap((row) => ("folder" in row ? [row.folder] : []));
+  const last = page.at(-1);
+  if (last === undefined || rows.length <= limit) return { objects, folders, more: false };
+
+  return { objects, folders, more: true, cursor: last.last as ListCursor };
 }
 
 /**

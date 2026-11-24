@@ -36,6 +36,9 @@ const R2_ETAG = /^[\w-]+$/;
 /** How R2 says the bytes of a put are not the ones the hash given with it names: its error 10037, which its message ends in. */
 const BAD_DIGEST = /\(10037\)\s*$/;
 
+/** What ends a folder's prefix, and what R2 groups the keys of a shallow listing at. */
+const FOLDER_END = "/";
+
 // R2 normalises a key to NFC and stores a lone surrogate as U+FFFD: core refuses both, so a key is listed as it was written.
 function listedKey(raw: string): ObjectKey {
   const parsed = parseObjectKey(raw);
@@ -72,7 +75,14 @@ function listOptions(options: ListOptions): R2ListOptions {
 
   if (options.cursor !== undefined) listed.cursor = options.cursor;
 
+  if (options.shallow === true) listed.delimiter = FOLDER_END;
+
   return listed;
+}
+
+// R2's reference writes a delimited prefix without its last `/`, and its local bucket answers one with it: a folder is listed with it either way.
+function folderOf(prefix: string): string {
+  return prefix.endsWith(FOLDER_END) ? prefix : `${prefix}${FOLDER_END}`;
 }
 
 /**
@@ -199,9 +209,10 @@ export class R2Store implements ObjectStore {
   async list(options: ListOptions): Promise<ListPage> {
     const listed = await this.#bucket.list(listOptions(options));
     const objects = listed.objects.map(summaryOf);
+    const folders = listed.delimitedPrefixes.map(folderOf);
 
-    if (!listed.truncated) return { objects, more: false };
+    if (!listed.truncated) return { objects, folders, more: false };
 
-    return { objects, more: true, cursor: listed.cursor as ListCursor };
+    return { objects, folders, more: true, cursor: listed.cursor as ListCursor };
   }
 }

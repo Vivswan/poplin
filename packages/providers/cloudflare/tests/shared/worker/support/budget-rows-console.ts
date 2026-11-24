@@ -191,6 +191,22 @@ export const CONSOLE_ROWS: readonly BudgetRow[] = [
   },
   {
     group,
+    name: "Sites screen: one folder of a site's files, 200 of 1,001",
+    guide: "Open a folder of a site's files",
+    route: "GET /data/sites/:site/files",
+    // Worst: the site keeps every version it may, and the folder holds more than a page, so the listing is cut at 200 and answers the cursor of the next.
+    // A press on a folder, or on Show more, is this once: one listing, which is counted against the day's writes first.
+    arrange: async (stage) => {
+      await siteWithFiles(stage, TWO_PAGES, { versions: KEPT });
+      const session = await sessionOf(stage);
+
+      return (measured) => data(measured, session, `/sites/${LABEL}/files?version=1`);
+    },
+    status: 200,
+    budget: { queries: 3, read: 8, written: 1, reads: 0, writes: 1 },
+  },
+  {
+    group,
     name: "Sites screen: the address of a public name",
     route: "GET /data/public-address",
     // The address is written from the name alone: nothing is read for it.

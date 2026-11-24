@@ -19,7 +19,7 @@ const SAMPLES = join(import.meta.dir, "..", "..", "..", "..", "..", "..", "demo"
 const STANDING = { sites: 12, files: 120, bytes: 4_000_000 };
 
 /** The most bucket writes and lists a reset with the real demo asks for when it keeps nothing: every site removed and published anew. It is under the ceiling by the room for requests that are asked twice. */
-const USUAL_RESET = 135;
+const USUAL_RESET = 140;
 
 /** How long a test that builds the demo may take, in milliseconds: the build holds the dashboard's client, which is built first. */
 const BUILD_MS = 60_000;

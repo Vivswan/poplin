@@ -149,11 +149,11 @@ export async function manyFiles(prefix: string, count: number): Promise<void> {
 }
 
 /**
- * Make the made-up site 1 with one version that holds so many files, each stored in the bucket.
+ * Make the made-up site 1, whose first version holds so many files, each stored in the bucket.
  *
- * @param made - `trashed` puts the site in the trash
+ * @param made - `trashed` puts the site in the trash; `versions` is how many it keeps, one when left out
  */
-export async function siteWithFiles(stage: Stage, files: number, made: { readonly trashed?: boolean } = {}): Promise<void> {
+export async function siteWithFiles(stage: Stage, files: number, made: { readonly trashed?: boolean; readonly versions?: number } = {}): Promise<void> {
   await manySites(stage, 1, made);
   await sql("UPDATE versions SET files = ?1, bytes = ?1", files);
   await manyFiles(`${siteFolder(1)}/v1/`, files);

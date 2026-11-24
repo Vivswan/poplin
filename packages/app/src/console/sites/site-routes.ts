@@ -1,9 +1,10 @@
-// The data of the Sites screen: one page of the table, one site, and each change of a site.
+// The data of the Sites screen: one page of the table, one site, one folder of a site's files, and each change of a site.
 //
 //   GET  /sites                    one page; ?view=trash, ?q=, ?access=, ?sort= with ?dir=, ?after=
 //                                  ?q= is a text, or what names one site: its id, its label, its link, or its whole address
 //   GET  /sites/<label>            one site, and whether the install lets search engines in
 //                                  both with the names of the logins there are, for whoever published a version
+//   GET  /sites/<label>/files      one page of one folder of a kept version; ?version=, ?folder=, ?cursor=
 //   GET  /public-address?name=     the address a site made public under that name answers at
 //   POST /sites/<label>/<change>   naming, access, settings, expiry, delete, restore, delete-for-good, new-link, make-live
 
@@ -11,6 +12,7 @@ import { vValidator } from "@hono/valibot-validator";
 import { SITE_CHANGES } from "@poplin/core/src/actions/sites/changes";
 import { readConfig } from "@poplin/core/src/actions/install/config";
 import { deleteSite } from "@poplin/core/src/actions/sites/delete";
+import { listFolder } from "@poplin/core/src/actions/sites/files";
 import { listSitesWithNames, MAX_NAMED } from "@poplin/core/src/actions/sites/list";
 import { newLink } from "@poplin/core/src/actions/sites/new-link";
 import { restoreSite } from "@poplin/core/src/actions/sites/restore";
@@ -27,6 +29,9 @@ import { NOTHING, refused, refuseInvalid, type Shared } from "../data";
 
 /** How many sites one page of the table holds. */
 const PAGE_SIZE = 25;
+
+/** How many folders and files one page of a folder holds, together. */
+const FOLDER_PAGE_SIZE = 200;
 
 /** The place a page of the list ended, as the address carries it: the change time, a dash, the id, and after a tilde the name, the access, or the key of the title of a table ordered by one; that key may be empty. */
 const CURSOR_PATTERN = /^([0-9]{1,16})-([0-9a-z]{12})(?:~([\s\S]{0,40}))?$/u;
@@ -49,6 +54,13 @@ const PAGE_QUERY = v.object({
 
 /** What names one site in a route's path: its label. */
 const ONE_SITE = v.object({ site: v.string() });
+
+/** What a page of a folder is asked with: the version's number as the address carries it, the folder's path in the version, and the `next` of the page before. */
+const FOLDER_PAGE_QUERY = v.object({
+  version: v.pipe(v.string(), v.regex(/^[1-9][0-9]{0,15}$/), v.transform(Number)),
+  folder: v.optional(v.string()),
+  cursor: v.optional(v.string()),
+});
 
 /** What the address of a public name is asked with: the name as it is typed. */
 const NAMED = v.object({ name: v.string() });
@@ -151,6 +163,13 @@ export const siteRoutes = new Hono<Shared>()
     if (!config.ok) return refused(context, config);
 
     return context.json({ ok: true as const, site: shown.site, logins: shown.names, search_engines_allowed: config.values.search_engines_allowed });
+  })
+  .get("/sites/:site/files", vValidator("param", ONE_SITE, refuseInvalid), vValidator("query", FOLDER_PAGE_QUERY, refuseInvalid), async (context) => {
+    const { install, actor } = context.get("asker");
+    const listed = await listFolder(install, actor, { site: context.req.valid("param").site, ...context.req.valid("query"), limit: FOLDER_PAGE_SIZE });
+    if (!listed.ok) return refused(context, listed);
+
+    return context.json({ ok: true as const, folders: listed.folders, files: listed.files, next: listed.next ?? null, total: listed.total });
   })
   .get("/public-address", vValidator("query", NAMED, refuseInvalid), (context) => {
     const { install } = context.get("asker");
