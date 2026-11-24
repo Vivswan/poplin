@@ -1,6 +1,6 @@
 // The older build's own code, taken from the folder older-build.ts made. What installs the older build, fills it, and starts its update is that build's code, never this commit's.
 //
-//   install     its `live:converge`, as a child told to start over: `poplin uninstall`, then `poplin install` of its own build
+//   install     its `live:converge`, as a child told not to start over, on an account the upgrade left no install on: `poplin install` of its own build
 //   seedToken   its row of a token, in its database
 //   openBench   its command line and its MCP server, run in this process
 //   take        its start of an update, over its database's API driver, fed the release this commit's build is published as
@@ -8,6 +8,7 @@
 // A part is typed as this commit's: the older build is another version's code, which no type here describes. One that moved or changed since fails where it is called.
 
 import { join } from "node:path";
+import { Writable } from "node:stream";
 import type { startUpdate } from "@poplin/core/src/actions/start-update";
 import type { Login } from "@poplin/core/src/auth/logins";
 import type { SqlDatabase } from "@poplin/core/src/database/sql-database";
@@ -27,8 +28,8 @@ const PACKAGE = join("packages", "providers", "cloudflare");
 /** The script of the older build that makes the test install, as its package names it. */
 const INSTALL_SCRIPT = "live:converge";
 
-/** What tells that script to remove the install first, and make it from nothing. */
-const START_OVER = { POPLIN_LIVE_START_OVER: "true" } as const;
+/** What tells that script to remove nothing, whatever the environment it inherits asks: the upgrade's own removal came before it. */
+const NO_START_OVER = { POPLIN_LIVE_START_OVER: "false" } as const;
 
 /** The parts of a build that start an update of an install. */
 export interface UpdateParts {
@@ -59,13 +60,22 @@ export interface Taking {
   readonly now: () => number;
 }
 
+/** What a child came to when it ended, as one run of the older build's install does. */
+export interface Ended {
+  /** The exit code of its script. */
+  readonly code: number;
+
+  /** Each line the script printed on its standard output. */
+  readonly said: readonly string[];
+}
+
 /** The older build, as an upgrade uses it. */
 export interface Older {
   /** The version it says. */
   readonly version: string;
 
-  /** Makes the test install from nothing with its own commands, and answers the exit code. */
-  readonly install: () => Promise<number>;
+  /** Makes the test install with its own commands, on an account that holds none, and goes on with one it began. */
+  readonly install: () => Promise<Ended>;
 
   /** Stores an admin's token in its database. */
   readonly seedToken: typeof seedToken;
@@ -105,6 +115,21 @@ export function takeWith(parts: UpdateParts, given: Taking): ReturnType<typeof s
 }
 
 /**
+ * Run a script as a child, with what it prints on this process's own as it comes.
+ *
+ * @param env - what the child is run with
+ * @returns its exit code and every line of its standard output, which an upgrade reads the row of a failed install from; what it prints as errors is shown and not kept
+ */
+export async function runChild(command: readonly string[], env: Readonly<Record<string, string | undefined>>): Promise<Ended> {
+  const child = Bun.spawn([...command], { env: { ...env }, stdio: ["ignore", "pipe", "inherit"] });
+  const [shown, kept] = child.stdout.tee();
+  // This process prints after the child ended, so its own stdout stays open.
+  const [said, code] = await Promise.all([new Response(kept).text(), child.exited, shown.pipeTo(Writable.toWeb(process.stdout), { preventClose: true })]);
+
+  return { code, said: said.split("\n") };
+}
+
+/**
  * Open the older build in its folder.
  *
  * @param folder - the tree older-build.ts made, with its packages installed and its Worker built
@@ -123,7 +148,7 @@ export async function openOlder(folder: string, env: Readonly<Record<string, str
 
   return {
     version: versionOf(folder),
-    install: () => Bun.spawn(child, { env: { ...env, ...START_OVER }, stdio: ["ignore", "inherit", "inherit"] }).exited,
+    install: () => runChild(child, { ...env, ...NO_START_OVER }),
     seedToken: await part(tree, `${PACKAGE}/scripts/live/tokens.ts`, "seedToken"),
     openBench: await part(tree, `${PACKAGE}/live/bench.ts`, "openBench"),
     liveAddresses: await part(tree, `${PACKAGE}/live/addresses.ts`, "liveAddresses"),

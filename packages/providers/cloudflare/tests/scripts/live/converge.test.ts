@@ -73,6 +73,9 @@ const SETTLING_READS = 4;
 /** What a run that was through says last. */
 const ANSWERS = "The test install answers.";
 
+/** The line an install says at each wait for a bucket name Cloudflare still holds. */
+const NAME_HELD = "Cloudflare still holds the bucket name poplin-sites after a removal. Retrying in 15 s";
+
 /** What both kinds tell first of an account on the free plans. */
 const PLANS = "Account plans: free (0 subscriptions: 0 at a price of 0, 0 ended)";
 
@@ -519,13 +522,19 @@ describe.each(["domain", "account address"] as const)("the test install of an ac
   });
 
   // Drift: a start-over that removed by a list of its own would pass while `poplin uninstall` left a piece behind; and one that took the marking bucket would leave an account no later run may remove anything on.
-  test("a run asked to start over removes the install with poplin uninstall, the files and the database too, then makes it anew: the marking bucket stays, and the wait asks twelve answers in a row", async () => {
+  // Incident: a start-over's install came right after its removal, Cloudflare still held the bucket's name, and the test install stayed removed until a later run.
+  test.each([
+    ["frees at once", 0],
+    ["holds for four creates more, which the install waits for and says", 4],
+  ])("a run asked to start over removes the install with poplin uninstall, the files and the database too, then makes it anew: the marking bucket stays, and the wait asks twelve answers in a row; the bucket's name Cloudflare %s", async (_what, held) => {
     const standing = await standingOn(freshAccount(), kind);
     await standing.again();
+    Object.assign(standing.account, { refuse: `POST /accounts/${INSTALL_ACCOUNT}/r2/buckets`, refuseAs: { status: 409, code: 10073 }, refuseTimes: held });
     const over = await standing.again(true);
     const removal = [...told.removed, "R2 bucket: removed (0 in it)", "D1 database: removed (0 in it)", ...told.stays, `Removal: ${told.removed.length + 2} kinds in 0 seconds`];
+    const waits = Array.from({ length: held }, () => NAME_HELD);
 
-    expect(over.lines).toEqual([told.found, PLANS, "Start over: asked for", ...removal, ...told.made("left"), READ_MADE, TWELVE, "Storage and file caps: set", FRESH_KEY, ANSWERS]);
+    expect(over.lines).toEqual([told.found, PLANS, "Start over: asked for", ...removal, ...waits, ...told.made("left"), READ_MADE, TWELVE, "Storage and file caps: set", FRESH_KEY, ANSWERS]);
     expect({ code: over.code, uploads: over.uploads, buckets: standing.account.buckets.map((bucket) => bucket.name) }).toEqual({ code: 0, uploads: [FIRST_UPLOAD], buckets: ["poplin-live-sites", "poplin-sites"] });
   });
 

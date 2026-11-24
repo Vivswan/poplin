@@ -21,14 +21,16 @@ const ZONE_PLANS: ReadonlySet<string> = new Set(["free", "pro", "business", "ent
 const REFUSAL = v.object({ code: v.number(), message: v.string() });
 
 /**
- * Where to send a call and the key that authorises it. `baseUrl` and `fetch` are absent outside tests. `sleep` waits so many milliseconds between two reads of settings that trail an upload: the platform's own timer where absent.
+ * Where to send a call and the key that authorises it. `baseUrl` and `fetch` are absent outside tests.
+ * `sleep` waits so many milliseconds before a call is made again, as between two reads of settings that trail an upload: the platform's own timer where absent.
+ * Its `why` is the line a person is shown meanwhile, on a wait long enough to need one.
  * `ride` makes a call again while its answer asks to wait, and only the connection of an install command has one: with it the SDK tries such an answer once, and every wait is the rider's.
  */
 export interface Connection {
   readonly key: string;
   readonly baseUrl?: string | undefined;
   readonly fetch?: ((input: string | URL | Request, init?: RequestInit) => Promise<Response>) | undefined;
-  readonly sleep?: ((milliseconds: number) => Promise<void>) | undefined;
+  readonly sleep?: ((milliseconds: number, why?: string) => Promise<void>) | undefined;
   readonly ride?: (<Value>(call: () => Promise<CloudflareResult<Value>>) => Promise<CloudflareResult<Value>>) | undefined;
 }
 
@@ -65,17 +67,31 @@ function limitedBy(retryAfter: string | null | undefined): CloudflareFailure {
   return { ok: false, failure: "rate-limited", afterMs: seconds * MS_PER_SECOND };
 }
 
-// The SDK waits as long as an answer that asks to wait names, unseen, on a timer no person can end. Its own header for "do not try again" hands such an answer to the connection's rider at once.
-function unretried(send: NonNullable<Connection["fetch"]>): NonNullable<Connection["fetch"]> {
+// The SDK tries an answer of some statuses again by itself, unseen, on a timer no person can end. Its own header for "do not try again" hands an answer of the status to the caller at once.
+function unretried(send: NonNullable<Connection["fetch"]>, status: number): NonNullable<Connection["fetch"]> {
   return async (input, init) => {
     const response = await send(input, init);
-    if (response.status !== RATE_LIMITED_STATUS) return response;
+    if (response.status !== status) return response;
 
     const headers = new Headers(response.headers);
     headers.set("x-should-retry", "false");
 
     return new Response(response.body, { status: response.status, headers });
   };
+}
+
+/**
+ * A connection whose answers of a status the SDK hands back at once, whatever their codes: it tries a conflict (409) three times within two seconds by itself.
+ *
+ * @param status - the status of an answer the caller makes the call again for by itself, after a wait of its own; an answer of another status is tried again as before
+ */
+export function unretriedOn(connection: Connection, status: number): Connection {
+  return { ...connection, fetch: unretried(connection.fetch ?? fetch, status) };
+}
+
+/** The clock a connection's waits are on: its own, or the platform's timer where it has none. */
+export function clockOf(connection: Connection): NonNullable<Connection["sleep"]> {
+  return connection.sleep ?? ((milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)));
 }
 
 function failureOf(error: APIError): CloudflareFailure {
@@ -105,7 +121,7 @@ function clientOf(connection: Connection): BaseCloudflare {
     apiEmail: null,
     userServiceKey: null,
     baseURL: connection.baseUrl ?? API,
-    fetch: connection.ride === undefined ? connection.fetch : unretried(connection.fetch ?? fetch),
+    fetch: connection.ride === undefined ? connection.fetch : unretried(connection.fetch ?? fetch, RATE_LIMITED_STATUS),
     logLevel: "off",
   });
   // biome-ignore lint/complexity/useLiteralKeys: the SDK's types keep these options private, and this form reaches them with the name still checked.
@@ -117,8 +133,8 @@ function clientOf(connection: Connection): BaseCloudflare {
 /**
  * Make one call to the Cloudflare API with the key the caller holds.
  *
- * A busy answer (429), a failure of Cloudflare's own (5xx), and a dropped connection are tried again by the SDK, twice at most, after the wait Cloudflare names, or else up to half a second and then up to one.
- * A connection with a rider leaves the busy answer to it: the rider makes the whole call again after each wait.
+ * A busy answer (429), a conflict (409), a failure of Cloudflare's own (5xx), and a dropped connection are tried again by the SDK, twice at most, after the wait Cloudflare names, or else up to half a second and then up to one.
+ * A connection with a rider leaves the busy answer to it: the rider makes the whole call again after each wait. A connection made with `unretriedOn` leaves an answer of its status to the caller.
  *
  * @param call - builds an SDK resource on the given client and awaits one request
  * @returns the reply's `result`, or the failure of the last try; a refusal by Cloudflare is a value, never an exception

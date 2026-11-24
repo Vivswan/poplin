@@ -1,9 +1,14 @@
 // The live upgrade: an install the older build made and filled takes this commit's build as an update, and is asked again for everything it held.
 //
-//   a test account alone -> the older build's own `poplin uninstall` and `poplin install` -> its database is one this commit takes over
+//   a test account alone -> this commit's `poplin uninstall` -> the older build's own `poplin install` -> its database is one this commit takes over
 //   -> the older build's command line fills it, with a token of its making -> every answer written down
 //   -> the older build's own start of an update, fed this commit's build as a release -> the install says this commit's version, twelve answers in a row
 //   -> one line a check -> the settings put back, and the sites, the token's row, and the older build's folder removed
+//
+// For a while after a bucket is removed, Cloudflare refuses its name to a new one (409, code 10073). An older build waits for no name and stops on that row, so its install is run again:
+//
+//   the older build's install ends on that row    -> a rest of 30 s, then its install again, which goes on from what stands: 8 runs at most
+//   it ends on any other row, or with no row      -> the upgrade stops at once
 //
 // This commit's build holds one schema step more than the product: the later step older-build.ts gave the checkout. The Worker applies it to the filled database as it starts, and the checks read what it left.
 // The start runs in this process, with the run's token where the kept key stands: a deployed Worker reads releases from the project's website alone, which names no build of a commit.
@@ -12,6 +17,7 @@
 
 import { rmSync } from "node:fs";
 import { parseLogin } from "@poplin/core/src/auth/logins";
+import pRetry from "p-retry";
 import * as v from "valibot";
 
 import type { Fetch } from "../../../cli/src/client/client";
@@ -20,6 +26,7 @@ import { openBench } from "../live/bench";
 import { shownInTime } from "../live/util";
 import { CEILINGS, meterBucket } from "../scripts/live/budget";
 import { command, type Ends, type Published, placeWords, publish, reachOf, readBuilt } from "../scripts/live/commands";
+import { startOver } from "../scripts/live/converge";
 import { meterRows, ROW_CEILINGS } from "../scripts/live/rows";
 import { sendLive } from "../scripts/live/send";
 import { readStanding } from "../scripts/live/shape";
@@ -59,6 +66,15 @@ const OWN_REPAIR_WITHIN = { ms: 1_080_000, pause: 30_000 } as const;
 
 /** Why an upgrade stops before it removes anything, where its build is the product alone: it would apply no step, and prove less than it says. */
 const NO_LATER_STEP = "this commit's build holds no later step: `live:upgrade-builds` gives the checkout one, before the Worker is built";
+
+/** What the log says of the removal an upgrade begins with. */
+const MADE_ANEW = "the older build makes the install from nothing";
+
+/** The row the older build's install ends on where Cloudflare still holds the name of a bucket that was removed. */
+const NAME_HELD = "R2 bucket: failed (refused with status 409 and codes 10073)";
+
+/** How often the older build's install is run while it ends on that row, and the rest before each run after the first, in milliseconds. A name was seen held 47 s after its bucket went, and free 110 s after. */
+const INSTALLS = { runs: 8, everyMs: 30_000 } as const;
 
 /** What an upgrade is made with, beside the account. */
 export interface Upgrade {
@@ -136,6 +152,13 @@ interface Asked {
   readonly published: readonly string[];
 }
 
+/** A run of the older build's install that ended on the row of a bucket name Cloudflare still holds. */
+class NameHeld extends Error {
+  constructor(readonly code: number) {
+    super("Cloudflare still holds the bucket's name");
+  }
+}
+
 /** Where an install answers, as the live checks name it. */
 function installOf(found: Found): LiveInstall {
   return found.kind === "domain" ? { kind: "domain", domain: found.layout.domain } : { kind: "account address", account: found.layout.account };
@@ -173,7 +196,42 @@ export async function awaitVersion(wanted: string, asking: () => Promise<string 
   return { kind: "failed", what: `the install did not say the version ${wanted} ${ROW_NEEDED.answers} times in a row within ${PACE.withinMs / 1000} seconds (it last said ${last ?? "nothing"})` };
 }
 
-/** Have the older build make the test install from nothing, and find the database and a token of that build's making. */
+/**
+ * Have the older build make the test install, and again after a rest each time its run ended on the row of a bucket name Cloudflare still holds.
+ *
+ * The rests are on the run's own clock: the library waits none. A run that ended any other way is never made again.
+ *
+ * @returns what stopped the upgrade, or `undefined` once the older build's install ended well
+ */
+async function installOlder(run: Run, given: Upgrade): Promise<Stop | undefined> {
+  const attempt = async (): Promise<number> => {
+    const { code, said } = await given.older.install();
+    if (code !== 0 && said.includes(NAME_HELD)) throw new NameHeld(code);
+
+    return code;
+  };
+  const again = async ({ error, attemptNumber }: { readonly error: Error; readonly attemptNumber: number }): Promise<boolean> => {
+    if (!(error instanceof NameHeld)) return false;
+
+    run.say(`Older install: the bucket's name is still held, trying again in ${INSTALLS.everyMs / 1000} s (${attemptNumber + 1} of ${INSTALLS.runs})`);
+    await given.ends.sleep(INSTALLS.everyMs);
+
+    return true;
+  };
+  const ended = (code: number, after = ""): Stop => ({ kind: "failed", what: `the older build's own install ended with exit code ${code}${after}` });
+
+  try {
+    const code = await pRetry(attempt, { retries: INSTALLS.runs - 1, minTimeout: 0, maxTimeout: 0, shouldRetry: again });
+
+    return code === 0 ? undefined : ended(code);
+  } catch (error) {
+    if (error instanceof NameHeld) return ended(error.code, `: Cloudflare still held the bucket's name after ${INSTALLS.runs} runs`);
+
+    throw error;
+  }
+}
+
+/** Remove what stands with this commit's own `poplin uninstall`, have the older build make the test install from nothing, and find the database and a token of that build's making. */
 async function makeOlder(run: Run, given: Upgrade): Promise<Standing | Stop> {
   const found = await findInstall(run, given.env);
   if (isStop(found)) return found;
@@ -181,8 +239,12 @@ async function makeOlder(run: Run, given: Upgrade): Promise<Standing | Stop> {
   const refused = await refuseOtherAccount(run, found.zone);
   if (refused !== undefined) return refused;
 
-  const code = await given.older.install();
-  if (code !== 0) return { kind: "failed", what: `the older build's own install ended with exit code ${code}` };
+  // What stands is read before it is removed, as a run of converge reads it: a database Cloudflare will not read today stops the upgrade with the install in place.
+  const before = await readStanding(run);
+  if (isStop(before)) return before;
+
+  const stopped = (await startOver(run, found, given, { pieces: [] }, MADE_ANEW)) ?? (await installOlder(run, given));
+  if (stopped !== undefined) return stopped;
 
   const made = await readStanding(run);
   if (isStop(made)) return made;

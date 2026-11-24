@@ -22,6 +22,7 @@ import { INSTALL_OBJECTS } from "../../src/shared/install/install-objects";
 import { createSelfUpdate } from "../../src/shared/release/update/self-update";
 import { COMMIT, freshAccount, type harnessOf as HarnessOf, harnessOf } from "../live/support/harness-world";
 import { catchStep } from "../live/support/step";
+import { ACCOUNT } from "../shared/install/support/fake-install";
 
 /** The version the older build says: below the one a test publishes as this commit's. */
 const OLDER = "0.3.0";
@@ -47,6 +48,21 @@ const MARKS_READ = `SELECT * FROM ${LEDGER_TABLE} ORDER BY step`;
 /** A line of an upgrade that says something is wrong: a check that failed, or the error a run ends with. */
 const WRONG = /FAILED|^::error::/;
 
+/** The call that makes the install's bucket. */
+const BUCKET_CREATE = `POST /accounts/${ACCOUNT}/r2/buckets`;
+
+/** How the line of a rest before the older build's install is run again starts. */
+const NAME_HELD = "Older install: the bucket's name is still held";
+
+/** What an upgrade says before it removes what stands. */
+const START_OVER = "Start over: the older build makes the install from nothing";
+
+/** The row the last release's install ended on where Cloudflare still held the name of a bucket that was removed. */
+const HELD_ROW = "R2 bucket: failed (refused with status 409 and codes 10073)";
+
+/** An account that holds nothing of an install: the bucket that marks a test account, and no database or Worker. */
+const NO_INSTALL = { buckets: ["poplin-live-sites"], databases: 0, worker: false };
+
 /** Every line of an upgrade whose checks all hold, after the older build's own install. The two counts are what the upgrade costs an install: a request that grows moves them, and so does a statement of the later step. */
 const HELD = [
   "Older install: made by the older build's own poplin install, which says the version 0.3.0",
@@ -67,15 +83,37 @@ const HELD = [
   "Cleanup: the two settings put back, the sites and the token's row removed",
 ];
 
-/** One upgrade on an account in memory: its exit code and what it said after the older build's own install. */
+/**
+ * One upgrade on an account in memory: its exit code, what its removal said, how many removals it sent, what the account held of an install when the older build's install first ran, how often that install ran,
+ * each line between two of its runs, the clock between two of its launches and each rest the upgrade asked for after the last, in milliseconds, what the upgrade said after the last, and the Worker's uploads.
+ */
 interface Ran {
   readonly code: number;
+  readonly removal: readonly string[];
+  readonly deleted: number;
+  readonly handed: { readonly buckets: readonly unknown[]; readonly databases: number; readonly worker: boolean } | undefined;
+  readonly installs: number;
+  readonly waits: readonly string[];
+  readonly gaps: readonly number[];
+  readonly restsAfter: readonly number[];
   readonly lines: readonly string[];
   readonly uploads: number;
 }
 
 /** What goes wrong in one upgrade, where anything does. */
 interface Fault {
+  /** Whether an install of this commit's build stands on the account before the upgrade. */
+  readonly standing?: true;
+
+  /** Whether Cloudflare refuses every question to the database of the install that stands. */
+  readonly unread?: true;
+
+  /** How many runs of the older build's own install end on the row of a bucket name Cloudflare still holds, before one that goes through. */
+  readonly held?: number;
+
+  /** The code Cloudflare refuses every create of the bucket with, under status 409. */
+  readonly refused?: number;
+
   /** The version the install says once it was updated, where it is not the one it took. */
   readonly says?: string;
 
@@ -187,36 +225,110 @@ function ownReach(harness: Awaited<ReturnType<typeof HarnessOf>>, fault: Fault):
   return { ...ends, sleep, reach: { ...ends.reach, fetch } };
 }
 
-/** Upgrade an install on a fresh account in memory, with this commit's own code as the older build. */
+/** Upgrade an install on an account in memory, with this commit's own code as the older build. */
 async function upgrade(kind: Found["kind"], fault: Fault = {}): Promise<Ran> {
   using _step = catchStep();
   const harness = await harnessOf(freshAccount(), kind);
   const env = { POPLIN_LIVE_INSTALL: kind };
-  let installed = 0;
+  if (fault.standing === true) await convergeInstall(harness.run, env, harness.world);
+
+  if (fault.refused !== undefined) Object.assign(harness.account, { refuse: BUCKET_CREATE, refuseAs: { status: 409, code: fault.refused } });
+
+  if (fault.unread === true) Object.assign(harness.account, { refuse: `POST /accounts/${ACCOUNT}/d1/database/*`, refuseAs: { status: 400, code: 7500 } });
+
+  const own = ownReach(harness, fault);
+  const slept: number[] = [];
+  const sleep = async (milliseconds: number): Promise<void> => {
+    slept.push(milliseconds);
+    await own.sleep(milliseconds);
+  };
+  const [began, asked] = [harness.lines.length, harness.asked.length];
+  const runs: { readonly lines: number; readonly at: number; readonly slept: number }[] = [];
+  let [installed, handed]: [number, Ran["handed"]] = [began, undefined];
   const older: Older = {
     version: OLDER,
     install: async () => {
-      const code = fault.install ?? (await convergeInstall(harness.run, { ...env, POPLIN_LIVE_START_OVER: "true" }, harness.world));
+      runs.push({ lines: harness.lines.length, at: own.reach.now(), slept: slept.length });
+      handed ??= { buckets: harness.account.buckets.map((bucket) => bucket.name), databases: harness.account.databases.length, worker: harness.account.noWorker !== true };
+      if (runs.length <= (fault.held ?? 0)) return { code: 1, said: ["Install: none found, so poplin install ran", HELD_ROW] };
+
+      const code = fault.install ?? (await convergeInstall(harness.run, env, harness.world));
       installed = harness.lines.length;
 
-      return code;
+      return { code, said: harness.lines.slice(runs.at(-1)?.lines) };
     },
     seedToken,
     openBench,
     liveAddresses,
     take: (given) => takeWith({ startUpdate, SqlDatabase, apiDriver, createSelfUpdate }, given),
   };
-  const code = await upgradeInstall(harness.run, { env, older, release: harness.world.release, steps: fault.bare === true ? STEPS : BUILD, ends: ownReach(harness, fault), fetch: installOf(harness, fault) });
+  const code = await upgradeInstall(harness.run, { env, older, release: harness.world.release, steps: fault.bare === true ? STEPS : BUILD, ends: { ...own, sleep }, fetch: installOf(harness, fault) });
+  const waits = harness.lines.filter((line) => line.startsWith(NAME_HELD));
+  const gaps = runs.slice(1).map((run, before) => run.at - (runs[before]?.at ?? 0));
+  const told = { removal: harness.lines.slice(began, runs[0]?.lines ?? began), waits, lines: harness.lines.slice(installed) };
+  const deleted = harness.asked.slice(asked).filter((call) => call.method === "DELETE").length;
 
-  return { code, lines: harness.lines.slice(installed), uploads: harness.account.uploads.length };
+  return { code, ...told, deleted, handed, installs: runs.length, gaps, restsAfter: slept.slice(runs.at(-1)?.slept ?? 0), uploads: harness.account.uploads.length };
 }
 
 describe.each(["domain", "account address"] as const)("the live upgrade of an install on its %s, on a fake account in memory", (kind) => {
   // Drift: a step that moved, a check that reads the wrong answer, or a request with no price in rows would first show on the test account.
   test("an install the older build made and filled takes this commit's build, and every check holds, within the mode's own ceilings", async () => {
     const ran = await upgrade(kind);
+    const removal = [START_OVER, "This account has no install. Nothing changed.", "Removal: nothing of an install is there"];
 
-    expect(ran).toEqual({ code: 0, lines: HELD, uploads: 2 });
+    expect(ran).toMatchObject({ code: 0, removal, handed: NO_INSTALL, installs: 1, waits: [], gaps: [], lines: HELD, uploads: 2 });
+  });
+
+  // Drift: the older build read what stood before it removed it, and went no further where Cloudflare would not read the database.
+  // A removal with no such read first would take the install on a day nothing can be made in its place.
+  test("an install whose database Cloudflare will not read stops the upgrade before anything is removed, and the older build's install never runs", async () => {
+    const ran = await upgrade(kind, { standing: true, unread: true });
+
+    expect([ran.code, ran.deleted, ran.installs, ran.lines]).toEqual([1, 0, 0, ["::error::The upgrade could not be checked: Cloudflare refused with status 400 and codes 7500."]]);
+  });
+
+  // Incident: the older build removed the install and made its own right after, by its own code, and Cloudflare still held the bucket's name. An older build's removal is none this commit can mend.
+  // Drift: with no removal first, an older build that is told nothing would mend the install that stands, and the upgrade would start from a database another build made.
+  test("an install that stands is removed by this commit's own poplin uninstall, the files and the database with it, before the older build's install runs once, on an account that holds none", async () => {
+    const ran = await upgrade(kind, { standing: true, install: 3 });
+    const removed = ran.removal.filter((line) => line.endsWith(": removed") || line.includes(": removed ("));
+
+    expect([ran.removal[0], ran.removal.at(-1), removed.slice(-2), ran.handed]).toEqual([START_OVER, `Removal: ${removed.length} kinds in 0 seconds`, ["R2 bucket: removed (0 in it)", "D1 database: removed (0 in it)"], NO_INSTALL]);
+    expect([ran.code, ran.installs, ran.lines]).toEqual([1, 1, ["::error::The upgrade could not be checked: the older build's own install ended with exit code 3."]]);
+  });
+
+  // Incident: Cloudflare held the name of a removed bucket, and the last release's install, which waits for no name, ended on the row of that refusal.
+  test.each([
+    ["twice is run a third time, and the upgrade goes on", 2, { code: 0, installs: 3, uploads: 2 }, []],
+    [
+      "at every run is run 8 times, and the upgrade stops with no rest after the last",
+      8,
+      { code: 1, installs: 8, uploads: 0 },
+      ["::error::The upgrade could not be checked: the older build's own install ended with exit code 1: Cloudflare still held the bucket's name after 8 runs."],
+    ],
+  ] as const)("an older build's install that ends on the row of a held name %s: 30 s lie between two launches, each with its line", async (_what, held, ended, wrong) => {
+    const ran = await upgrade(kind, { held });
+    const waits = Array.from({ length: ended.installs - 1 }, (_, rest) => `${NAME_HELD}, trying again in 30 s (${rest + 2} of 8)`);
+
+    expect([{ code: ran.code, installs: ran.installs, uploads: ran.uploads }, ran.waits, ran.gaps, ran.lines.filter((line) => WRONG.test(line))]).toEqual([ended, waits, waits.map(() => 30_000), [...wrong]]);
+    // An upgrade that goes on rests again for its own later waits.
+    if (ended.code !== 0) expect(ran.restsAfter).toEqual([]);
+  });
+
+  // Drift: the row the upgrade reads is the one this commit's own install ends on where every create is refused so. Worded another way here, the release after this one would stop at its first run.
+  test.each([
+    [
+      "as a held name ends on the row the upgrade reads, and is run to the last of 8 runs",
+      10073,
+      8,
+      "::error::The upgrade could not be checked: the older build's own install ended with exit code 1: Cloudflare still held the bucket's name after 8 runs.",
+    ],
+    ["with another code ends on another row, and is never run again", 10004, 1, "::error::The upgrade could not be checked: the older build's own install ended with exit code 1."],
+  ] as const)("this commit's own install, as the older build's, whose bucket is refused %s", async (_what, refused, installs, wrong) => {
+    const ran = await upgrade(kind, { refused });
+
+    expect([ran.code, ran.installs, ran.waits.length, ran.lines.filter((line) => WRONG.test(line)), ran.uploads]).toEqual([1, installs, installs - 1, [wrong], 0]);
   });
 
   // Drift: a version may expect another login than the one before made, and the install repairs it by itself on a scheduled run. A check that called that a fault at once would fail every such upgrade;

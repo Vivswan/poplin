@@ -54,6 +54,15 @@ const SCHEDULING = `PUT /accounts/${ACCOUNT}/workers/scripts/poplin/schedules`;
 /** What the row of a call Cloudflare refuses for the missing subdomain says, in place of its codes. */
 const SET_ONE = "this account has no workers.dev subdomain. Set one under Workers & Pages in the Cloudflare dashboard";
 
+/** The call that makes the install's bucket. */
+const BUCKET_CREATE = `POST /accounts/${ACCOUNT}/r2/buckets`;
+
+/** What Cloudflare refuses that call with while it still holds the name of a bucket that was removed. */
+const NAME_HELD = { status: 409, code: 10073 };
+
+/** The line a person is shown at each wait for that name. */
+const HELD_WAIT = "Cloudflare still holds the bucket name poplin-sites after a removal. Retrying in 15 s";
+
 /** The login, the variables, and the keys, which both kinds make alike; `host` and `sites` are what the login stands in front of. */
 function shared(host: string, sites: string): string[] {
   return [
@@ -259,6 +268,25 @@ describe.each(Object.keys(KINDS) as (keyof typeof KINDS)[])("a new install, %s",
 
     expect(await installer.find(KEY, KINDS[kind].where, world.reach, "install")).toMatchObject({ state: "whole", version: RELEASE, address: KINDS[kind].address, newest: RELEASE });
     expect(world.asked.filter((entry) => entry.method !== "GET")).toEqual([]);
+  });
+
+  // Incident: an install right after a removal found no bucket of the name, was refused the name with 409 and code 10073, and stopped. A person who removes an install and makes it anew meets the same.
+  test("a bucket name Cloudflare still holds after a removal is waited for on the command's clock, with the line that says why, and the install is made whole; one still held after 180 s fails the bucket's row, and the run after it goes on", async () => {
+    const waited = await installed(fresh({ refuse: BUCKET_CREATE, refuseAs: NAME_HELD, refuseTimes: 2 }), kind, APPLY);
+    const made = waited.calls.writes.filter((call) => call === BUCKET_CREATE).length;
+
+    expect([shown(waited.done), waited.world.slept, waited.world.told, made, waited.calls.run]).toEqual([[...ROWS[kind]], [15_000, 15_000], [HELD_WAIT, HELD_WAIT], 3, CALLS[kind].run + 2]);
+
+    const account = fresh({ refuse: BUCKET_CREATE, refuseAs: NAME_HELD });
+    const stopped = await installed(account, kind, APPLY);
+    const rows = ["Account subdomain | leave | example.workers.dev", "R2 bucket | fail | poplin-sites: refused with status 409 and codes 10073"];
+
+    expect([shown(stopped.done).slice(0, 2), stopped.done.ok && stopped.done.ready, stopped.world.slept, account.buckets]).toEqual([rows, false, Array.from({ length: 12 }, () => 15_000), []]);
+
+    delete account.refuse;
+    const again = await installed(account, kind, APPLY);
+
+    expect([shown(again.done), again.done.ok && again.done.ready, again.world.slept]).toEqual([[...ROWS[kind]], true, []]);
   });
 
   // Drift: no API switches Access on, so a run that called such an install done would hand over a dashboard nobody can log in to.
