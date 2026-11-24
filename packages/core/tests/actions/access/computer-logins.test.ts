@@ -41,9 +41,9 @@ function idOf(login: { readonly secret: string }): LoginId {
   return parseLoginSecret(login.secret) ?? ("" as LoginId);
 }
 
-/** The decision that lets a begun login in, as a person who sees its terminal makes it: with the last four letters of its code. */
+/** The decision that lets a begun login in, as a person who has its terminal's code makes it: with the whole code. */
 function allowing(login: { readonly code: string; readonly secret: string }, scope: "admin" | "publisher" = "publisher"): Parameters<typeof decideLogin>[2] {
-  return { login: idOf(login), allow: true, scope, letters: login.code.slice(-4) };
+  return { login: idOf(login), allow: true, scope, code: login.code };
 }
 
 /** The decision that keeps a begun login out. */
@@ -239,18 +239,18 @@ describe("decideLogin", () => {
     expect(await world.audit()).toEqual(["login_allowed", "token_added"]);
   });
 
-  // Drift: the letters are typed by a person; one spelling refused would lock out the person who did everything asked.
+  // Drift: the code is typed or pasted by a person; one spelling refused would lock out the person who did everything asked.
   test.each([
-    ["the last four letters", (code: string) => code.slice(-4)],
-    ["the last four in small letters, with spaces", (code: string) => ` ${code.slice(-4, -2).toLowerCase()} ${code.slice(-2).toLowerCase()} `],
-    ["the whole code", (code: string) => code],
-    ["the whole code in small letters, without its dash", (code: string) => code.replace("-", "").toLowerCase()],
+    ["the code as the terminal shows it", (code: string) => code],
+    ["the code in small letters, without its dash", (code: string) => code.replace("-", "").toLowerCase()],
+    ["the code as a paste brings it, with a space before it and a line end after", (code: string) => ` ${code}\n`],
+    ["the code with spaces around its dash", (code: string) => code.replace("-", " - ")],
   ])("a login is allowed by %s, and is decided once", async (_what, typed) => {
     const world = await makeWorld();
     const login = await begun(world);
     const shown: Awaited<ReturnType<typeof showLogin>> = { ok: true, login: { id: idOf(login), scope: "publisher", computer: "laptop", asked: NOW, expires: NOW + 10 * MINUTE } };
 
-    expect([await showLogin(world.install, ADMIN, idOf(login)), await decideLogin(world.install, ADMIN, { ...allowing(login), letters: typed(login.code) } as Parameters<typeof decideLogin>[2])]).toEqual([shown, shown]);
+    expect([await showLogin(world.install, ADMIN, idOf(login)), await decideLogin(world.install, ADMIN, { ...allowing(login), code: typed(login.code) } as Parameters<typeof decideLogin>[2])]).toEqual([shown, shown]);
     expect([await decideLogin(world.install, ADMIN, denying(login)), await decideLogin(world.install, ADMIN, allowing(login)), await showLogin(world.install, ADMIN, idOf(login))]).toEqual([
       { ok: false, code: "no_such_login" },
       { ok: false, code: "no_such_login" },
@@ -259,22 +259,24 @@ describe("decideLogin", () => {
     expect(await world.audit()).toEqual(["login_allowed"]);
   });
 
-  // Drift: the letters are the one thing a stranger who began a login and sent its address cannot give the admin a page to read them from. Any text but the code's own end must let nobody in, and tell nothing of the code.
+  // Drift: the code is the one thing a stranger who began a login and sent its address cannot give the admin a page to read it from. Any text but the whole code must let nobody in, and tell nothing of the code.
+  // A half of a code is one of 160,000, which a guesser's tries reach; the whole is one of 25 billion.
   test.each([
-    ["no letters", () => ""],
-    ["three of the last four", (code: string) => code.slice(-3)],
-    ["the last four with one changed", (code: string) => `${code.slice(-4, -1)}${code.endsWith("B") ? "C" : "B"}`],
-    ["the last five", (code: string) => code.replace("-", "").slice(-5)],
+    ["nothing", () => ""],
+    ["the last four letters", (code: string) => code.slice(-4)],
+    ["the first four letters", (code: string) => code.slice(0, 4)],
+    ["the code without its last letter", (code: string) => code.slice(0, -1)],
+    ["the code with one letter changed", (code: string) => `${code.slice(0, -1)}${code.endsWith("B") ? "C" : "B"}`],
     ["the code twice", (code: string) => `${code}${code}`],
     ["a text far longer than a code", () => "B".repeat(5000)],
     ["the code of another login", (_code: string, other: string) => other],
   ])("a login is not allowed by %s, stays pending, and can still be allowed", async (_what, typed) => {
     const world = await makeWorld();
     const [login, other] = [await begun(world, "admin"), await begun(world, "admin", "another-visitor")];
-    const refused = await decideLogin(world.install, ADMIN, { ...allowing(login, "admin"), letters: typed(login.code, other.code) } as Parameters<typeof decideLogin>[2]);
+    const refused = await decideLogin(world.install, ADMIN, { ...allowing(login, "admin"), code: typed(login.code, other.code) } as Parameters<typeof decideLogin>[2]);
 
-    expect([refused, await redeemLogin(world.install, { secret: login.secret }), await world.audit()]).toEqual([{ ok: false, code: "not_confirmed", about: "letters" }, { ok: true, state: "pending" }, []]);
-    expect(JSON.stringify(refused)).not.toContain(login.code.slice(-4));
+    expect([refused, await redeemLogin(world.install, { secret: login.secret }), await world.audit()]).toEqual([{ ok: false, code: "not_confirmed", about: "code" }, { ok: true, state: "pending" }, []]);
+    expect([login.code.slice(0, 4), login.code.slice(-4)].filter((half) => JSON.stringify(refused).includes(half))).toEqual([]);
     expect(await decideLogin(world.install, ADMIN, allowing(login, "admin"))).toMatchObject({ ok: true });
   });
 

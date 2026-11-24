@@ -65,10 +65,11 @@ test("a double click on Approve approves the login once, and says so", async ({ 
   await page.goto(WAITING);
   const printed = page.locator("section").filter({ has: page.getByRole("link") }).first();
   await expect(printed.locator("code")).toBeVisible({ timeout: FIRST_LOAD_MS });
-  const letters = ((await printed.locator("code").textContent()) ?? "").slice(-4);
+  // The code as a person types it from the terminal: small letters, and no dash.
+  const typed = ((await printed.locator("code").textContent()) ?? "").replace("-", "").toLowerCase();
   await printed.getByRole("link").click();
   const review = page.getByRole("dialog", { name: "Approve this login?", exact: true });
-  await review.getByRole("textbox", { name: "Last 4 letters of the code in your terminal", exact: true }).fill(letters);
+  await review.getByRole("textbox", { name: "Code from your terminal", exact: true }).fill(typed);
   // A login that asked for more than it gets is told so in the same line.
   const allowed = page.getByRole("region", { name: /^Notifications/ }).getByText(/^Approved.* Its token shows here in a few seconds\.$/u);
   const sent = changesOf(page);

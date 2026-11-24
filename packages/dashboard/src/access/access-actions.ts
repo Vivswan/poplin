@@ -1,5 +1,7 @@
 // What is done on the Access screen: a waiting login is allowed or denied, a person is added or taken out, a token is removed, every browser is signed out. Each change is sent and its result said in one line.
 
+import type { InferRequestType } from "hono/client";
+
 import type { Review, Token } from "@/access/access-queries";
 import { answerOf, api, Refused } from "@/lib/api";
 import { copy, sayDone, sayRefused, send, unsay } from "@/lib/notify";
@@ -34,25 +36,16 @@ function passOn(): string {
   return `Send them ${window.location.origin}: poplin sends no mail.`;
 }
 
-/** What a decision about a login asks for. */
-interface Decision {
-  /** Whether the computer is let in. */
-  readonly allow: boolean;
+/** What a decision about a login asks for, as its route takes it: the login's id, and to keep the computer out, or to let it in with what it may change and the code the person typed or pasted. */
+export type Decision = InferRequestType<typeof api.logins.decide.$post>["json"];
 
-  /** What the person typed as the last letters of the code: the server alone knows them, and lets no computer in without. */
-  readonly letters: string;
-
-  /** What an allowed computer may change. */
-  readonly scope: Review["scope"];
-}
-
-/** How a decision ended. `letters` is a refusal of what was typed, with its sentence to say at the field; `gone` a login that no longer waits; `refused` any other refusal. The last two were said in a line. */
-export type Decided = { readonly kind: "done" | "gone" | "refused" } | { readonly kind: "letters"; readonly sentence: string };
+/** How a decision ended. `code` is a refusal of what was typed, with its sentence to say at the field; `gone` a login that no longer waits; `refused` any other refusal. The last two were said in a line. */
+export type Decided = { readonly kind: "done" | "gone" | "refused" } | { readonly kind: "code"; readonly sentence: string };
 
 /** The changes of the Access screen. */
 export interface AccessActions {
-  /** Allows or denies the login under review. */
-  readonly decide: (login: Review, decision: Decision) => Promise<Decided>;
+  /** Allows or denies the login under review. `asked` is what that login asked to change: a done decision that gives it less says so. */
+  readonly decide: (decision: Decision, asked: Review["scope"]) => Promise<Decided>;
 
   /** Adds a person. It answers the sentence of a refusal, which is shown at the field, or nothing when the person was added. */
   readonly addPerson: (email: string) => Promise<string | undefined>;
@@ -71,10 +64,10 @@ export interface AccessActions {
 }
 
 /** The line of a done decision: a computer that asked for everything and got less is told apart. */
-function decisionWords(login: Review, decision: Decision): string {
+function decisionWords(decision: Decision, asked: Review["scope"]): string {
   if (!decision.allow) return DECIDED.denied;
 
-  return login.scope === "admin" && decision.scope === "publisher" ? DECIDED.lowered : DECIDED.allowed;
+  return asked === "admin" && decision.scope === "publisher" ? DECIDED.lowered : DECIDED.allowed;
 }
 
 /** The line of a person who was taken out: the word that it is done, and after it what the server says of a change that did not reach the domain's login. */
@@ -114,15 +107,13 @@ export function accessActions(onChanged: () => void, onUsersChanged: () => void)
 
   return {
     removePerson,
-    decide: async (login, decision) => {
-      const { allow, letters, scope } = decision;
-
+    decide: async (decision, asked) => {
       try {
-        await answerOf(api.logins.decide.$post({ json: allow ? { login: login.id, allow, scope, letters } : { login: login.id, allow } }));
+        await answerOf(api.logins.decide.$post({ json: decision }));
       } catch (error) {
         if (!(error instanceof Refused)) throw error;
 
-        if (error.code === "not_confirmed") return { kind: "letters", sentence: error.message };
+        if (error.code === "not_confirmed") return { kind: "code", sentence: error.message };
 
         sayRefused(error.message);
         if (error.code !== "no_such_login") return { kind: "refused" };
@@ -134,9 +125,9 @@ export function accessActions(onChanged: () => void, onUsersChanged: () => void)
 
       onChanged();
       // An allowed computer asks for its token every few seconds: the tokens are read once more when it has had the time.
-      if (allow) window.setTimeout(onChanged, COLLECTED_AFTER_MS);
+      if (decision.allow) window.setTimeout(onChanged, COLLECTED_AFTER_MS);
 
-      sayDone(decisionWords(login, decision));
+      sayDone(decisionWords(decision, asked));
 
       return { kind: "done" };
     },

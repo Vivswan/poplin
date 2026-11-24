@@ -117,10 +117,9 @@ export function plainPage({ text, status }: { readonly text: string; readonly st
 /** The lines `poplin login` prints on one computer: the address that opens the review, as a link, and the code. */
 function printedLines(printed: Printed): Markup {
   return html`<section><h2>${printed.computer}</h2>
-<pre>open this address, and approve this login there:
+<pre>Approve this login in your browser:
   <a href="${printed.address}">${printed.address}</a>
-the page asks for the last 4 letters of this code:
-  <code>${printed.code}</code></pre></section>`;
+Code: <code>${printed.code}</code>   (type or paste it on that page)</pre></section>`;
 }
 
 /**

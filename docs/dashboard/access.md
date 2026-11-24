@@ -64,10 +64,19 @@ Without a kept key, Cloudflare ends the logins itself: in Zero Trust, open the A
 
 ```text
 $ poplin login --server https://poplin.example.com
-  ->  prints a URL and a short code
-  ->  you open the URL, type the last 4 letters of the code, and approve it
+  ->  prints a URL and a short code, and copies the code
+  ->  you open the URL, paste or type the whole code, and approve it
   ->  the token is stored on this machine
 ```
+
+The code is copied only for a person at the terminal:
+
+| `poplin login` is run                                    | The code is                                    |
+| -------------------------------------------------------- | ---------------------------------------------- |
+| in a terminal, on a machine you sit at, with a clipboard | copied: its line starts with `Code copied:`    |
+| with no terminal to ask on, as an agent or a script does | printed alone: its line starts with `Code:`    |
+| over SSH, in CI, or on a machine with no clipboard       | printed alone: its line starts with `Code:`    |
+| with `--json`                                            | in the first line of JSON, and never copied    |
 
 An install begins two logins a minute from one address, and eight a minute for all addresses together. In a minute that is full, `poplin login` is told how long to wait, waits, and asks again.
 

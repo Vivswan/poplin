@@ -15,7 +15,7 @@ export type Waiting = InferResponseType<typeof api.logins.$get, 200>;
 /** One waiting login of the list. Times are milliseconds since the epoch. */
 export type WaitingLogin = Waiting["logins"][number];
 
-/** The login under review. No part of its code is in the answer: its last letters are typed from the terminal. */
+/** The login under review. No part of its code is in the answer: the code is typed or pasted from the terminal. */
 export type Review = InferResponseType<(typeof api.logins)[":login"]["$get"], 200>["login"];
 
 /** The people who can log in, and which one is logged in here. */

@@ -254,28 +254,26 @@ The screen asks for a Repair, and for a Check on an install that holds no key. A
 
 ## 5. Log this machine in, and check
 
-At `Log this machine in now?`, Yes is chosen already: press Enter. It prints a URL and a short code in your terminal, and opens the URL in your browser:
+At `Log this machine in now?`, Yes is chosen already: press Enter. It prints a URL and a short code in your terminal, copies the code, and opens the URL in your browser:
 
 ```text
-Open this URL and approve the login:
+Approve this login in your browser:
   https://poplin.example.com/tokens/review/8c2e5a7019bd46f3
-Enter the last 4 characters of this code on that page:
-  WXKT-RDMP
-The code expires in 10 minutes
+Code copied: WXKT-RDMP   (paste it on that page; expires in 10 minutes)
 ```
 
-Here the last 4 letters are `RDMP`. Yours differ. If no browser opens, copy the URL of the second line into your browser.
+Your URL and your code differ. If no browser opens, copy the URL of the second line into your browser. Over SSH, or on a machine with no clipboard, the third line starts with `Code:` and says to type the code.
 
 | The browser shows            | Do                                                                    |
 | ---------------------------- | --------------------------------------------------------------------- |
 | Cloudflare's login, first    | type your email, the one of step 2, then the code Cloudflare sends it |
 | `Approve this login?`, then  | the table below, with the short code of your terminal                 |
 
-| On the page                                 | Do                                                    |
-| ------------------------------------------- | ----------------------------------------------------- |
-| Can change                                  | choose Admin, on a machine of your own               |
-| Last 4 letters of the code in your terminal | type them                                             |
-| Approve                                     | press it                                              |
+| On the page             | Do                                      |
+| ----------------------- | --------------------------------------- |
+| Can change              | choose Admin, on a machine of your own  |
+| Code from your terminal | paste it, or type it: all 8 letters     |
+| Approve                 | press it                                |
 
 Can change has two roles to choose from, and the page opens on the second:
 
@@ -286,7 +284,7 @@ Can change has two roles to choose from, and the page opens on the second:
 
 An agent on this machine uses the same login. As an admin it reaches a site that an earlier login published. As a publisher it does not: after a new login it no longer reaches the sites of the login before.
 
-The page takes only the letters of the code your terminal printed. If it refuses them, or you did not start a login, press Deny.
+The page takes only the whole code your terminal printed. If it still refuses the code once you pasted it whole, or you did not start a login, press Deny.
 
 After a no, or on another machine, the same login is one line, with the URL of your own dashboard, as the command printed it:
 

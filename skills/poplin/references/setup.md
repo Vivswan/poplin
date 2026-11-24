@@ -328,14 +328,15 @@ Run the login with the dashboard's URL: the one the user gave you, or the one th
 npx poplin login --server https://poplin.example.com
 ```
 
-Give the user both, each on its own line. The URL opens the dashboard on the question `Approve this login?`. The page asks for the last 4 letters of the code. Neither the page nor the URL holds any of them, so the user needs the code you gave them.
+Give the user both, each on its own line. The URL opens the dashboard on the question `Approve this login?`. The page asks for the whole code. Neither the page nor the URL holds any part of it, so the user needs the code you gave them.
 
 On a new install Cloudflare's login comes first: it asks for the user's email and sends a code to its inbox. A new address can take a few minutes to answer: until then the browser cannot find it.
 
-| The user                           | Does                                              |
-| ---------------------------------- | ------------------------------------------------- |
-| asked you for this login           | types the last 4 letters, then presses Approve    |
-| sees the page refuse those letters | presses Deny: that page is of some other login    |
+| The user                              | Does                                                   |
+| ------------------------------------- | ------------------------------------------------------ |
+| asked you for this login              | pastes or types the whole code, then presses Approve   |
+| sees the page refuse the code         | pastes the whole code again, as you gave it            |
+| sees the page refuse the code again   | presses Deny: that page is of some other login         |
 
 The page has one choice, Can change, and it starts at Publisher. Tell the user both rows before they press Approve. The choice is theirs: you use the login they approve.
 

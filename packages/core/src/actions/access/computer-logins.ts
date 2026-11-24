@@ -1,4 +1,4 @@
-// A computer logged in from the dashboard: a terminal asks, an admin allows or denies it, typing the end of a code the terminal alone shows, and the terminal collects its token once.
+// A computer logged in from the dashboard: a terminal asks, an admin allows or denies it, typing or pasting the code the terminal alone shows, and the terminal collects its token once.
 //
 //   beginLogin    anyone      a pending login: a code to show and a secret to keep. It grants nothing, and no visitor's logins keep another's out
 //   listLogins    an admin    every login that waits to be decided
@@ -8,7 +8,7 @@
 
 import * as v from "valibot";
 
-import { type ComputerLogin, endsUserCode, holdsSecret, type LoginId, mintComputerLogin, parseLoginId, parseLoginSecret, showUserCode } from "../../auth/computer-logins";
+import { type ComputerLogin, holdsSecret, isShownUserCode, type LoginId, mintComputerLogin, parseLoginId, parseLoginSecret, sameUserCode, showUserCode } from "../../auth/computer-logins";
 import type { Login } from "../../auth/logins";
 import type { Actor } from "../../auth/scopes";
 import { mintToken } from "../../auth/tokens";
@@ -52,10 +52,10 @@ export const LOGIN_REQUEST = v.strictObject({
 /** What a terminal asks for its token with. */
 export const LOGIN_SECRET = v.strictObject({ secret: v.pipe(v.string(), v.maxLength(MAX_SECRET_LENGTH)) });
 
-/** What an admin decides about one waiting login, named by its id. To let it in they name its scope, so none is let in with a scope nobody chose, and type the `letters` its code ends with, which the terminal alone shows. */
+/** What an admin decides about one waiting login, named by its id. To let it in they name its scope, so none is let in with a scope nobody chose, and give its `code`, which the terminal alone shows. */
 const LOGIN_DECISION = v.variant("allow", [
   v.strictObject({ login: v.string(), allow: v.literal(false) }),
-  v.strictObject({ login: v.string(), allow: v.literal(true), scope: v.picklist(["publisher", "admin"]), letters: v.string() }),
+  v.strictObject({ login: v.string(), allow: v.literal(true), scope: v.picklist(["publisher", "admin"]), code: v.string() }),
 ]);
 
 /**
@@ -68,8 +68,8 @@ export function plainComputerName(text: string): string {
   return text.replace(NOT_PLAIN, "").slice(0, MAX_COMPUTER_LENGTH).replace(NOT_PLAIN, "");
 }
 
-/** A login begun: the code to show a person, the secret to keep, the seconds until the login runs out, and the seconds to wait between two questions. */
-const BEGUN_LOGIN = v.object({ code: v.string(), secret: v.string(), expires_in: v.number(), interval: v.number() });
+/** A login begun: the code to show a person, the secret to keep, the seconds until the login runs out, and the seconds to wait between two questions. A terminal copies the code, so no other text is taken for one. */
+const BEGUN_LOGIN = v.object({ code: v.pipe(v.string(), v.check(isShownUserCode)), secret: v.string(), expires_in: v.number(), interval: v.number() });
 
 /** What the API answers a login begun: with `verify_url`, the address of the page where an admin allows it. */
 export const BEGUN_LOGIN_ANSWER = v.object({ ...BEGUN_LOGIN.entries, verify_url: v.string() });
@@ -83,7 +83,7 @@ export const REDEEMED_LOGIN = v.variant("state", [
 /**
  * A pending login as an admin sees it: never its secret, nor the secret's hash. Times are milliseconds since the epoch.
  *
- * `id` names the login and proves nothing. No part of its code is here: a person types the code's end from the terminal to allow it. `computer` is what the computer called itself, which nobody checked.
+ * `id` names the login and proves nothing. No part of its code is here: a person brings the code from the terminal to allow it. `computer` is what the computer called itself, which nobody checked.
  */
 export interface LoginObject {
   readonly id: LoginId;
@@ -176,10 +176,10 @@ export async function showLogin(install: Install, actor: Actor, id: string): Pro
 /**
  * Allow or deny one waiting login. The decision is made once and writes one audit entry; an allowed login gives its token to the terminal that holds its secret.
  *
- * An admin may allow a computer for less than it asked, never for more. Only one who sees the terminal allows it: the letters are in no answer and no address.
+ * An admin may allow a computer for less than it asked, never for more. Only one who has the terminal's code allows it: the code is in no answer and no address.
  *
- * @param decision - the login's id and whether the computer is let in; for one that is, its scope and the letters its code ends with, as typed; anything is taken and checked
- * @returns the login as it was decided, `not_allowed` for anyone but an admin in a browser, `not_confirmed` for letters that are not the code's last four or the whole code, `bad_argument` about `scope` for more than was asked, or `no_such_login`
+ * @param decision - the login's id and whether the computer is let in; for one that is, its scope and its code, as typed or pasted; anything is taken and checked
+ * @returns the login as it was decided, `not_allowed` for anyone but an admin in a browser, `not_confirmed` for anything but the whole code, `bad_argument` about `scope` for more than was asked, or `no_such_login`
  * @throws {Error} the database failed
  */
 export async function decideLogin(
@@ -197,7 +197,7 @@ export async function decideLogin(
   if (login === undefined) return refuse("no_such_login");
 
   const scope = asked.output.allow ? asked.output.scope : undefined;
-  if (asked.output.allow && !endsUserCode(asked.output.letters, login.code)) return refuse("not_confirmed", "letters");
+  if (asked.output.allow && !(await sameUserCode(asked.output.code, login.code))) return refuse("not_confirmed", "code");
 
   if (scope === "admin" && login.scope !== "admin") return refuse("bad_argument", "scope");
 

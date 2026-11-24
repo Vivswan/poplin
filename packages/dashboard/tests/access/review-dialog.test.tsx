@@ -1,13 +1,14 @@
-// The review of a waiting login: what a stranger's login cannot make it say or start at, what a person must type before Approve, what one who came by a link is told, and what each decision sends.
+// The review of a waiting login: what a stranger's login cannot make it say or start at, what a person must type or paste before Approve, what one who came by a link is told, and what each decision sends.
 
 import { clearPage, type Within } from "../lib/support/page";
 
 import { afterAll, afterEach, describe, expect, test } from "bun:test";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { parseUserCode } from "@poplin/core/src/auth/computer-logins";
 import { cleanup, fireEvent, render, waitFor, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 
-import type { AccessActions, Decided } from "@/access/access-actions";
+import type { AccessActions, Decided, Decision } from "@/access/access-actions";
 import type { Review } from "@/access/access-queries";
 import { ReviewDialog } from "@/access/review-dialog";
 
@@ -35,21 +36,18 @@ const LINK_WORDS = /^Anyone can start a login and send its link\./;
 /** The code of every login here, as its terminal alone shows it: the page is given no part of it. */
 const CODE = "WDJB-MJHT";
 
-/** The last letters of that code, which a person types. */
-const LETTERS = "MJHT";
-
-/** What the server says of letters that are not the code's last. */
-const WRONG_LETTERS = "Those are not the last letters of this login's code.";
+/** What the server says of a text that is not the code. */
+const WRONG_CODE = "That is not this login's code.";
 
 /** Every decision the dialog sent. */
-const sent: Parameters<AccessActions["decide"]>[1][] = [];
+const sent: Decision[] = [];
 
-/** The changes of the screen, with a decision that answers as the server does: it alone knows the letters, and lets no computer in without them. */
+/** The changes of the screen, with a decision that answers as the server does: it alone knows the code, and lets no computer in without the whole of it. */
 const ACTIONS = {
-  decide: async (_login: Review, decision: Parameters<AccessActions["decide"]>[1]): Promise<Decided> => {
+  decide: async (decision: Decision, _asked: Review["scope"]): Promise<Decided> => {
     sent.push(decision);
 
-    return decision.allow && decision.letters.replace(/[\s-]/g, "").toUpperCase() !== LETTERS ? { kind: "letters", sentence: WRONG_LETTERS } : { kind: "done" };
+    return decision.allow && parseUserCode(decision.code) !== parseUserCode(CODE) ? { kind: "code", sentence: WRONG_CODE } : { kind: "done" };
   },
 } as AccessActions;
 
@@ -82,12 +80,12 @@ function allowIsOff(): boolean {
   return dialog().getByRole("button", { name: "Approve" }).hasAttribute("disabled");
 }
 
-/** Type into the field a person fills from the terminal. */
-function type(letters: string): void {
-  fireEvent.change(dialog().getByRole("textbox", { name: "Last 4 letters of the code in your terminal" }), { target: { value: letters } });
+/** Type or paste into the field a person fills from the terminal. */
+function type(code: string): void {
+  fireEvent.change(dialog().getByRole("textbox", { name: "Code from your terminal" }), { target: { value: code } });
 }
 
-/** What a screen reader says after the name of the field of the letters: the lines the field is described by. */
+/** What a screen reader says after the name of the field of the code: the lines the field is described by. */
 function saidAtField(): (string | null)[] {
   const lines = dialog().getByRole("textbox").getAttribute("aria-describedby")?.split(" ") ?? [];
 
@@ -123,55 +121,56 @@ describe("the review", () => {
     render(<Reviewing login={login} onClose={() => (closed += 1)} />);
     const [began, asked] = [pressed(), fact("Asks for")];
     if (press !== undefined) fireEvent.click(dialog().getByRole("button", { name: press }));
-    type(LETTERS);
+    type(CODE);
     await decide("Approve");
 
     expect([began, asked]).toEqual([starts, asks]);
-    expect([sent, closed]).toEqual([[{ allow: true, letters: LETTERS, scope }], 1]);
+    expect([sent, closed]).toEqual([[{ login: login.id, allow: true, code: CODE, scope }], 1]);
   });
 
-  // Drift: keeping a computer out would ask for the letters that only letting one in needs.
+  // Drift: keeping a computer out would ask for the code that only letting one in needs.
   test("denies with nothing typed", async () => {
     let closed = 0;
     render(<Reviewing login={ADMIN} onClose={() => (closed += 1)} />);
     await decide("Deny");
 
-    expect([sent, closed]).toEqual([[{ allow: false, letters: "", scope: "publisher" }], 1]);
+    expect([sent, closed]).toEqual([[{ login: ADMIN.id, allow: false }], 1]);
   });
 
-  // Drift: Approve would be sent with nothing typed, or the page would say a part of a code again, which is the whole answer for a code whose halves are the same.
+  // Drift: Approve would be sent with a part of a code, which a guesser finds far sooner than the whole, or the page would say a part of a code again; or a paste would be refused for its dash, its small letters, or the spaces it brought.
   test.each([
     ["nothing", "", true],
-    ["fewer letters than asked", "JHT", true],
-    ["three letters, a space, and a dash", "J H-T", true],
-    ["four letters", "MJHT", false],
-    ["four letters the page cannot know to be wrong", "BBBB", false],
-    ["the whole code", "wdjb-mjht", false],
-  ])("says no part of a code, and Approve is off until four letters are typed: %s", (_case, letters, off) => {
+    ["the last four letters", "MJHT", true],
+    ["seven letters, a space, and a dash", "WDJB-MJ H", true],
+    ["the code as the terminal shows it", "WDJB-MJHT", false],
+    ["the code in small letters with no dash", "wdjbmjht", false],
+    ["the code as a paste brings it, with spaces around it", "  WDJB-MJHT ", false],
+    ["a code the page cannot know to be wrong", "BBBB-BBBB", false],
+  ])("says no part of a code, and Approve is off until a whole code is typed or pasted: %s", (_case, code, off) => {
     render(<Reviewing login={PUBLISHER} />);
     const page = document.body.innerHTML.toUpperCase();
-    if (letters !== "") type(letters);
+    if (code !== "") type(code);
 
     expect([CODE.split("-").filter((half) => page.includes(half)), allowIsOff(), sent]).toEqual([[], off, []]);
   });
 
-  // Drift: letters the server refused would close the review as if done, or the refusal would show away from the field, or stay after the person typed again.
+  // Drift: a code the server refused would close the review as if done, or the refusal would show away from the field, or stay after the person typed again.
   // Or the line under the field, the note or the refusal, would be tied to nothing, so a screen reader would say the field's name alone.
-  test("keeps open when the server refuses the letters, says so at the field with the focus there, and takes the next try", async () => {
+  test("keeps open when the server refuses the code, says so at the field with the focus there, and takes the next try", async () => {
     let closed = 0;
     render(<Reviewing login={PUBLISHER} onClose={() => (closed += 1)} />);
-    type("BBBB");
+    type("BBBB-BBBB");
     const before = saidAtField();
     await decide("Approve");
     const field = dialog().getByRole("textbox");
     const refused = [closed, dialog().getByRole("alert").textContent, document.activeElement === field, field.getAttribute("aria-invalid"), saidAtField()];
-    type(LETTERS);
+    type(CODE);
     const cleared = dialog().queryAllByRole("alert").length;
     sent.length = 0;
     await decide("Approve");
 
-    expect([before, refused]).toEqual([["Type them to approve."], [0, WRONG_LETTERS, true, "true", [WRONG_LETTERS]]]);
-    expect([cleared, sent, closed]).toEqual([0, [{ allow: true, letters: LETTERS, scope: "publisher" }], 1]);
+    expect([before, refused]).toEqual([["Type or paste it to approve."], [0, WRONG_CODE, true, "true", [WRONG_CODE]]]);
+    expect([cleared, sent, closed]).toEqual([0, [{ login: PUBLISHER.id, allow: true, code: CODE, scope: "publisher" }], 1]);
   });
 });
 
@@ -201,14 +200,14 @@ describe("a review opened by a link", () => {
   test.each([
     ["by a press on the screen", false, false],
     ["by a link", true, true],
-  ])("opened %s, it says who can send a link accordingly, and asks for the letters either way", (_case, byLink, told) => {
+  ])("opened %s, it says who can send a link accordingly, and asks for the code either way", (_case, byLink, told) => {
     render(<Reviewing login={PUBLISHER} byLink={byLink} />);
 
     expect([dialog().queryByText(LINK_WORDS) !== null, dialog().queryAllByRole("textbox").length, allowIsOff()]).toEqual([told, 1, true]);
   });
 
   // Drift: any one of the three would fall away unseen, and the login a stranger sends an admin would again be one tick and one press from a token for everything.
-  test("the login a stranger sends an admin meets all three: a title of the page's own, the least it may change, and an Approve that waits for letters the page does not show", () => {
+  test("the login a stranger sends an admin meets all three: a title of the page's own, the least it may change, and an Approve that waits for a code the page does not show", () => {
     render(<Reviewing login={PHISHING} byLink />);
     const named = within(document.body).getByRole("dialog", { name: TITLE });
 

@@ -151,8 +151,8 @@ test("a login that waits is still there to review after a demo is opened from a 
   // The code is what the sample computer's terminal shows, which the demo prints on a page of its own.
   const printed = await (await second.fetch(new Request(`${HOME}/state/allow/waiting`))).text();
   const terminal = DomUtils.getElementsByTagName("section", parseDocument(printed)).find((section) => DomUtils.textContent(section).includes(`/tokens/review/${waiting?.id}`));
-  const letters = DomUtils.textContent(DomUtils.getElementsByTagName("code", terminal ?? []).at(0) ?? []).slice(-4);
-  const decision = { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ login: waiting?.id, allow: true, scope: "publisher", letters }) };
+  const code = DomUtils.textContent(DomUtils.getElementsByTagName("code", terminal ?? []).at(0) ?? []);
+  const decision = { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ login: waiting?.id, allow: true, scope: "publisher", code }) };
   const decided = await second.fetch(new Request(`${HOME}/data/logins/decide`, decision));
   const third = await open(second.save());
   const { tokens } = await read<{ readonly tokens: readonly { readonly note: string }[] }>(third, "/data/tokens");

@@ -1207,7 +1207,7 @@ describe("what the API refuses before any action runs", () => {
     const install = await openApi();
     const { takeMinute } = install.counters;
     const begun = await answered(install.as(null).logins.$post({ json: { scope: "publisher", computer: "laptop" }, query: {} }));
-    const allowed = await decideLogin(installOf(install), { scope: "admin", holder: "ada@example.com" as Login }, { login: String(begun.body.secret).split("_")[2] ?? "", allow: true, scope: "publisher", letters: String(begun.body.code).slice(-4) });
+    const allowed = await decideLogin(installOf(install), { scope: "admin", holder: "ada@example.com" as Login }, { login: String(begun.body.secret).split("_")[2] ?? "", allow: true, scope: "publisher", code: String(begun.body.code) });
     const ask = (): Promise<Answered> => answered(install.as(null).logins.token.$post({ json: { secret: begun.body.secret as string }, query: {} }));
     install.counters.takeMinute = () => Promise.reject(new Error("the counter is down"));
 

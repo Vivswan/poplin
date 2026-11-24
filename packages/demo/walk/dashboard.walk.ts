@@ -331,16 +331,22 @@ const STOPS: readonly Stop[] = [
     close: (page) => review(page).getByRole("button", { name: "Close", exact: true }).click(),
   },
   {
-    name: "the review the printed link opens, which holds no letter to type and approves the login once the terminal's are typed",
+    name: "the review the printed link opens, which holds no part of the code and approves the login once the terminal's code is pasted",
     open: async (page) => {
       // The demo's own page stands where the terminal would be: it prints the link and the code.
       await page.goto("state/allow/waiting");
       const printed = page.locator("section").filter({ hasText: SAMPLE.login });
-      const letters = ((await printed.locator("code").textContent()) ?? "").slice(-4);
+      const code = (await printed.locator("code").textContent()) ?? "";
+      const halves = code.split("-");
       await printed.getByRole("link").click();
       await expect(review(page).getByRole("button", { name: "Approve", exact: true, disabled: true })).toBeVisible();
-      expect([letters.length, page.url().includes(letters), (await review(page).innerHTML()).includes(letters)]).toEqual([4, false, false]);
-      await review(page).getByRole("textbox", { name: "Last 4 letters of the code in your terminal", exact: true }).fill(letters);
+      const shown = await review(page).innerHTML();
+      expect([halves.map((half) => half.length), halves.filter((half) => page.url().includes(half) || shown.includes(half))]).toEqual([[4, 4], []]);
+      // The last half alone is not the code: Approve stays off, as it does until the whole code stands in the field.
+      const field = review(page).getByRole("textbox", { name: "Code from your terminal", exact: true });
+      await field.fill(halves[1] ?? "");
+      await expect(review(page).getByRole("button", { name: "Approve", exact: true, disabled: true })).toBeVisible();
+      await field.fill(code);
     },
     shows: (page) => [review(page).getByText(/^Anyone can start a login and send its link\./), review(page).getByRole("button", { name: "Approve", exact: true, disabled: false })],
     close: (page) => review(page).getByRole("button", { name: "Approve", exact: true }).click(),

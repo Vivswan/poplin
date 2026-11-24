@@ -11,6 +11,7 @@ import { problem, problemLines } from "./commands/problems";
 import type { Io } from "./commands/records";
 import { AFTER_STOP_TIMEOUT_MS, run } from "./commands/run";
 import { openBrowser } from "./local/browser";
+import { copyText } from "./local/clipboard";
 import { thisMachine } from "./local/login-file";
 import { pastedScreen, runnerOf } from "./local/invoked";
 import { lookOf, processScreen } from "./local/screen";
@@ -68,6 +69,7 @@ function thisProcess(): Io {
     looks,
     computer: hostname(),
     open: (address) => openBrowser(address, machine),
+    copy: (text) => copyText(text, machine),
     pause,
     stopped: STOP.signal,
   };
