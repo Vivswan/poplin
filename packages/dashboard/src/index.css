@@ -169,6 +169,16 @@
     display: block;
     padding: 24px;
   }
+  /* A button, a switch, and a checkbox show the hand: the CSS framework leaves a button with the arrow. One that is off keeps the pointer it had. */
+  /* The rule sits in the base layer, so a control that names a pointer of its own keeps it, as the grip of a table's heading does. */
+  :is(button, [role="button"], [role="switch"], [role="checkbox"]):not(:disabled, [aria-disabled="true"], [data-disabled]) {
+    cursor: pointer;
+  }
+}
+
+/* A line of an opened menu or list is a control too, and its part names the arrow. This rule sits outside the layers, so it holds over the part's own class. */
+:is([role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"], [role="option"]):not([aria-disabled="true"], [data-disabled]) {
+  cursor: pointer;
 }
 
 /* How far from the screen's edge a line that says a result lies. A wide screen says it at the top, inside the header's band. A phone says it at the bottom, and over the bar of unsaved changes while that is shown. */
