@@ -13,6 +13,16 @@ Look at github.com/Vivswan/poplin, read its skill, and help me set up poplin.
 
 Paste it into an agent, such as Claude Code or Codex: an AI tool that runs in a terminal on your own machine and runs commands there. It is a separate tool that you install yourself, and it may cost money: poplin brings none. A chat in a browser cannot run commands, so it cannot publish.
 
+**Or install the skill yourself**, then ask the agent to set poplin up: the steps below are the same. Have Node.js 24 or higher on the machine first, as poplin needs:
+
+```sh
+npx skills add Vivswan/poplin
+```
+
+It asks what it needs, such as which agents get the skill, and whether for this folder or for you. `npx skills add Vivswan/poplin -g -y` skips those questions: `-g` installs for you, in every folder, and `-y` takes the defaults for the rest.
+
+The skill is enough for an agent that runs commands: without poplin's MCP server, it publishes with `npx poplin` itself.
+
 **Have ready** what [What you need](install.md#what-you-need) lists. The domain is your choice: the agent asks.
 
 ```text
