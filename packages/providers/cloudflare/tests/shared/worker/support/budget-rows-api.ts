@@ -240,7 +240,7 @@ export const API_ROWS: readonly BudgetRow[] = [
     // Worst: the login was allowed, so the poll makes the token and removes the login.
     arrange: async (stage) => {
       const begun = await done<{ code: string; secret: string }>(await apiOf(unmeasured(stage), null).logins.$post({ query: {}, json: { scope: "publisher", computer: "laptop" } }));
-      const decided = await decideLogin(stage.install, ADMIN_ACTOR, { login: begun.secret.split("_")[2] ?? "", allow: true, scope: "publisher", letters: begun.code });
+      const decided = await decideLogin(stage.install, ADMIN_ACTOR, { login: begun.secret.split("_")[2] ?? "", allow: true, scope: "publisher", code: begun.code });
       if (!decided.ok) throw new Error(`the row's login was not allowed: ${decided.code}`);
 
       return (measured) => apiOf(measured, null).logins.token.$post({ query: {}, json: { secret: begun.secret } });

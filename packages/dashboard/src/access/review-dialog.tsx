@@ -1,10 +1,11 @@
-// The review of one waiting login: what it asks for, the name it gave, the role it has once approved, the letters of its code that the person types from their terminal, and Approve or Deny. The page never holds those letters: the server checks them.
+// The review of one waiting login: what it asks for, the name it gave, the role it has once approved, the code that the person types or pastes from their terminal, and Approve or Deny. The page never holds that code: the server checks it.
 //
 // Anyone can begin a login, so nothing the login says of itself is the page's own words: its name is a quoted fact, and what it may change starts at the least, whatever it asked for.
 
+import { fillsUserCode, MAX_TYPED_LENGTH, USER_CODE_SHAPE } from "@poplin/core/src/auth/computer-logins";
 import { type FormEvent, type ReactNode, type RefObject, useRef, useState } from "react";
 
-import type { AccessActions } from "@/access/access-actions";
+import type { AccessActions, Decision } from "@/access/access-actions";
 import type { Review } from "@/access/access-queries";
 import { ROLE_WORDS, SCOPE_WORDS } from "@/access/access-values";
 import { Button } from "@/components/ui/button";
@@ -28,15 +29,6 @@ const SAYS_FIRST = {
   listed: "Approve it only if you started this login yourself.",
   linked: "Anyone can start a login and send its link. Approve this one only if you just started it, and its code is on your screen.",
 } as const;
-
-/** How many letters at the end of a code the person types. */
-const TYPED_LETTERS = 4;
-
-/** The most characters the field takes: a whole code with its dash, for one who types all of it. */
-const MOST_TYPED = 9;
-
-/** What a person may type between the letters of a code. */
-const CODE_SEPARATORS = /[\s-]/g;
 
 /** What a review is drawn from. */
 interface ReviewDialogProps {
@@ -98,12 +90,7 @@ function ScopeChoice({
   );
 }
 
-/** How many of the letters a person may type are typed, without the spaces and dashes between them. */
-function lettersIn(typed: string): number {
-  return typed.replace(CODE_SEPARATORS, "").length;
-}
-
-/** The check that the login is the person's own: the page knows no part of its code, and the person types the code's end from the terminal, which only the one who began the login has. */
+/** The check that the login is the person's own: the page knows no part of its code, and the person types or pastes the whole of it from the terminal, which only the one who began the login has. */
 function TypedCode({
   typed,
   refusal,
@@ -117,9 +104,7 @@ function TypedCode({
 }): ReactNode {
   return (
     <Field invalid={refusal !== undefined} className="gap-1.5 border-t pt-4">
-      <FieldLabel className="font-normal">
-        Last {TYPED_LETTERS} letters of the code in your terminal
-      </FieldLabel>
+      <FieldLabel className="font-normal">Code from your terminal</FieldLabel>
       <div>
         <Input
           ref={field}
@@ -128,14 +113,15 @@ function TypedCode({
           autoComplete="off"
           autoCapitalize="characters"
           spellCheck={false}
-          maxLength={MOST_TYPED}
-          className="w-28 font-mono uppercase max-md:h-10"
+          maxLength={MAX_TYPED_LENGTH}
+          placeholder={USER_CODE_SHAPE}
+          className="w-32 font-mono uppercase max-md:h-10"
           onChange={(event) => onType(event.target.value)}
         />
       </div>
       <div className="min-h-5 max-md:min-h-10">
         {refusal === undefined ? (
-          <FieldDescription className="text-[13px]">Type them to approve.</FieldDescription>
+          <FieldDescription className="text-[13px]">Type or paste it to approve.</FieldDescription>
         ) : (
           <FieldError className="text-[13px]">{refusal}</FieldError>
         )}
@@ -163,26 +149,26 @@ function ReviewForm({
   const [scope, setScope] = useState<Review["scope"]>("publisher");
   const [refusal, setRefusal] = useState<string>();
   // The answer is acted on only while this login is still the one under review: a review that was left, even one still fading out, does not close the one that followed it.
-  const { press: decide, busy } = useOnePress(async (allow: boolean): Promise<void> => {
-    const decided = await actions.decide(login, { allow, letters: typed, scope });
+  const { press: decide, busy } = useOnePress(async (decision: Decision): Promise<void> => {
+    const decided = await actions.decide(decision, login.scope);
     if (under.current?.id !== login.id) return;
 
     if (decided.kind === "done" || decided.kind === "gone") return onClose();
 
-    if (decided.kind !== "letters") return;
+    if (decided.kind !== "code") return;
 
     setRefusal(decided.sentence);
     field.current?.focus();
   });
-  const type = (letters: string): void => {
-    setTyped(letters);
+  const type = (code: string): void => {
+    setTyped(code);
     setRefusal(undefined);
   };
 
   // Enter in the field does what Approve does, and nothing while Approve is off.
   const allow = (event: FormEvent): void => {
     event.preventDefault();
-    decide(true);
+    decide({ login: login.id, allow: true, scope, code: typed });
   };
 
   return (
@@ -210,10 +196,10 @@ function ReviewForm({
       {login.scope === "admin" ? <p className="text-[13px] text-muted-foreground">{ROLES_GIVE}</p> : null}
       <TypedCode typed={typed} refusal={refusal} field={field} onType={type} />
       <DialogFooter>
-        <Button type="button" variant="outline" disabled={busy} onClick={() => decide(false)}>
+        <Button type="button" variant="outline" disabled={busy} onClick={() => decide({ login: login.id, allow: false })}>
           Deny
         </Button>
-        <Button type="submit" disabled={busy || lettersIn(typed) < TYPED_LETTERS}>
+        <Button type="submit" disabled={busy || !fillsUserCode(typed)}>
           Approve
         </Button>
       </DialogFooter>

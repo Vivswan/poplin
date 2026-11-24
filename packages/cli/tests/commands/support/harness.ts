@@ -25,6 +25,9 @@ interface Options {
   /** Whether a terminal is there to ask on and to show progress on; neither unless said. */
   readonly terminal?: Io["terminal"];
 
+  /** Whether this machine's clipboard takes what is copied; it takes nothing unless said, as on a machine that has none. */
+  readonly clipboard?: boolean;
+
   /** How each stream shows a help text; plain unless said. */
   readonly looks?: Io["looks"];
 
@@ -32,7 +35,7 @@ interface Options {
   readonly typed?: string | { readonly stop: true };
 }
 
-/** What one command printed, and how it exited. `asked` holds the questions it put, `opened` the addresses it handed to a browser, and `waits` how long each of its waits was, in milliseconds. */
+/** What one command printed, and how it exited. `asked` holds the questions it put, `opened` the addresses it handed to a browser, `copied` the texts it handed to the clipboard, and `waits` how long each of its waits was, in milliseconds. */
 export interface Ran {
   readonly code: number;
   readonly out: string[];
@@ -40,6 +43,7 @@ export interface Ran {
   readonly status: string[];
   readonly asked: string[];
   readonly opened: string[];
+  readonly copied: string[];
   readonly waits: number[];
 }
 
@@ -144,7 +148,7 @@ export async function openBench(layout?: LayoutInput): Promise<Bench> {
     paused: undefined,
     stop: () => stopping.abort(),
     run: async (line, options = {}) => {
-      const ran: Ran = { code: -1, out: [], err: [], status: [], asked: [], opened: [], waits: [] };
+      const ran: Ran = { code: -1, out: [], err: [], status: [], asked: [], opened: [], copied: [], waits: [] };
       const env = options.env ?? { POPLIN_SERVER: ORIGIN, POPLIN_TOKEN: install.tokens.admin };
       stopping = new AbortController();
 
@@ -177,6 +181,11 @@ export async function openBench(layout?: LayoutInput): Promise<Bench> {
           ran.opened.push(address);
 
           return true;
+        },
+        copy: async (text) => {
+          ran.copied.push(text);
+
+          return options.clipboard === true;
         },
         // A stop ends a wait, and a wait the test stops is the one stop the command hears of.
         pause: async (ms) => {

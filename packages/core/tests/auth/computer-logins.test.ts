@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { holdsSecret, mintComputerLogin, parseLoginSecret, parseUserCode, type UserCode } from "../../src/auth/computer-logins";
+import { holdsSecret, mintComputerLogin, parseLoginSecret, parseUserCode, USER_CODE_SHAPE, type UserCode } from "../../src/auth/computer-logins";
 import { parseToken } from "../../src/auth/tokens";
 
 const NOW = 1_700_000_000_000;
@@ -25,6 +25,16 @@ describe("mintComputerLogin", () => {
 
     expect(codes.filter((code) => !/^[BCDFGHJKLMNPQRSTVWXZ]{8}$/.test(code))).toEqual([]);
     expect(new Set(codes.join("")).size).toBe(20);
+  });
+
+  // Drift: the page that allows a login shows the shape of a code in its empty field. A login given a code with a half of that shape would have a part of its code on a page that is given none.
+  test("a draw that holds a half of the shape a page shows is drawn again", async () => {
+    const [half = ""] = USER_CODE_SHAPE.split("-");
+    const draws = [`${half}${half}`, `${half}WDJB`, `MJHT${half}`, CODE, "QXZKWDJB"] as UserCode[];
+
+    const { login } = await mintComputerLogin({ scope: "admin", computer: "", visitor: "one-visitor", now: NOW }, () => draws.shift() ?? CODE);
+
+    expect([login.code, draws]).toEqual([CODE, ["QXZKWDJB" as UserCode]]);
   });
 });
 

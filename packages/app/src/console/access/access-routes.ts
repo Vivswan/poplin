@@ -2,7 +2,7 @@
 //
 //   GET  /logins                   the newest logins that wait, and how many more wait
 //   GET  /logins/<id>              one waiting login, to review: no part of its code
-//   POST /logins/decide            deny a login, or allow it with the scope the person chose and the end of its code, which they typed; counted as a try at a code
+//   POST /logins/decide            deny a login, or allow it with the scope the person chose and its code, which they typed or pasted; counted as a try at a code
 //   GET  /people                   the emails that can log in, which one asks, and how many tokens that work each is behind
 //   POST /people/add, /remove      one email in, or out with every token that user allowed, in one step each; the users are then carried to the provider's list, and `note` is the sentence of a change that did not reach it
 //   GET  /tokens                   every token that works, never its value; ?sort= with ?dir=; and the newest that ended
@@ -37,10 +37,10 @@ const ONE_LOGIN = v.object({ login: v.string() });
 /** What names one token in a route's path: its id. */
 const ONE_TOKEN = v.object({ token: v.string() });
 
-/** What a decision carries: the login's id and whether the computer is let in; for one that is, the scope the person chose, which is never left to what the computer asked, and the letters they typed. */
+/** What a decision carries: the login's id and whether the computer is let in; for one that is, the scope the person chose, which is never left to what the computer asked, and the code they typed or pasted. */
 const DECISION = v.variant("allow", [
   v.object({ login: v.string(), allow: v.literal(false) }),
-  v.object({ login: v.string(), allow: v.literal(true), scope: v.picklist(["publisher", "admin"]), letters: v.string() }),
+  v.object({ login: v.string(), allow: v.literal(true), scope: v.picklist(["publisher", "admin"]), code: v.string() }),
 ]);
 
 /** What a change of the users says in a console that carries none of them to the provider and has a Domain screen: a repair there carries them. */

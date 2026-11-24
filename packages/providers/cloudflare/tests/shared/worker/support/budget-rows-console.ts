@@ -318,7 +318,7 @@ export const CONSOLE_ROWS: readonly BudgetRow[] = [
       const [login = { id: "", code: "" }] = await waitingLogins(stage, MOST_WAITING, "admin");
       const session = await sessionOf(stage);
 
-      const decision: Decision = { login: login.id, allow: true, scope: "admin", letters: login.code.slice(-4) };
+      const decision: Decision = { login: login.id, allow: true, scope: "admin", code: login.code };
 
       return (measured) => post(measured, "/data/logins/decide", decision, session);
     },

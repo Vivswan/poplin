@@ -101,7 +101,7 @@ The page that allows a machine's login treats what the login says of itself as a
 | has the fixed title `Approve this login?`, and shows the machine's name in quotes beside `Name it gave` | a login cannot write the question a user answers |
 | starts at Publisher, whatever the login asked for | a token for everything is given only by a user who chose Admin |
 | is reached by an address that names the login and holds no part of its code | a link someone sent gives nothing to type |
-| is given no part of the code; the Worker checks the 4 letters the user types | the letters are in the terminal alone, so only its reader can allow the login |
+| is given no part of the code; the Worker checks the whole code the user types or pastes, all 8 letters | only the terminal that began the login gives the code out: it prints it, and copies it to the clipboard of a user who sits at it. A code alone lets nobody in: that takes a user's login at the dashboard |
 | opened by an address and not by a press on Review, says that anyone can start a login and send its link | a user who was sent a link is told so |
 | refuses a name with a line break, a control character, or a character that hides or turns text around | a name reads as it was written |
 

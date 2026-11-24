@@ -150,7 +150,7 @@ export async function beginWithAddress(install: Install, body: unknown, origin: 
   const begun = await checked(LOGIN_REQUEST, body, (request) => beginLogin(install, request, visitor));
   if (!begun.ok) return begun;
 
-  // The address names the login by the id its secret starts with, which proves nothing. No part of the code is in it: the page asks for the code's end, so the address alone allows nothing.
+  // The address names the login by the id its secret starts with, which proves nothing. No part of the code is in it: the page asks for the whole code, so the address alone allows nothing.
   return { ...begun, verify_url: `${origin}${REVIEW_PAGE}/${parseLoginSecret(begun.secret)}` };
 }
 

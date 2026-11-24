@@ -1,4 +1,4 @@
-// The Access screen's data: what the waiting logins, the people, and the tokens answer, what each change refuses, and that the end of a login's code is in no answer and is tried a counted number of times.
+// The Access screen's data: what the waiting logins, the people, and the tokens answer, what each change refuses, and that no part of a login's code is in an answer and a code is tried a counted number of times.
 
 import { describe, expect, test } from "bun:test";
 import { listAudit } from "@poplin/core/src/actions/install/audit-log";
@@ -13,8 +13,8 @@ import { ORIGIN } from "../support/install";
 /** What a browser sends with a request made by a page of a site of the same install: the site's origin, and that it is another origin of the same site. */
 const SIBLING_PAGE = { Origin: "https://docs--k3v9x2q7m4t8-u-poplin.example.com", "Sec-Fetch-Site": "same-site", "Content-Type": "application/x-www-form-urlencoded" };
 
-/** The code of a planted login, and four letters that are not its last: a code drawn by chance would, once in many runs, end in the letters a test calls wrong, or stand in a page by chance. */
-const PLANTED = { code: "WDJBQXZK" as UserCode, wrong: "BBBB" } as const;
+/** The code of a planted login, and a code that is not it: a code drawn by chance would, once in many runs, be the one a test calls wrong, or stand in a page by chance. */
+const PLANTED = { code: "WDJBQXZK" as UserCode, wrong: "BBBB-BBBB" } as const;
 
 /** One day, in milliseconds. */
 const DAY_MS = 86_400_000;
@@ -93,7 +93,7 @@ describe("the waiting logins", () => {
     expect([found.status, body.code, Object.keys(body).sort()]).toEqual([400, "no_such_login", ["about", "code", "ok", "sentence"]]);
   });
 
-  // Drift: the letters a person types to allow a login would be in something the page is sent, so a page could show them, and a person who was sent the address could copy them.
+  // Drift: the code a person gives to allow a login would be in something the page is sent, so a page could show it, and a person who was sent the address could copy it.
   test("no answer about a waiting login holds either half of its code: the list, the review, each page, each refusal, and the decision", async () => {
     const opened = await openConsole();
     const { id, code } = await plant(opened, "studio-laptop", "admin");
@@ -103,10 +103,10 @@ describe("the waiting logins", () => {
       await opened.get(`/data/logins/${id}`),
       await opened.get("/tokens/list"),
       await opened.get(`/tokens/review/${id}`),
-      await opened.change("/data/logins/decide", { login: id, allow: true, scope: "admin", letters: wrong }),
-      await opened.change("/data/logins/decide", { login: id, allow: true, scope: "admin", letters: "" }),
-      await opened.change("/data/logins/decide", { login: id, allow: true, letters: wrong }),
-      await opened.change("/data/logins/decide", { login: id, allow: true, scope: "admin", letters: code.slice(-4) }),
+      await opened.change("/data/logins/decide", { login: id, allow: true, scope: "admin", code: wrong }),
+      await opened.change("/data/logins/decide", { login: id, allow: true, scope: "admin", code: "" }),
+      await opened.change("/data/logins/decide", { login: id, allow: true, code: wrong }),
+      await opened.change("/data/logins/decide", { login: id, allow: true, scope: "admin", code }),
       await opened.get("/data/tokens"),
     ];
     const texts = await Promise.all(answers.map(async (answer) => `${answer.headers.get("Location") ?? ""}\n${await answer.text()}`));
@@ -117,38 +117,39 @@ describe("the waiting logins", () => {
 });
 
 describe("a decision", () => {
-  // Drift: a computer would be let in without the letters of its terminal, with more than it asked, or with what it asked because the caller named no scope; or a lowered scope would not reach the token.
+  // Drift: a computer would be let in without the whole code of its terminal, with more than it asked, or with what it asked because the caller named no scope; or a lowered scope would not reach the token.
   test.each([
-    ["allowed with the letters", "publisher", { allow: true, scope: "publisher" }, "last", { ok: true, allowed: true, scope: "publisher" }, 0],
-    ["allowed for less than it asked", "admin", { allow: true, scope: "publisher" }, "last", { ok: true, allowed: true, scope: "publisher" }, 0],
-    ["allowed for all it asked, by name", "admin", { allow: true, scope: "admin" }, "last", { ok: true, allowed: true, scope: "admin" }, 0],
-    ["allowed with no scope named, when it asked for everything", "admin", { allow: true }, "last", { ok: false, code: "bad_argument", about: "scope" }, 1],
-    ["allowed with no scope named, when it asked to publish", "publisher", { allow: true }, "last", { ok: false, code: "bad_argument", about: "scope" }, 1],
-    ["allowed with no letters sent", "publisher", { allow: true, scope: "publisher" }, "none", { ok: false, code: "bad_argument", about: "letters" }, 1],
-    ["allowed with other letters", "publisher", { allow: true, scope: "publisher" }, "wrong", { ok: false, code: "not_confirmed", about: "letters", sentence: "Those are not the last letters of this login's code." }, 1],
-    ["allowed with the word a page could send in their place", "publisher", { allow: true, scope: "publisher", confirm: true }, "none", { ok: false, code: "bad_argument", about: "letters" }, 1],
-    ["allowed for more than it asked", "publisher", { allow: true, scope: "admin" }, "last", { ok: false, code: "bad_argument", about: "scope" }, 1],
-    ["denied, which needs no letters", "publisher", { allow: false }, "none", { ok: true, allowed: false }, 0],
+    ["allowed with the code", "publisher", { allow: true, scope: "publisher" }, "whole", { ok: true, allowed: true, scope: "publisher" }, 0],
+    ["allowed for less than it asked", "admin", { allow: true, scope: "publisher" }, "whole", { ok: true, allowed: true, scope: "publisher" }, 0],
+    ["allowed for all it asked, by name", "admin", { allow: true, scope: "admin" }, "whole", { ok: true, allowed: true, scope: "admin" }, 0],
+    ["allowed with no scope named, when it asked for everything", "admin", { allow: true }, "whole", { ok: false, code: "bad_argument", about: "scope" }, 1],
+    ["allowed with no scope named, when it asked to publish", "publisher", { allow: true }, "whole", { ok: false, code: "bad_argument", about: "scope" }, 1],
+    ["allowed with no code sent", "publisher", { allow: true, scope: "publisher" }, "none", { ok: false, code: "bad_argument", about: "code" }, 1],
+    ["allowed with another code", "publisher", { allow: true, scope: "publisher" }, "wrong", { ok: false, code: "not_confirmed", about: "code", sentence: "That is not this login's code." }, 1],
+    ["allowed with the last four letters of the code", "publisher", { allow: true, scope: "publisher" }, "half", { ok: false, code: "not_confirmed", about: "code", sentence: "That is not this login's code." }, 1],
+    ["allowed with the word a page could send in its place", "publisher", { allow: true, scope: "publisher", confirm: true }, "none", { ok: false, code: "bad_argument", about: "code" }, 1],
+    ["allowed for more than it asked", "publisher", { allow: true, scope: "admin" }, "whole", { ok: false, code: "bad_argument", about: "scope" }, 1],
+    ["denied, which needs no code", "publisher", { allow: false }, "none", { ok: true, allowed: false }, 0],
   ] as const)("%s", async (_case, asked, decision, typed, answer, waiting) => {
     const opened = await openConsole();
     const { id, code } = await plant(opened, "studio-laptop", asked);
-    const letters = { last: { letters: code.slice(-4) }, wrong: { letters: PLANTED.wrong }, none: {} }[typed];
-    const decided = await read(await opened.change("/data/logins/decide", { login: id, ...decision, ...letters }));
+    const given = { whole: { code }, half: { code: code.slice(-4) }, wrong: { code: PLANTED.wrong }, none: {} }[typed];
+    const decided = await read(await opened.change("/data/logins/decide", { login: id, ...decision, ...given }));
     const listed = await read(await opened.get("/data/logins"));
 
     expect(decided).toMatchObject(answer);
     expect(listed.logins).toHaveLength(waiting);
   });
 
-  // Drift: the letters could be guessed without end, or a request that is no decision would spend the tries of the person whose login it rides on.
+  // Drift: the code could be guessed without end, or a request that is no decision would spend the tries of the person whose login it rides on.
   test("is refused after twenty tries in a minute, which a request that is no decision does not spend, and listing is not", async () => {
     const opened = await openConsole();
     const { id } = await plant(opened, "studio-laptop");
-    const attempt = (): Promise<Response> => opened.change("/data/logins/decide", { login: id, allow: true, scope: "publisher", letters: PLANTED.wrong });
+    const attempt = (): Promise<Response> => opened.change("/data/logins/decide", { login: id, allow: true, scope: "publisher", code: PLANTED.wrong });
     for (let nth = 0; nth < 30; nth += 1) await opened.change("/data/logins/decide", { login: id, allow: true });
     // A page of a site of the same install rides on the person's login: what it can send is refused before it is a decision or a search, and spends nothing.
     const forged: number[] = [];
-    for (let nth = 0; nth < 30; nth += 1) forged.push((await opened.change("/data/logins/decide", `login=${id}&allow=true&scope=admin&letters=BBBB`, SIBLING_PAGE)).status);
+    for (let nth = 0; nth < 30; nth += 1) forged.push((await opened.change("/data/logins/decide", `login=${id}&allow=true&scope=admin&code=BBBB-BBBB`, SIBLING_PAGE)).status);
     for (let nth = 0; nth < 30; nth += 1) forged.push((await opened.fetch(new Request(`${ORIGIN}/data/logins/find?code=BBBB-BBBB`, { headers: { ...opened.base.proof, ...SIBLING_PAGE } }))).status);
     const statuses: number[] = [];
     for (let nth = 0; nth < 21; nth += 1) statuses.push((await attempt()).status);

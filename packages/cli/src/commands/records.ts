@@ -42,6 +42,9 @@ export interface Io {
   /** Hands an address to the person's browser, when this machine has one to open. It never throws, and answers whether the browser's command was started, which does not say a page came up. */
   readonly open: (address: string) => Promise<boolean>;
 
+  /** Copies a text to the person's clipboard, and answers whether it did. It never throws. A machine with no clipboard has none. */
+  readonly copy?: (text: string) => Promise<boolean>;
+
   /** Waits so many milliseconds. It answers `interrupted`, at once, when the command is stopped during the wait or was before it. */
   readonly pause: (ms: number) => Promise<"over" | "interrupted">;
 

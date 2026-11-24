@@ -1,6 +1,6 @@
 // Anyone can begin a login, ask for its token, and send the dashboard any decision, as JSON or as a form, from any origin.
-// Across any order of those steps, a token must come out only for a login the admin allowed in a JSON request under their login with the letters its terminal shows, once, to the holder of its secret.
-// No secret or token may show up anywhere else, and the letters a person types may show up in nothing the dashboard answers.
+// Across any order of those steps, a token must come out only for a login the admin allowed in a JSON request under their login with the whole code its terminal shows, once, to the holder of its secret.
+// No secret or token may show up anywhere else, and no half of a code may show up in anything the dashboard answers.
 
 import { expect } from "bun:test";
 import fc from "fast-check";
@@ -33,7 +33,7 @@ type Step =
   | { readonly kind: "begin"; readonly scope: "admin" | "publisher"; readonly computer: string }
   | { readonly kind: "ask"; readonly login: number; readonly secret: string | undefined }
   | { readonly kind: "look"; readonly login: number; readonly named: string | undefined }
-  | { readonly kind: "decide"; readonly login: number; readonly allow: boolean; readonly typed: "terminal" | "other" | "none"; readonly session: boolean; readonly json: boolean; readonly origin: string }
+  | { readonly kind: "decide"; readonly login: number; readonly allow: boolean; readonly typed: "terminal" | "half" | "other" | "none"; readonly session: boolean; readonly json: boolean; readonly origin: string }
   | { readonly kind: "wait"; readonly seconds: number };
 
 /** What the test itself knows of a login, kept apart from anything the install answers. */
@@ -107,7 +107,7 @@ const steps: fc.Arbitrary<Step> = fc.oneof(
       kind: fc.constant("decide" as const),
       login: picks,
       allow: fc.boolean(),
-      typed: fc.oneof({ arbitrary: fc.constant("terminal" as const), weight: 3 }, { arbitrary: fc.constantFrom("other" as const, "none" as const), weight: 1 }),
+      typed: fc.oneof({ arbitrary: fc.constant("terminal" as const), weight: 3 }, { arbitrary: fc.constantFrom("half" as const, "other" as const, "none" as const), weight: 1 }),
       session: fc.oneof({ arbitrary: fc.constant(true), weight: 4 }, { arbitrary: fc.constant(false), weight: 1 }),
       json: fc.oneof({ arbitrary: fc.constant(true), weight: 4 }, { arbitrary: fc.constant(false), weight: 1 }),
       origin: fc.constantFrom(ORIGIN, ORIGIN, ORIGIN, ORIGIN, "https://evil.example.com", "null"),
@@ -208,10 +208,10 @@ function guarded(step: Extract<Step, { kind: "decide" }>): number | undefined {
 }
 
 async function decide(desk: Desk, login: Known, step: Extract<Step, { kind: "decide" }>): Promise<void> {
-  // What a person has to type with: the terminal's own letters, letters that are surely others, or nothing.
-  const other = `${login.code.slice(-4, -1)}${login.code.endsWith("B") ? "C" : "B"}`;
-  const letters = { terminal: { letters: login.code.slice(-4) }, other: { letters: other }, none: {} }[step.typed];
-  const decision = { login: login.id, allow: step.allow, ...(step.allow ? { scope: login.scope, ...letters } : {}) };
+  // What a person has to give: the terminal's own code, its last half alone, a code that is surely another, or nothing.
+  const other = `${login.code.slice(0, -1)}${login.code.endsWith("B") ? "C" : "B"}`;
+  const given = { terminal: { code: login.code }, half: { code: login.code.slice(-4) }, other: { code: other }, none: {} }[step.typed];
+  const decision = { login: login.id, allow: step.allow, ...(step.allow ? { scope: login.scope, ...given } : {}) };
   const body = step.json ? JSON.stringify(decision) : new URLSearchParams(Object.entries(decision).map(([key, value]) => [key, String(value)])).toString();
 
   const headers = new Headers({ Origin: step.origin, "Sec-Fetch-Site": step.origin === ORIGIN ? "same-origin" : "cross-site", "Content-Type": step.json ? JSON_TYPE : FORM });
@@ -223,7 +223,7 @@ async function decide(desk: Desk, login: Known, step: Extract<Step, { kind: "dec
   const refusal = guarded(step);
   if (refusal !== undefined) expect(answer.status).toBe(refusal);
 
-  // A page of another origin is refused whatever it sends, and a page with no origin of its own, which sends `null`, is one. The login, the dashboard's own page, and the media type guard the request; the letters are what only the terminal's reader has.
+  // A page of another origin is refused whatever it sends, and a page with no origin of its own, which sends `null`, is one. The login, the dashboard's own page, and the media type guard the request; the whole code is what only the terminal's reader has.
   const taken = refusal === undefined && (step.typed === "terminal" || !step.allow);
   if (taken && login.state === "pending" && desk.install.clock.now < login.expiresAt) login.state = step.allow ? "allowed" : "denied";
 }
@@ -275,7 +275,7 @@ async function take(desk: Desk, step: Step): Promise<void> {
 }
 
 property(
-  "over any order of steps a token comes out only for a login the admin allowed in a JSON request under their login with its terminal letters, once, and no secret, token, or half of a code is in any other answer, page, address, or audit entry",
+  "over any order of steps a token comes out only for a login the admin allowed in a JSON request under their login with the whole code of its terminal, once, and no secret, token, or half of a code is in any other answer, page, address, or audit entry",
   fc.asyncProperty(fc.array(steps, { minLength: 1, maxLength: 40 }), async (taken) => {
     const desk = await openDesk();
     const tokensBefore = (await desk.install.database.listTokens()).length;

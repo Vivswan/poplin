@@ -10,8 +10,8 @@ const SCREENS = [
   { width: 1024, height: 768 },
 ] as const;
 
-/** Four letters that end no code, which has no vowel in it, and what the server says of them. */
-const WRONG = { letters: "OOOO", refusal: "Those are not the last letters of this login's code." } as const;
+/** A text shaped like a code that is the code of no login, since a code has no vowel in it, and what the server says of it. */
+const WRONG = { code: "OOOO-OOOO", refusal: "That is not this login's code." } as const;
 
 /** Where each heading of the list of tokens starts, in whole pixels from the window's left edge. */
 async function headingStarts(page: Page): Promise<readonly number[]> {
@@ -55,16 +55,16 @@ for (const size of SCREENS) {
   });
 }
 
-// Drift: Enter in the field of the letters would do nothing, where it sends every other form of the dashboard, and a person who types the letters and presses Enter would wait for an answer that never comes.
-test("Enter in the field of a review's letters does what Approve does", async ({ page }) => {
+// Drift: Enter in the field of the code would do nothing, where it sends every other form of the dashboard, and a person who pastes the code and presses Enter would wait for an answer that never comes.
+test("Enter in the field of a review's code does what Approve does", async ({ page }) => {
   await page.goto("tokens/list");
   const review = page.getByRole("dialog", { name: "Approve this login?", exact: true });
-  const field = review.getByRole("textbox", { name: "Last 4 letters of the code in your terminal", exact: true });
+  const field = review.getByRole("textbox", { name: "Code from your terminal", exact: true });
   await page.getByRole("button", { name: "Review", exact: true }).filter({ visible: true }).first().click({ timeout: FIRST_LOAD_MS });
-  await field.fill(WRONG.letters);
+  await field.fill(WRONG.code);
   await field.press("Enter");
 
-  // The server answered the letters, which only Allow sends: its refusal stands at the field, and the review stays for the next try.
+  // The server answered the code, which only Approve sends: its refusal stands at the field, and the review stays for the next try.
   await expect(review.getByRole("alert")).toHaveText(WRONG.refusal);
   await expect(field).toBeFocused();
 });

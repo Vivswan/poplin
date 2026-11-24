@@ -101,20 +101,37 @@ async function begin(client: Client, asked: { readonly scope: "publisher" | "adm
   }
 }
 
-/** Tell the person where to go: with `--json` one line an agent can pass on, otherwise the address and the code, each alone on a line. The page asks for the code's last letters, which only this output shows. */
-function announce(page: string, begun: Begun, json: boolean, io: Io): void {
-  if (json) {
+/**
+ * Copy the code to the clipboard of the person at this terminal, to paste on the page.
+ *
+ * @returns whether it was copied, which it never is under `--json`, nor where no person can be asked: stdin or stderr is no terminal
+ */
+async function copyCode(code: string, json: boolean, io: Io): Promise<boolean> {
+  if (json || !io.terminal.asks) return false;
+
+  return (await io.copy?.(code)) === true;
+}
+
+/**
+ * Tell the person where to go: with `--json` one line an agent can pass on, otherwise the address alone on a line, and the code under it. The page asks for the whole code, which only this output shows.
+ *
+ * @param said - whether the line is the JSON one, and whether the code was copied, which the line of the code then says
+ */
+function announce(page: string, begun: Begun, said: { readonly json: boolean; readonly copied: boolean }, io: Io): void {
+  if (said.json) {
     io.out(JSON.stringify({ verify_url: page, code: begun.code, expires_in: begun.expires_in }));
 
     return;
   }
 
   const minutes = Math.round(begun.expires_in / SECONDS_PER_MINUTE);
-  io.screen.line("note", "Open this URL and approve the login:");
+  const code = said.copied
+    ? `Code copied: ${begun.code}   (paste it on that page; expires in ${minutes} minutes)`
+    : `Code: ${begun.code}   (type it on that page; expires in ${minutes} minutes)`;
+
+  io.screen.line("note", "Approve this login in your browser:");
   io.screen.line("plain", `  ${page}`);
-  io.screen.line("note", "Enter the last 4 characters of this code on that page:");
-  io.screen.line("plain", `  ${begun.code}`);
-  io.screen.line("plain", `The code expires in ${minutes} minutes`);
+  io.screen.line("note", code);
 }
 
 /** Ask for the token once: the token, the reason to stop, or the seconds to wait before the next question. */
@@ -179,7 +196,7 @@ function saved(server: string, record: Collected["record"], asked: "publisher" |
 /**
  * Log this computer in.
  *
- * The address and the code are printed before the wait begins, and the browser is opened when there is one. The token is saved in the login file and printed nowhere.
+ * The address and the code are printed before the wait begins, the code is copied on a terminal, and the browser is opened when there is one. The token is saved in the login file and printed nowhere.
  *
  * @returns who the saved token is, or the problem: no install to ask, a login that was denied, ran out, or was stopped, or an install that did not answer as one
  */
@@ -197,7 +214,9 @@ export async function logIn(request: RequestOf<"login">, io: Io): Promise<Outcom
   const page = pageOf(begun.verify_url, server);
   if (page === undefined) return refused(problem("unexpected_answer", "the approval URL is not on the install's origin"));
 
-  announce(page, begun, request.json, io);
+  // The copy ends before the browser starts. Each runs with this process's tokens taken out, and one that ended while the other started would put them back for it.
+  const copied = await copyCode(begun.code, request.json, io);
+  announce(page, begun, { json: request.json, copied }, io);
   if (request.browser) void io.open(page);
 
   const collected = await collect(client, begun, io);

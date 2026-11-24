@@ -1503,8 +1503,8 @@ describe("a computer's login", () => {
     const id = begun.secret.split("_")[2] ?? "";
     const found = await ask(worker, `${ADMIN}/data/logins/${id}`, { headers: session });
     const byCode = await ask(worker, `${ADMIN}/data/logins/find?code=${begun.code}`, { headers: session });
-    const decision = { login: id, allow: true, scope: "publisher", letters: begun.code.slice(-4) };
-    const linkAlone = await send(worker, `${ADMIN}/data/logins/decide`, { ...decision, letters: begun.code.endsWith("B") ? "CCCC" : "BBBB" }, session);
+    const decision = { login: id, allow: true, scope: "publisher", code: begun.code };
+    const halfAlone = await send(worker, `${ADMIN}/data/logins/decide`, { ...decision, code: begun.code.slice(-4) }, session);
 
     const unsigned = await send(worker, `${ADMIN}/data/logins/decide`, decision);
     w.clock.now += 5000;
@@ -1521,8 +1521,8 @@ describe("a computer's login", () => {
     expect([stranger.status, stranger.headers.get("Location"), await stranger.text()]).toEqual([403, null, `${NO_LOGIN.sentence}\n`]);
     expect([opened.status, ((await readShell(await opened.text())).boot as { email: string }).email]).toEqual([200, OWNER]);
     expect([found.status, JSON.parse(shown)]).toMatchObject([200, { ok: true, login: { id, computer: "laptop", scope: "publisher" } }]);
-    // The code is in the terminal alone: no half of it is in what the page is given, no address that holds it leads to a login, and letters that are not its last allow nothing.
-    expect([[begun.code.slice(0, 4), begun.code.slice(-4)].some((half) => shown.includes(half)), byCode.status, linkAlone.status]).toEqual([false, 400, 400]);
+    // The code is in the terminal alone: no half of it is in what the page is given, no address that holds it leads to a login, and its last half alone allows nothing.
+    expect([[begun.code.slice(0, 4), begun.code.slice(-4)].some((half) => shown.includes(half)), byCode.status, halfAlone.status]).toEqual([false, 400, 400]);
     expect([unsigned.status, untouched.state]).toEqual([401, "pending"]);
     expect([allowed.status, await allowed.json()]).toEqual([200, { ok: true, allowed: true, scope: "publisher" }]);
     expect([collected.state, again.state, who.token]).toMatchObject(["allowed", "expired", { scope: "publisher", note: "laptop" }]);
