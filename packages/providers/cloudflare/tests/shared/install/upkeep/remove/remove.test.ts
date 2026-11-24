@@ -422,12 +422,13 @@ describe("an account that changed between the look and the removal", () => {
 
 describe("what one kind alone has", () => {
   // Drift: a rule is made only by a token with an optional permission, so a token without it can neither list nor remove it: that is no failure of the removal.
-  test("with a domain, a token without a rule's optional permission leaves that row as one that stays, names the permission, and the run is done", async () => {
+  // Its row says the permission it needs, as the row of a piece an install left out does: in the words of a row that is blocked, it read as a failure.
+  test("with a domain, a token without a rule's optional permission leaves that row as one that stays, says and names the permission it needs, and the run is done", async () => {
     const account = await installedAccount("domain", { refuse: "GET /zones/zone-1/rulesets/phases/http_request_firewall_custom/entrypoint" });
     const run = await removed(account, "domain", applyOf(KINDS.domain.confirm));
-    const stays = run.done.ok ? run.done.rows.filter((row) => row.right !== undefined).map((row) => `${row.object} | ${row.state} | ${row.right}`) : [];
+    const stays = run.done.ok ? run.done.rows.filter((row) => row.right !== undefined).map((row) => `${row.object} | ${row.state} | ${row.detail} | ${row.right}`) : [];
 
-    expect([stays, run.done.ok && run.done.ready, run.done.ok && run.done.blocked, left(account)]).toEqual([["WAF rule | stay | Zone WAF: Edit"], true, [], { ...NOTHING, rules: 2, rulesets: 1 }]);
+    expect([stays, run.done.ok && run.done.ready, run.done.ok && run.done.blocked, left(account)]).toEqual([["WAF rule | stay | needs Zone WAF: Edit | Zone WAF: Edit"], true, [], { ...NOTHING, rules: 2, rulesets: 1 }]);
   });
 
   // Drift: where the zone had rules of its own in a phase, poplin's rule went into the zone's ruleset. Only the name tells that ruleset from one poplin made, so one of another name must stay even when poplin's rule was the last in it.

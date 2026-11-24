@@ -138,12 +138,17 @@ export type Run = "dry-run" | "apply";
  */
 export type RowState = "make" | "change" | "remove" | "leave" | "leave-out" | "block" | "fail" | "not-run";
 
-/** One object of an install, in the order of the work. `detail` names it and says why it was left out, blocked, or failed; `right` is on a row that lacks one right of the token, and names it. */
+/**
+ * One object of an install, in the order of the work. `detail` names it and says why it was left out, blocked, or failed; `right` is on a row that lacks one right of the token, and names it.
+ *
+ * A row left out with a `right` is a piece the install works without, which the token could not read for want of that right. `extra` says what such a piece is for, in a few words, for the one line that speaks of all of them.
+ */
 export interface Row {
   readonly object: string;
   readonly state: RowState;
   readonly detail: string;
   readonly right?: string;
+  readonly extra?: string;
 }
 
 /** Something only a person can do, at the provider's own pages: what to do there, and the address to open. */

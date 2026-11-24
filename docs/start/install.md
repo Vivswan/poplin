@@ -162,7 +162,7 @@ The terminal shows a row of small marks for what you paste, never the letters. P
 
 **Leave Cloudflare's page with the token open** until the command says `is installed`: Cloudflare shows the token once, and a run that stops asks for it again. If the page is gone, choose Roll in the token's menu, under My Profile, then API Tokens: it shows a new text.
 
-**Skip the optional permissions on a first install.** There are four, and the command's last line before its question says what they add. Nothing is wrong without them.
+**Skip the optional permissions on a first install.** There are four, and the command's last line before its question says what they add. Nothing is wrong without them: a piece left out for one says `skipped` and `needs`, then the permission, and [one line under the rows](#4-read-what-it-made) says what to do.
 
 They can be added on any day: three for [rules against junk traffic](../dashboard/domain.md#optional-block-junk-traffic-and-crawlers), and one for [an email about charges](../dashboard/domain.md#optional-an-email-when-charges-reach-1-dollar) at once.
 
@@ -227,6 +227,27 @@ Under a domain, the command adds records, routes, and rules of its own. A websit
 | `Passkeys` | by a passkey, saved after the email was proved once by the code |
 
 **Where Cloudflare makes an account no passkeys**, or the account's `Cloudflare` method was removed, that row says `skipped`, and users log in with the code. Nothing is wrong.
+
+**Where the token lacks an optional permission**, the piece's row says `skipped` and the permission it needs. Nothing is wrong. One line under the rows says what those pieces are, and when to add the permissions:
+
+```text
+skipped    Redirect rule         needs Single Redirect: Edit
+skipped    WAF rule              needs Zone WAF: Edit
+skipped    Budget alert          needs Notifications: Edit, or wait a day: the install creates it
+6 optional rows skipped: http redirect, edge rules, bot blocking, and alerts. They need 4 permissions the account token lacks: add them, then run:
+  npx poplin doctor --repair --domain example.com
+```
+
+| The line ends                        | Printed by                                             | What reads those pieces again                                      |
+| ------------------------------------ | ------------------------------------------------------ | ------------------------------------------------------------------ |
+| `then run:`, and the repair under it | an install that was made                               | the repair: a second `install` changes nothing of an install       |
+| `then rerun this command`            | a repair that left nothing undone                      | the same repair                                                    |
+| `before the next step`               | a run that left something undone, or kept other users  | the step a later line names, after `Next:` or `as a user:`         |
+| `before the run`                     | a dry run                                              | the run: a dry run changes nothing                                 |
+
+With the permission, a piece is read, and made where the domain and its plan have room for it. Where they have none, its row says why.
+
+[Domain](../dashboard/domain.md#optional-block-junk-traffic-and-crawlers) has each permission's boxes on the token's form.
 
 **Where an install already is**, the command changes nothing. It reads whether the install needs a repair, says what to run next, and names the command for each thing you may want:
 
@@ -361,7 +382,17 @@ A dry run does not test the account token's write permissions
 A run would create 29 resources and update 1
 ```
 
-The sample is of a token that holds the four optional permissions. With a token that lacks one, the last line counts those rows too: `and skip`, and their number.
+The sample is of a token that holds the four optional permissions. With a token that lacks them, each of their rows says `would skip` and the permission it needs, and the last lines count them:
+
+```text
+would skip    WAF rule              needs Zone WAF: Edit
+would skip    Budget alert          needs Notifications: Edit
+6 optional rows would be skipped: http redirect, edge rules, bot blocking, and alerts. They need 4 permissions the account token lacks: add them before the run
+A dry run does not test the account token's write permissions
+A run would create 22 resources, update 1, and skip 6
+```
+
+Nothing is wrong: [the install works without them](#4-read-what-it-made).
 
 | The last line starts with   | Means                                                                              | Exit code |
 | --------------------------- | ---------------------------------------------------------------------------------- | --------- |

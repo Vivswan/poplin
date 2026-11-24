@@ -25,7 +25,7 @@ export const FRESH: readonly Row[] = [
   { object: "Records", state: "make", detail: "poplin" },
   { object: "Program", state: "make", detail: "poplin, to run 0.1.0" },
   { object: "Address", state: "leave", detail: "poplin.example.com" },
-  { object: "Guard rule", state: "leave-out", detail: "the token lacks Rules: Edit (optional)", right: "Rules: Edit" },
+  { object: "Guard rule", state: "leave-out", detail: "needs Rules: Edit", right: "Rules: Edit", extra: "a guard rule" },
 ];
 
 /** The rows a removal of a whole install works through, in the order removed. */

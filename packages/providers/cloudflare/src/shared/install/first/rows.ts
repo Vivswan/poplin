@@ -24,6 +24,9 @@ const STATES: Readonly<Record<Mode, Readonly<Record<DomainRow["state"], RowState
   apply: { present: "leave", missing: "block", differs: "block", "left-out": "leave-out", optional: "leave-out", created: "make", changed: "change", removed: "remove", failed: "fail", "not-run": "not-run" },
 };
 
+/** A row of the repair as a command line words it. `extra` is on a piece left out for an optional permission, which `right` then names: what the piece is for, in a few words. */
+export type CommandRow = DomainRow & { readonly extra?: string };
+
 /**
  * Why a call failed, with nothing Cloudflare said but its status and the numbers of its error codes.
  *
@@ -47,22 +50,24 @@ export function failureWords(failure: CloudflareFailure): string {
  *
  * @param loginOff - whether Access is switched off for the account
  */
-export function rowOf(row: DomainRow, mode: Mode, loginOff: boolean): Row {
+export function rowOf(row: CommandRow, mode: Mode, loginOff: boolean): Row {
   const login = row.state === "missing" && row.detail.startsWith(`${INSTALL_OBJECTS.accessBinding}:`);
   const waits = loginOff && row.state === "missing" && (login || BEHIND_ACCESS.test(row.object));
   const state = waits || (row.state === "failed" && row.right !== undefined) ? "block" : STATES[mode][row.state];
+  const right = row.right === undefined ? {} : { right: row.right };
+  const extra = row.extra === undefined ? {} : { extra: row.extra };
 
-  return { object: row.object, state, detail: login && !waits ? INSTALL_OBJECTS.accessBinding : row.detail, ...(row.right === undefined ? {} : { right: row.right }) };
+  return { object: row.object, state, detail: login && !waits ? INSTALL_OBJECTS.accessBinding : row.detail, ...right, ...extra };
 }
 
 /**
- * Name each permission the rows of a run say the token lacks, once.
+ * Name each permission an install needs that the rows of a run say the token lacks, once. A piece left out for an optional one stops no run, so its permission is no block.
  *
  * @param form - the address of the token's form, where a permission is added
  * @returns one block a permission, in the order the rows name them
  */
 export function lackingOf(rows: readonly Row[], form: string): Blocked[] {
-  const rights = [...new Set(rows.flatMap((row) => (row.right === undefined ? [] : [row.right])))];
+  const rights = [...new Set(rows.flatMap((row) => (row.right === undefined || row.state === "leave-out" ? [] : [row.right])))];
 
   return rights.map((right) => ({ what: "right_lacking", right, words: `${LACKS} ${right}`, address: form }));
 }

@@ -60,7 +60,8 @@ describe("a repair with the account token", () => {
       "unchanged  Records               poplin",
       "unchanged  Program               poplin, to run 0.1.0",
       "unchanged  Address               poplin.example.com",
-      "skipped    Guard rule            the token lacks Rules: Edit (optional)",
+      "skipped    Guard rule            needs Rules: Edit",
+      "1 optional row skipped: a guard rule. It needs a permission the account token lacks: add it, then rerun this command",
       "The install needs no repair",
       ...ENDED,
     ]);

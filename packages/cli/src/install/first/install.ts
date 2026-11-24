@@ -4,7 +4,7 @@
 //
 // A dry run goes the same way and changes nothing. Nothing is kept on this computer, and the token is in no line and no value.
 
-import type { Found, Installed, Startable, Whole } from "../../../../core/src/install/installer";
+import type { Found, Installed, Run, Startable, Whole } from "../../../../core/src/install/installer";
 import { exitCode } from "../../commands/exit-codes";
 import { logIn } from "../../commands/install/login";
 import { problemLines } from "../../commands/problems";
@@ -16,7 +16,7 @@ import { runCommand, type Show, stopped } from "../ends";
 import { installHelp } from "./help";
 import { parseInstall } from "./parse";
 import type { Careful, InstallEnds, InstallRequest, Next, Plan, Provider, Stop } from "../records";
-import { carefulOf, carried, changesIn, dryRunLines, followed, heldStop, letInNext, NEXT, placeOf, REFUSED_AS, refusedWords, repairAfter, rowWording, leftOutLines, runLines, runValue, UNCHANGED, unusedLine } from "../report";
+import { carefulOf, carried, changesIn, dryRunLines, type FollowUp, followed, heldStop, letInNext, NEXT, optionalLines, placeOf, REFUSED_AS, refusedWords, repairAfter, rowWording, leftOutLines, runLines, runValue, UNCHANGED, unusedLine } from "../report";
 
 /** What the look for an install is called while it runs. */
 const LOOKING = "Checking the account for an install";
@@ -209,15 +209,37 @@ function doneWords(release: string | undefined, answers: boolean | null): string
   return release === undefined ? `poplin ${state}. ${UNCHECKED}.` : `poplin ${release} ${state}`;
 }
 
-/** Say what a run that worked through its rows came to, and offer the login after one that left nothing undone. A run that did not use the first login offers none: it ends with the repair that lets that person in. */
+/**
+ * What follows once the token has the optional permissions the rows of a run need.
+ *
+ * A dry run changes nothing: the run after it reads those pieces. A run that left something undone, or did not use its first login, names a next step in its later lines, and that step reads them.
+ * A second install changes nothing of an install that is made, so after every other run the repair at its place reads them.
+ *
+ * @param next - what the run names next
+ * @param repair - the repair at the run's place
+ */
+function followUpOf(installed: Extract<Installed, { readonly ok: true }>, run: Run, next: Next, repair: Next): FollowUp {
+  if (run === "dry-run") return "run";
+
+  return !installed.ready || next.step === "repair" ? "next" : { other: repair };
+}
+
+/**
+ * Say what a run that worked through its rows came to, and offer the login after one that left nothing undone. A run that did not use the first login offers none: it ends with the repair that lets that person in.
+ *
+ * The line of the optional rows stands under the rows it speaks of, before the wait for the install's address.
+ */
 async function ended(installed: Extract<Installed, { readonly ok: true }>, ground: Ground, request: InstallRequest, io: Io, ends: InstallEnds, show: Show): Promise<Ended> {
   const { mode } = request;
-  const answers = await waited(installed, mode, ends, show);
+  const repair = NEXT.repair("this", [], placeOf(request.provider, ground.where));
   const next = await nextAfter(installed, ground, request, ends, io.machine.platform);
+  for (const line of optionalLines(installed.rows, followUpOf(installed, mode.mode, next, repair))) show.line(line.tone, line.text);
+
+  const answers = await waited(installed, mode, ends, show);
   const value = runValue(installed, mode.mode, ground.found.state, answers, next);
   const code = exitCode({ kind: value.ok === true ? "done" : "failed" });
   const done = doneWords(installed.release, answers);
-  const lines = mode.mode === "dry-run" ? dryRunLines(installed) : runLines(installed, answers, { done, next, again: NEXT.install(request.provider), repair: NEXT.repair("this", [], placeOf(request.provider, ground.where)) });
+  const lines = mode.mode === "dry-run" ? dryRunLines(installed) : runLines(installed, answers, { done, next, again: NEXT.install(request.provider), repair });
 
   const { unused } = installed;
   const letIn = unused !== undefined && installed.ready && mode.mode === "apply" ? [unusedLine(unused, next)] : [];

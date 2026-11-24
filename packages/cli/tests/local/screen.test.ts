@@ -33,13 +33,14 @@ function pipe(): { readonly stream: NodeJS.WriteStream; readonly text: () => str
   return { stream: stream as unknown as NodeJS.WriteStream, text: () => chunks.join("") };
 }
 
-/** A stream that stands in for a terminal of so many columns, read back as the rows it shows with every control sequence taken out. */
-function terminal(columns: number): { readonly stream: NodeJS.WriteStream; readonly text: () => string; readonly widest: () => number; readonly rows: () => string[] } {
+/** A stream that stands in for a terminal of so many columns, or for one that names no width, read back as the rows it shows with every control sequence taken out. */
+function terminal(columns?: number): { readonly stream: NodeJS.WriteStream; readonly text: () => string; readonly widest: () => number; readonly rows: () => string[] } {
   const kept = pipe();
   const shown = (): string[] => stripVTControlCharacters(kept.text()).split("\n");
+  const width = columns === undefined ? {} : { columns };
 
   return {
-    stream: Object.assign(kept.stream, { columns, isTTY: true }),
+    stream: Object.assign(kept.stream, { ...width, isTTY: true }),
     text: kept.text,
     widest: () => Math.max(...shown().map((row) => stringWidth(row))),
     rows: () => shown().flatMap((row) => (row.trim() === "" ? [] : [row.trimEnd()])),
@@ -117,20 +118,24 @@ describe("processScreen", () => {
     expect([code, said.includes("stopped by the command")]).toEqual([1, true]);
   });
 
-  test("on a terminal a line wider than 80 columns is folded at its spaces, its later rows under where `hang` says, and an address stands whole: without this a row breaks in the middle of a word", () => {
-    const out = terminal(120);
+  // Drift: every line was folded at 80 columns whatever the terminal, so the last column of a row had 44 cells on a terminal with 84 free.
+  test.each<[string, number | undefined, string[]]>([
+    ["120 columns wide, at 120", 120, ["made      Guard rule            stops every method but GET and HEAD, and the paths of scanners that look for what is", `${" ".repeat(34)}not there`]],
+    ["that names no width, at 80", undefined, ["made      Guard rule            stops every method but GET and HEAD, and the", `${" ".repeat(34)}paths of scanners that look for what is not`, `${" ".repeat(34)}there`]],
+  ])("a terminal %s, folds a wider line at its spaces, its later rows under where `hang` says, and an address stands whole", (_name, columns, folded) => {
+    const out = terminal(columns);
     const err = terminal(60);
     const screen = processScreen({ out: out.stream, err: err.stream, colour: { out: true, err: true }, ...NOBODY });
-    const address = `https://example.com/${"a".repeat(90)}`;
+    const address = `https://example.com/${"a".repeat(130)}`;
 
     screen.line("done", "made      Guard rule            stops every method but GET and HEAD, and the paths of scanners that look for what is not there", 34);
     screen.line("plain", `  ${address}`);
     screen.aside("plain", "a narrower terminal folds a line at its own width and never past it");
 
     const rows = out.rows();
-    expect(rows.slice(0, 3).map((row) => row.slice(2))).toEqual(["made      Guard rule            stops every method but GET and HEAD, and the", `${" ".repeat(34)}paths of scanners that look for what is not`, `${" ".repeat(34)}there`]);
-    expect(out.widest()).toBeLessThanOrEqual(Math.max(80, stringWidth(`  ${address}`)));
-    expect(rows.slice(3)).toEqual([`  ${address}`]);
+    expect(rows.slice(0, folded.length).map((row) => row.slice(2))).toEqual(folded);
+    expect(out.widest()).toBe(stringWidth(`  ${address}`));
+    expect(rows.slice(folded.length)).toEqual([`  ${address}`]);
     expect(err.rows()).toEqual(["a narrower terminal folds a line at its own width and never", "past it"]);
   });
 

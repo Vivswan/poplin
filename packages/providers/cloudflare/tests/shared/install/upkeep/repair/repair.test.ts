@@ -58,6 +58,12 @@ const FOLLOWS: Readonly<Record<keyof typeof KINDS, readonly (readonly [string, s
   "no-domain": [["Budget alert | change | poplin: usage charges reached 1 dollar", `PUT /accounts/${ACCOUNT}/alerting/v3/policies/made-0`]],
 };
 
+/** The pieces of each kind that an optional permission makes, each with that permission, in the order of their rows. */
+const OPTIONAL: Readonly<Record<keyof typeof KINDS, readonly string[]>> = {
+  domain: ["Redirect rule | Single Redirect: Edit", "WAF rule | Zone WAF: Edit", "Rate rule | Zone WAF: Edit", "Bot settings | Bot Management: Edit", "Budget alert | Notifications: Edit", "Certificate alert | Notifications: Edit"],
+  "no-domain": ["Budget alert | Notifications: Edit"],
+};
+
 /** The calls that add one user, in order: the policy is found, written, and only then is the user stored. */
 const ADD_CALLS = [`GET /accounts/${ACCOUNT}/access/policies`, `PUT /accounts/${ACCOUNT}/access/policies/made-1`, `POST /accounts/${ACCOUNT}/d1/database/made-0/query`];
 
@@ -175,6 +181,15 @@ describe.each(BOTH)("a repair with the token, %s", (kind) => {
     expect([...new Set(shown(done).map((row) => row.split(" | ")[1]))]).toEqual(["leave"]);
     expect([changes, calls.length, said, { ...account, store: undefined }]).toEqual([[], CALLS[kind], shown(done), before]);
     expect(done).toMatchObject({ ok: true, ready: true, blocked: [], steps: [], address: KINDS[kind].address });
+  });
+
+  // Drift: a token without the optional permissions is the one most repairs run with. Each row of a piece it leaves out carries its permission, and a permission on a row once counted as a block: a healthy install would end as one to repair.
+  test("a token without the optional permissions leaves those pieces out, each row with its permission, blocks nothing, and the run is ready", async () => {
+    const account = await wholeInstall(kind, { refuse: ["GET /zones/zone-1/rulesets*", `GET /accounts/${ACCOUNT}/alerting*`, "GET /zones/zone-1/bot_management"] });
+    const { done } = await repaired(account, kind);
+    const left = done.ok ? done.rows.filter((row) => row.state === "leave-out").map((row) => `${row.object} | ${row.right}`) : [];
+
+    expect([left, done.ok && [done.ready, done.blocked]]).toEqual([[...OPTIONAL[kind]], [true, []]]);
   });
 
   // Drift: a dry run that read a piece another way than the run mends it would promise a list no run works through.

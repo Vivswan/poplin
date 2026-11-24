@@ -6,7 +6,7 @@ import { type HelpPage, helpPage } from "../../commands/line/help-page";
 import { type Line, type Look, PLAIN_LOOK } from "../../local/screen";
 import { permissionsPart } from "../ask";
 import type { Careful, Next, Provider, Stop } from "../records";
-import { carefulOf, carried, changesIn, dryRunLines, followed, heldStop, NEXT, optionRows, REFUSED_AS, refusedWords, repairAfter, rowValues, runLines, runningWords, UNCHANGED, updateWords } from "../report";
+import { carefulOf, carried, changesIn, dryRunLines, type FollowUp, followed, heldStop, NEXT, optionalLines, optionRows, REFUSED_AS, refusedWords, repairAfter, rowValues, runLines, runningWords, UNCHANGED, updateWords } from "../report";
 import { REPAIR_COMMAND, REPAIR_OPTIONS } from "./parse";
 
 /** How far a line of a list stands in. */
@@ -99,19 +99,29 @@ export function unmended(repaired: Extract<Repaired, { readonly ok: false }>, ca
   return { problem: PROBLEMS[repaired.why], exit: 1, words };
 }
 
+/** What follows once the token has the optional permissions the rows of a repair need: the run after a dry run, the repair its later lines name where it left something undone, and else this command run again. */
+function followUpOf(repaired: Mended, run: Run): FollowUp {
+  if (run === "dry-run") return "run";
+
+  return repaired.ready ? "again" : "next";
+}
+
 /**
  * Word what a repair came to.
  *
- * @returns the last lines: of a dry run whether a run would go through and what it would do, and of a run what only a person can do and whether anything is left undone
+ * @returns the last lines: what the rows left out for an optional permission are, then of a dry run whether a run would go through and what it would do, and of a run what only a person can do and whether anything is left undone
  */
 export function repairedLines(repaired: Mended, run: Run): Line[] {
+  const optional = optionalLines(repaired.rows, followUpOf(repaired, run));
   const same = changesIn(repaired.rows) === 0;
-  if (run === "dry-run") return repaired.ready && same ? [{ tone: "done", text: DONE.same }] : dryRunLines(repaired);
+  if (run === "dry-run" && repaired.ready && same) return [...optional, { tone: "done", text: DONE.same }];
+
+  if (run === "dry-run") return [...optional, ...dryRunLines(repaired)];
 
   // What a person is told to do after a run that mended everything stands before its last lines. A step at the dashboard's own address is left to the line that names the dashboard; the JSON value keeps it.
   const told = repaired.ready ? repaired.steps.filter((step) => step.address !== repaired.address).flatMap((step): Line[] => [step.text, `${INDENT}${step.address}`].map((text) => ({ tone: "plain", text }))) : [];
 
-  return [...told, ...runLines(repaired, null, { done: same ? DONE.same : DONE.mended, next: NEXT.repair(), again: NEXT.repair(), repair: NEXT.repair() })];
+  return [...optional, ...told, ...runLines(repaired, null, { done: same ? DONE.same : DONE.mended, next: NEXT.repair(), again: NEXT.repair(), repair: NEXT.repair() })];
 }
 
 /**

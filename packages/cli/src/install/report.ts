@@ -48,6 +48,12 @@ const COUNTED: readonly (readonly [RowState, string])[] = [
   ["leave-out", "skip"],
 ];
 
+/** What became of the rows a run left out for an optional permission, as the one line that speaks of them all says it. */
+const LEFT_OUT = { "dry-run": "would be skipped", apply: "skipped" } as const satisfies Readonly<Record<Run, string>>;
+
+/** How that line ends where the lines after it say what follows: a dry run speaks of the run, and a run that names a next step names it later. */
+const BEFORE = { run: "before the run", next: "before the next step" } as const;
+
 /** Where a provider's sentence ends and the lead of its hint starts: the hint goes on a line of its own. */
 const LEAD_BREAK = /(?<=\.) (?=(?:Fix|See|Next): )/;
 
@@ -100,6 +106,9 @@ export interface Unsettled {
   readonly stop: Stop;
   readonly place: readonly string[];
 }
+
+/** What follows once the token has the optional permissions a run's rows need: the run a dry run speaks of, the step the run's later lines name, this command run again, or another command, as a step names it. It reads those pieces anew, and promises none of them. */
+export type FollowUp = "run" | "next" | "again" | { readonly other: Next };
 
 function plain(text: string): Line {
   return { tone: "plain", text };
@@ -298,6 +307,33 @@ export function nextLine(blocked: readonly Blocked[], again: string): Line {
 /** The lines of what stops a piece until a person acts: what it is, then the address to open, under it. */
 export function blockedLines(blocked: readonly Blocked[]): Line[] {
   return blocked.flatMap((one) => [{ tone: "warning", text: one.words }, plain(`${INDENT}${one.address}`)]);
+}
+
+/**
+ * Say once what the rows left out for an optional permission are, and what to do for them: each such row says the permission it needs, and no more.
+ *
+ * The line says what they need, and never that the permission makes them: a piece the token could not read may be left out for a reason of its own once it can.
+ *
+ * @param after - what follows once the token has the permissions
+ * @returns the line, with the line of another command alone under it; none where no row was left out for a permission
+ */
+export function optionalLines(rows: readonly Row[], after: FollowUp): Line[] {
+  const left = rows.filter((row) => row.state === "leave-out" && row.right !== undefined);
+  if (left.length === 0) return [];
+
+  const rights = new Set(left.map((row) => row.right)).size;
+  const extras = [...new Set(left.flatMap((row) => row.extra ?? []))];
+  const are = extras.length === 0 ? "" : `: ${LIST.format(extras)}`;
+  const need = left.length === 1 ? "It needs" : "They need";
+  const [permissions, them] = rights === 1 ? ["a permission", "it"] : [`${rights} permissions`, "them"];
+  const skipped = LEFT_OUT[after === "run" ? "dry-run" : "apply"];
+  const said = `${countText(left.length, "optional row")} ${skipped}${are}. ${need} ${permissions} the account token lacks: add ${them}`;
+
+  if (after === "run" || after === "next") return [{ tone: "note", text: `${said} ${BEFORE[after]}` }];
+
+  if (after === "again") return [{ tone: "note", text: `${said}, then ${againWords([])}` }];
+
+  return [{ tone: "note", text: `${said}, then run:` }, plain(`${INDENT}${after.other.command}`)];
 }
 
 /** One command line: its words, a provider's id among them where the line got as far as one, then each careful choice. */

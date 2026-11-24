@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test";
 
+import type { Login } from "../../../core/src/auth/logins";
 import type { Found, RemovalRow, Removed, Row, Token } from "../../../core/src/install/installer";
 import { TOKEN_VARIABLE } from "../../src/install/ask";
+import { optionalLines } from "../../src/install/report";
 import { jsonOf } from "../commands/support/harness";
 import { ADDRESS, type Account, emptyAccount, installedOf, type Place, removedOf, repairedOf, runLine, TOKEN, type Where } from "./support/stand-in";
 
@@ -35,6 +37,14 @@ const UNDONE: Row = { object: "Program", state: "fail", detail: "refused with st
 
 /** An object a run makes. */
 const MADE: Row = { object: "Guard rule", state: "make", detail: "bots" };
+
+/** Three pieces left out for two optional permissions, and one left out for another reason, which keeps its own sentence. */
+const LEFT_OUT: readonly Row[] = [
+  { object: "Guard rule", state: "leave-out", detail: "needs Rules: Edit", right: "Rules: Edit", extra: "guard rules" },
+  { object: "Flood rule", state: "leave-out", detail: "needs Rules: Edit", right: "Rules: Edit", extra: "guard rules" },
+  { object: "Alert", state: "leave-out", detail: "needs Mail: Edit", right: "Mail: Edit", extra: "email alerts" },
+  { object: "First user", state: "leave-out", detail: "you@example.com: not used" },
+];
 
 /** The kinds of a removal that left one behind. */
 const LEFT: readonly RemovalRow[] = [
@@ -171,5 +181,53 @@ describe("a piece the run never reached", () => {
     expect(stopped.out.filter((line) => line.startsWith("skipped")).map((line) => line.split(/ {2,}/)[2])).toEqual(["not attempted", "not attempted after a blocked or failed row"]);
     expect(ran.out.filter((line) => line.startsWith("skipped"))).toEqual(["skipped    Jobs                  not attempted"]);
     expect(jsonOf(json).rows).toEqual([{ object: "Jobs", did: "not-run", detail: "" }]);
+  });
+});
+
+describe("the rows a run left out for an optional permission", () => {
+  const undone = installedOf([...LEFT_OUT, UNDONE], { ready: false });
+  const said = (skipped: string): string => `3 optional rows ${skipped}: guard rules and email alerts. They need 2 permissions the account token lacks: add them`;
+  const row = /^(would skip|skipped|would create|failed) {2}/;
+  const incomplete = ["The run is incomplete: 1 failed", "Next: rerun this command", "The account token was not stored"];
+
+  // Drift: each such row named `npx poplin doctor --repair` as its fix, after every run. After a dry run no install is set, and the repair stops at `This account has no install`.
+  // A dry run makes nothing however often it is run, so its line names no command to run again.
+  test.each([
+    ["an install's dry run, which the run makes them after", `${INSTALL} --dry-run`, { ...emptyAccount(), installed: installedOf(LEFT_OUT) }, [`${said("would be skipped")} before the run`]],
+    ["an install's dry run that is not ready", `${INSTALL} --dry-run`, { ...emptyAccount(), installed: undone }, [`${said("would be skipped")} before the run`]],
+    ["an install that was made, which only the repair changes from then on", `${INSTALL} --no-wait`, { ...emptyAccount(), installed: installedOf(LEFT_OUT) }, [`${said("skipped")}, then run:`, `  ${NEXT.repair.command}`]],
+    ["a repair", REPAIR, { ...accountWith(WHOLE), repaired: repairedOf(LEFT_OUT) }, [`${said("skipped")}, then rerun this command`]],
+    ["a repair's dry run", `${REPAIR} --dry-run`, { ...accountWith(WHOLE), repaired: repairedOf([...LEFT_OUT, MADE]) }, [`${said("would be skipped")} before the run`]],
+  ] as const)("%s, says once under its rows what they are and what to do for them, and counts no row left out for another reason", async (_name, line, account, lines) => {
+    const ran = await runLine(line, account, { env: HELD });
+    const at = ran.out.findIndex((text) => text.includes("optional row"));
+
+    expect([row.test(ran.out[at - 1] ?? ""), ran.out.slice(at, at + lines.length)]).toEqual([true, [...lines]]);
+    expect(ran.out.filter((text) => text.includes("optional row"))).toHaveLength(1);
+  });
+
+  // Drift: a run whose later lines name what goes on named the same command under its optional rows too. The line now points at that step: every line after it is held here, so the step is named, and named once.
+  test.each([
+    ["an install that left a piece undone", INSTALL, { ...emptyAccount(), installed: undone }, incomplete],
+    [
+      "an install that did not use its first login",
+      `${INSTALL} --no-wait`,
+      { ...emptyAccount(), installed: { ...installedOf(LEFT_OUT), unused: "new@example.com" as Login } },
+      ["poplin 0.1.0 is installed", `Dashboard: ${ADDRESS}`, "The account token was not stored", `Add new@example.com as a user: ${NEXT.repair.command} --add-user new@example.com`],
+    ],
+    ["a repair that left a piece undone", REPAIR, { ...accountWith(WHOLE), repaired: repairedOf([...LEFT_OUT, UNDONE], { ready: false }) }, incomplete],
+  ] as const)("%s, points its optional rows at the next step, which one later line names", async (_name, line, account, after) => {
+    const ran = await runLine(line, account, { env: HELD });
+    const at = ran.out.findIndex((text) => text.includes("optional row"));
+
+    expect([ran.out[at], ran.out.slice(at + 1)]).toEqual([`${said("skipped")} before the next step`, [...after]]);
+  });
+
+  // Drift: a line that counts would say `1 permissions` of two rows that need one, and one whose provider gives no words of what its pieces are would end in a colon and nothing.
+  test.each<[string, readonly Row[], string]>([
+    ["two rows of one permission", LEFT_OUT.slice(0, 2), "2 optional rows skipped: guard rules. They need a permission the account token lacks: add it, then rerun this command"],
+    ["a row whose provider says nothing of what it is", [{ object: "Alert", state: "leave-out", detail: "needs Mail: Edit", right: "Mail: Edit" }], "1 optional row skipped. It needs a permission the account token lacks: add it, then rerun this command"],
+  ])("words %s by what it counts and what it was given", (_name, rows, line) => {
+    expect(optionalLines(rows, "again")).toEqual([{ tone: "note", text: line }]);
   });
 });

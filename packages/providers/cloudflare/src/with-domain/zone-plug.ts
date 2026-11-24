@@ -43,7 +43,7 @@ import { type HeldKey, type HeldKeys, type KeyRead, readBucket, readKeyStates } 
 import { type Minted, mintKeys, removeKeys, type WantedKey } from "../shared/install/key/mint";
 import { type Bucket, keyPolicies, uploadKeyPolicies } from "../shared/install/key/rights";
 import type { KeyRight } from "../shared/install/key/rights";
-import { failureWords } from "../shared/install/first/rows";
+import { type CommandRow, failureWords } from "../shared/install/first/rows";
 import { type DomainLayout, privateSitesPattern } from "./layout";
 import { syncRoutes } from "./pieces/routes/routes";
 import { syncGuards } from "./pieces/rules/guards";
@@ -105,8 +105,8 @@ const SWITCH_ON = "To switch this on, add this permission to the account token a
 /** What the row of an alert that is not set up says in place of that: the install's key makes its alerts too. */
 const BY_ITSELF = "An install whose key Cloudflare takes makes it by itself within a day. To make it now, add this permission to the account token and press Repair";
 
-/** What the row of a piece left out for an optional permission says on a command line: that the token lacks the permission, the repair that makes the piece once it has it, and of an alert that an install whose key Cloudflare takes makes it too. */
-const COMMAND_WORDS = { lacks: "The account token lacks", repair: "run npx poplin doctor --repair", itself: "or wait a day for the install to create it" } as const;
+/** What a row says on a command line before a permission: `lacks` of one a call was refused for, and `needs` of the optional one a piece was left out for. `itself` follows `needs` on an alert, which an install whose key Cloudflare takes makes too. */
+const COMMAND_WORDS = { lacks: "The account token lacks", needs: "needs", itself: "or wait a day: the install creates it" } as const;
 
 /** The states of the kept key's row that say the install holds a key Cloudflare takes: read as standing, or made by the run. */
 const KEY_WORKS: ReadonlySet<DomainRow["state"]> = new Set(["present", "created", "changed"]);
@@ -1220,24 +1220,25 @@ function optionalOf(object: string): Optional | undefined {
  * Word a row of a check or a repair for a command line, whose reader runs commands and knows Cloudflare's names.
  *
  * A row that names a permission to add says that the token lacks it, as the run's last lines do.
- * A piece left out for an optional permission names the permission the token lacks and the command that makes the piece, in place of what the piece adds.
+ * A piece left out for an optional permission says the permission it needs and no more, in place of what the piece adds.
+ * Its row carries that permission with the few words the token's form has for it, and the command says once what to do for all of them.
  *
  * @param keyed - whether the install holds a key Cloudflare takes: only then does the row of an alert say that the install makes it too
  */
-function commandRow(row: DomainRow, keyed: boolean): DomainRow {
+function commandRow(row: DomainRow, keyed: boolean): CommandRow {
   const right = row.state === "optional" ? optionalOf(row.object) : undefined;
   if (right === undefined) return { ...row, detail: row.detail.replace(`${ADD_PERMISSION}: `, `${COMMAND_WORDS.lacks} `) };
 
   const added = switchOn(right);
   const subject = row.detail.endsWith(added) ? row.detail.slice(0, -added.length) : "";
-  const fix = `${COMMAND_WORDS.lacks} ${right.name}. Fix: add it, then ${COMMAND_WORDS.repair}`;
-  const detail = right.how === undefined || !keyed ? fix : `${fix}, ${COMMAND_WORDS.itself}`;
+  const needs = `${COMMAND_WORDS.needs} ${right.name}`;
+  const detail = right.how === undefined || !keyed ? needs : `${needs}, ${COMMAND_WORDS.itself}`;
 
-  return { ...row, detail: `${subject}${detail}` };
+  return { ...row, detail: `${subject}${detail}`, right: right.name, extra: right.few };
 }
 
 /** Word the rows of a check or a repair for a command line, each as `commandRow` words it. The row of the kept key among them says whether the install holds a key Cloudflare takes. */
-export function commandRows(rows: readonly DomainRow[]): DomainRow[] {
+export function commandRows(rows: readonly DomainRow[]): CommandRow[] {
   const keyed = rows.some((row) => row.object === KEYS.kept.object && KEY_WORKS.has(row.state));
 
   return rows.map((row) => commandRow(row, keyed));
