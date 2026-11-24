@@ -317,7 +317,7 @@ Can change has two roles to choose from, and the page opens on the second:
 | Admin          | a machine of your own                    | every site, and the settings: `npx poplin config`, `export`, `import`, and `update` need it | 30 days       |
 | Publisher      | a machine that should only publish, such as a shared one | the sites that one login published, and no other                   | until you revoke it   |
 
-The last column is what the page's Expires row starts at. Its Change sets another moment, or never: [Access](../dashboard/access.md#this-machine) has the choices.
+The last column is what the page's Expires row starts at. The pencil beside it sets another moment, or never: [Access](../dashboard/access.md#this-machine) has the choices.
 
 An agent on this machine uses the same login. As an admin it reaches a site that an earlier login published. As a publisher it does not: after a new login it no longer reaches the sites of the login before.
 

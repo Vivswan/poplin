@@ -47,7 +47,7 @@ A press on a fold's heading opens it, and a second press folds it again. All thr
 | Show in search engines        | on any site, while Let search engines in is off: `Off for every site in Settings.` |
 | Show in search engines        | on a site that is not public, while it is on: `Only a public site is listed.`    |
 | Allow embedding               | on, as a new site has it: `Other pages may show this site in a frame and load its files.` Off stops both; [Between sites](../about/between-sites.md) has the rows |
-| Change, after Expires         | opens a menu; a choice is saved at once, with Undo                               |
+| the pencil, after Expires     | opens a menu; a choice is saved at once, with Undo                               |
 
 | In the menu           | The site expires                                                                     |
 | --------------------- | ------------------------------------------------------------------------------------ |

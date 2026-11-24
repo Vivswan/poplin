@@ -98,9 +98,14 @@ async function said(words: string): Promise<void> {
   await waitFor(() => expect(within(document.body).queryAllByText(words).length).toBeGreaterThan(0));
 }
 
-/** What the fact says, without its button. */
+/** What the fact says, with a bar before its button: the button is a pencil, and says no word of its own. */
 function fact(): string {
-  return (document.querySelector("dd")?.textContent ?? "").replace("Change", " | ");
+  const drawn = document.querySelector("dd")?.cloneNode(true);
+  if (!(drawn instanceof Element)) return "";
+
+  drawn.querySelector("button")?.before(" | ");
+
+  return drawn.textContent ?? "";
 }
 
 afterEach(() => {

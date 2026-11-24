@@ -1442,24 +1442,27 @@ test("two times of the same length take the same room in the face the dashboard 
   expect(measured.control[0]).not.toBe(measured.control[1]);
 });
 
-// Drift: a site could be told when to delete itself from a terminal alone, or the panel would show a span where the day it ends on is asked for.
+// Drift: a site could be told when to delete itself from a terminal alone, or the panel would show a span where the day it ends on is asked for;
+// or a button with a word of its own would stand beside the moment again, where the pencil is that says what it changes in its hint.
 test("in a site's panel, a span is shown as the moment it ends before it is saved and after, Undo takes it away again, and a day is picked in a dialog that one Escape leaves", async ({ page }) => {
   const fact = panel(page).locator("dd").filter({ has: page.getByRole("button", { name: "Change when it expires", exact: true }) });
   const change = panel(page).getByRole("button", { name: "Change when it expires", exact: true });
   await arrive(page);
   await openPanel(page, SAMPLE.site);
   await openFold(panel(page), "Details");
-  await expect(fact).toHaveText("NeverChange");
+  await expect(fact).toHaveText("Never");
+  await change.hover();
+  await expect(page.locator("[data-slot=tooltip-content]")).toHaveText("Change when it expires");
 
   await change.click();
   await expect(page.getByRole("menuitem")).toHaveText([new RegExp(`^1 day${MOMENT}$`), new RegExp(`^7 days${MOMENT}$`), new RegExp(`^30 days${MOMENT}$`), "On a day...", "Never"]);
   await page.getByRole("menuitem", { name: /^7 days/ }).click();
   await expect(said(page, "Saved.")).toBeVisible();
-  await expect(fact).toHaveText(new RegExp(`^${MOMENT}ChangeThen its link stops working, and it moves to the trash\\.$`));
+  await expect(fact).toHaveText(new RegExp(`^${MOMENT}Then its link stops working, and it moves to the trash\\.$`));
 
   await lines(page).filter({ hasText: "Saved." }).getByRole("button", { name: "Undo", exact: true }).click();
   await expect(said(page, "Put back.")).toBeVisible();
-  await expect(fact).toHaveText("NeverChange");
+  await expect(fact).toHaveText("Never");
 
   await change.click();
   await page.getByRole("menuitem", { name: "On a day...", exact: true }).click();
@@ -1472,7 +1475,7 @@ test("in a site's panel, a span is shown as the moment it ends before it is save
   await pressEscape(page);
   await expect(day).toBeHidden();
   await expect(change).toBeFocused();
-  await expect(fact).toHaveText("NeverChange");
+  await expect(fact).toHaveText("Never");
 });
 
 // Drift: a site in the trash could be removed for good from a terminal alone, or one press would remove it, with its title or its bare name where its label is asked for: two sites may share a name.
