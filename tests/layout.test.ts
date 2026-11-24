@@ -67,7 +67,6 @@ const CEILINGS: readonly (readonly [folder: string, ceiling: number, holds: stri
   ["packages/core/tests", 9, "the tests of src/, file for file"],
   ["packages/core/tests/records", 10, "the tests of src/records/, file for file"],
   ["packages/dashboard/src", 17, "the client's entries and one folder for each screen"],
-  ["packages/dashboard/src/access", 10, "the Access screen"],
   ["packages/dashboard/src/components/ui", 30, "the parts of the UI library, written by its tool at the path it names"],
   ["packages/dashboard/src/domain", 11, "the Domain screen"],
   ["packages/dashboard/src/lib", 11, "the client's helpers that no screen owns"],

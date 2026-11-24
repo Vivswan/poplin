@@ -1,10 +1,10 @@
-// When a site deletes itself: what each choice of the panel is sent as, so the moment a person read before the save is the one the server sets.
+// The moments an expiry is chosen as: what a picked day and a span are sent as, so the moment a person read before the save is the one the server sets.
 
 import { describe, expect, test } from "bun:test";
 import { readExpires } from "@poplin/core/src/actions/sites/changes";
 
+import { dayOf, dayStart, firstDay, sentFor } from "@/dialog/expiry/expiry-moments";
 import { momentIn } from "@/lib/timezone";
-import { backTo, dayStart, firstDay, sentFor } from "@/sites/expiry/expiry";
 
 /** A moment the tests count from: a minute before a day ends in UTC. */
 const NOW = Date.UTC(2026, 10, 30, 23, 59);
@@ -12,7 +12,10 @@ const NOW = Date.UTC(2026, 10, 30, 23, 59);
 /** How many milliseconds a day holds. */
 const DAY_MS = 86_400_000;
 
-describe("when a site deletes itself", () => {
+/** A time zone 14 hours ahead of UTC, as the browser's own: its day is the next one for most of every day of UTC. */
+const AHEAD = "Pacific/Kiritimati";
+
+describe("the moments an expiry is chosen as", () => {
   // Drift: a picked day would end the site at the start of that day somewhere else: the evening before, for a person west of UTC.
   test.each(["own", "utc"] as const)("a picked day starts at midnight in the time zone chosen: %s", (choice) => {
     expect(momentIn(dayStart(new Date(2026, 11, 1), choice), choice)).toBe(choice === "utc" ? "01 Dec 2026, 00:00 UTC" : "01 Dec 2026, 00:00");
@@ -38,8 +41,26 @@ describe("when a site deletes itself", () => {
     expect(readExpires(sentFor(moment), NOW + took)).toBe(taken ? moment : undefined);
   });
 
-  // Drift: Undo would leave an expiry on a site that had none, or put a moment back early or late.
-  test("what a site had before is put back: never, or the same moment as the server reads it", () => {
-    expect([readExpires(backTo("never"), NOW), readExpires(backTo(NOW + 30_500), NOW + 20_000)]).toEqual(["never", NOW + 30_500]);
+  // Drift: a token set to never, and Undo on a site that had no expiry, would send a moment where none was chosen.
+  test("never is sent as the word the server reads as never", () => {
+    expect(readExpires(sentFor("never"), NOW)).toBe("never");
+  });
+
+  // Drift: with UTC chosen the calendar would mark the day of the browser's own clock as today, which is another day for some hours of every day away from UTC.
+  test("today in UTC is the day the moment lies in there, in a browser whose own day is the next one already: the last minute of a day, and the first of the next", () => {
+    const own = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    process.env.TZ = AHEAD;
+
+    try {
+      const days = [dayOf(NOW, "utc"), dayOf(NOW + 120_000, "utc"), dayOf(NOW, "own")].map((day) => [day.getFullYear(), day.getMonth(), day.getDate()]);
+
+      expect(days).toEqual([
+        [2026, 10, 30],
+        [2026, 11, 1],
+        [2026, 11, 1],
+      ]);
+    } finally {
+      process.env.TZ = own;
+    }
   });
 });

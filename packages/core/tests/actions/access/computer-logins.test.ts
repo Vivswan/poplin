@@ -307,6 +307,33 @@ describe("decideLogin", () => {
     ]);
     expect([await redeemLogin(world.install, { secret: login.secret }), await world.audit()]).toEqual([{ ok: true, state: later === 0 ? "pending" : "expired" }, []]);
   });
+
+  // Drift: whoever approves a login chooses when its token expires. A choice lost on the way to the token would give an admin token no end, or a publisher token none of the days it was given.
+  test.each([
+    ["an admin login with no word of it, for 30 days from the approval", "admin", undefined, NOW + MINUTE + 30 * 86_400_000],
+    ["a publisher login with no word of it", "publisher", undefined, "never"],
+    ["an admin login set to never", "admin", "never", "never"],
+    ["a publisher login given a moment", "publisher", new Date(NOW + 90 * 86_400_000).toISOString(), NOW + 90 * 86_400_000],
+    ["an admin login given a span, counted from the approval", "admin", "90d", NOW + MINUTE + 90 * 86_400_000],
+  ] as const)("the token of %s expires when the approval says, whenever it is collected", async (_what, scope, expires, lasts) => {
+    const world = await makeWorld();
+    const login = await begun(world, scope);
+    world.clock.now = NOW + MINUTE;
+    const decided = await decideLogin(world.install, ADMIN, { ...allowing(login, scope), ...(expires === undefined ? {} : { expires }) });
+    world.clock.now = NOW + 5 * MINUTE;
+    const collected = await redeemLogin(world.install, { secret: login.secret });
+
+    expect<unknown>([decided.ok, collected.ok && collected.state === "allowed" && collected.record.expires]).toEqual([true, lasts]);
+  });
+
+  // Drift: a moment that has passed, or a text that is no moment, would be stored as the day a token ends.
+  test.each([["a moment that has passed", new Date(NOW).toISOString()], ["a text that is no moment", "soon"]])("%s is refused as the expiry of a token, and the login still waits", async (_what, expires) => {
+    const world = await makeWorld();
+    const login = await begun(world, "admin");
+    world.clock.now = NOW + MINUTE;
+
+    expect([await decideLogin(world.install, ADMIN, { login: idOf(login), allow: true, scope: "admin", code: login.code, expires }), await stateOf(world, login.code)]).toEqual([{ ok: false, code: "bad_argument", about: "expires" }, "pending"]);
+  });
 });
 
 describe("redeemLogin", () => {

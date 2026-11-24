@@ -9,7 +9,7 @@ import * as v from "valibot";
 
 import type { ComputerLogin, LoginId, PendingLogin, UserCode } from "../auth/computer-logins";
 import type { Login } from "../auth/logins";
-import type { TokenId, TokenRecord } from "../auth/tokens";
+import type { TokenExpiry, TokenId, TokenRecord } from "../auth/tokens";
 import type { PublicName } from "../names/names";
 import { type AuditAction, type AuditEntry, auditFromRow, HISTORY_KEPT_MS } from "../records/audit";
 import type { CarriedRules, CarriedUsers, DomainCheck, RememberedCheck } from "../records/domain-check";
@@ -66,6 +66,7 @@ import type {
   ShownSite,
   ShownSitesPage,
   Signed,
+  SignedByPerson,
   VisitorKey,
   SiteDetails,
   SiteNow,
@@ -112,10 +113,14 @@ import {
   TOKEN_FIELDS,
   endedTokensTrimmed,
   isNewLogin,
+  loginDecided,
+  loginRedeemed,
   loginsWhere,
   makeRoomOfAll,
   makeRoomOfVisitor,
+  storedExpiry,
   tokenById,
+  tokenExpiryChanged,
   tokenNames,
   USER_TOKENS,
   alertUsersKept,
@@ -124,13 +129,13 @@ import {
   endTokensOfDropped,
   endTokensOfRemoved,
   isStoredLogin,
-  isUser,
   settingsAndSigner,
   signerGone,
   signerStands,
   settingsPatched,
   userBehind,
   userTokenCounts,
+  workingToken,
   worksAt,
 } from "./login-statements";
 import {
@@ -160,7 +165,7 @@ import {
   sitesWhere,
   storedDetails,
 } from "./site-statements";
-import { BUILD, CHANGED, ONE, bare, built, insertFrom, qualified, written } from "./statements";
+import { BUILD, CHANGED, ONE, PLAIN_AUDIT_COLUMNS, bare, built, insertFrom, qualified, written } from "./statements";
 import {
   AN_UPLOAD,
   A_VERSION,
@@ -195,9 +200,6 @@ const AUDIT_START = { desc: Number.MAX_SAFE_INTEGER, asc: 0 } as const;
 
 /** The columns an audit entry is written with; `seq` is the engine's to give. */
 const AUDIT_COLUMNS = [audit.at, audit.actor, audit.action, audit.site_id, audit.site_name, audit.detail];
-
-/** The columns an audit entry of a change to no site is written with. */
-const PLAIN_AUDIT_COLUMNS = [audit.at, audit.actor, audit.action, audit.detail];
 
 /** The largest whole number the engine counts with exactly: the bound of a day on an install that has stored no settings. */
 const NO_BOUND = Number.MAX_SAFE_INTEGER;
@@ -958,7 +960,7 @@ export class SqlDatabase implements Database {
   }
 
   async addToken(token: TokenRecord, signed: Signed): Promise<{ readonly kind: "done" } | Refused<"id_taken" | "signer_gone">> {
-    const expires = token.scope === "admin" ? token.expiresAt : null;
+    const expires = storedExpiry(token.expires);
     const idIsFree = fragment`NOT EXISTS (SELECT 1 FROM ${tokens} WHERE ${tokens.id} = ${token.id})`;
     const made = fragment`SELECT ${token.id}, ${token.hash}, ${token.scope}, ${token.note}, ${token.createdAt}, ${expires}, ${userBehind(signed.by)} WHERE ${idIsFree} AND ${signerStands(signed)}`;
     const [inserted, , signer] = await this.#driver.batch([
@@ -1027,6 +1029,17 @@ export class SqlDatabase implements Database {
     return { kind: "done", token: tokenFromRow(row) };
   }
 
+  async changeTokenExpiry(id: TokenId, expires: TokenExpiry, signed: SignedByPerson): Promise<{ readonly kind: "done"; readonly token: TokenRecord } | Refused<"not_found" | "signer_gone">> {
+    const stands = written(fragment`SELECT ${signerStands(signed)} AS stands`);
+    const [before, , , signer] = await this.#driver.batch([workingToken(id, signed.at), ...tokenExpiryChanged(id, expires, signed), stands]);
+    const row = before?.rows[0];
+    if (row === undefined) return { kind: "not_found" };
+
+    if (signerGone(signer)) return { kind: "signer_gone" };
+
+    return { kind: "done", token: { ...tokenFromRow(row), expires } };
+  }
+
   async addComputerLogin(login: PendingLogin, room: LoginRoom): Promise<{ readonly kind: "done" } | Refused<"taken">> {
     const columns = [logins.id, logins.code, logins.hash, logins.scope, logins.computer, logins.visitor, logins.created_at, logins.expires_at];
     const values = fragment`${login.id}, ${login.code}, ${login.hash}, ${login.scope}, ${login.computer}, ${login.visitor}, ${login.createdAt}, ${login.expiresAt}`;
@@ -1059,17 +1072,7 @@ export class SqlDatabase implements Database {
   }
 
   async decideComputerLogin(code: UserCode, decision: LoginDecision): Promise<{ readonly kind: "done"; readonly login: ComputerLogin } | Refused<"not_pending">> {
-    // An allowed login becomes a publisher's when its decider asks so.
-    const scope = fragment<"admin" | "publisher">`CASE WHEN ${decision.asPublisher === true ? 1 : 0} = 1 AND ${decision.state} = 'allowed' THEN 'publisher' ELSE ${logins.scope} END`;
-    const waits = and(eq(logins.code, code), eq(logins.state, "pending"), gt(logins.expires_at, decision.at));
-    const action = decision.state === "allowed" ? "login_allowed" : "login_denied";
-    // The entry names the scope and the computer, and nothing of the secret.
-    const entry = fragment`SELECT ${decision.at}, ${decision.by}, ${action}, json_object('scope', ${logins.scope}, 'computer', ${logins.computer}) FROM ${logins} WHERE ${logins.code} = ${code} AND ${CHANGED}`;
-    const [updated, , after] = await this.#driver.batch([
-      built(BUILD.update(logins).set({ state: decision.state, decided_by: decision.by, scope }).where(waits)),
-      insertFrom(audit, PLAIN_AUDIT_COLUMNS, entry),
-      loginsWhere(eq(logins.code, code)),
-    ]);
+    const [updated, , after] = await this.#driver.batch([...loginDecided(code, decision), loginsWhere(eq(logins.code, code))]);
     const login = loginIn(after);
     if (!changed(updated) || login === undefined) return { kind: "not_pending" };
 
@@ -1077,20 +1080,7 @@ export class SqlDatabase implements Database {
   }
 
   async redeemComputerLogin(id: LoginId, token: TokenRecord): Promise<{ readonly kind: "done" } | Refused<"not_allowed">> {
-    const expires = token.scope === "admin" ? token.expiresAt : null;
-    const detail = JSON.stringify({ token: token.id, scope: token.scope, note: token.note });
-    // A token is stored only while the login is allowed, has not run out, is of the token's scope, and whoever allowed it is a user still.
-    const decided = fragment`${logins.state} = 'allowed' AND ${isUser(fragment`${logins.decided_by}`)}`;
-    const allowed = fragment`${logins.id} = ${id} AND ${decided} AND ${logins.expires_at} > ${token.createdAt} AND ${logins.scope} = ${token.scope}`;
-    const idIsFree = fragment`NOT EXISTS (SELECT 1 FROM ${tokens} WHERE ${tokens.id} = ${token.id})`;
-    const stored = fragment`SELECT ${token.id}, ${token.hash}, ${logins.scope}, ${token.note}, ${token.createdAt}, ${expires}, ${logins.decided_by} FROM ${logins} WHERE ${allowed} AND ${idIsFree}`;
-    // The entry is signed by whoever allowed the login, and the login goes only when the entry was written.
-    const entry = fragment`SELECT ${token.createdAt}, ${logins.decided_by}, 'token_added', ${detail} FROM ${logins} WHERE ${logins.id} = ${id} AND ${CHANGED}`;
-    const [inserted] = await this.#driver.batch([
-      insertFrom(tokens, TOKEN_COLUMNS, stored),
-      insertFrom(audit, PLAIN_AUDIT_COLUMNS, entry),
-      built(BUILD.delete(logins).where(and(eq(logins.id, id), CHANGED))),
-    ]);
+    const [inserted] = await this.#driver.batch(loginRedeemed(id, token));
 
     return { kind: changed(inserted) ? "done" : "not_allowed" };
   }

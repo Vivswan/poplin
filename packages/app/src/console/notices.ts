@@ -8,7 +8,7 @@ import type { deleteSite } from "@poplin/core/src/actions/sites/delete";
 import type { duplicateSite } from "@poplin/core/src/actions/sites/duplicate";
 import type { listSitesWithNames } from "@poplin/core/src/actions/sites/list";
 import type { addLogin, removeLogin } from "@poplin/core/src/actions/access/logins";
-import type { listTokens } from "@poplin/core/src/actions/access/manage-tokens";
+import type { changeTokenExpiry, listTokens } from "@poplin/core/src/actions/access/manage-tokens";
 import type { newLink } from "@poplin/core/src/actions/sites/new-link";
 import type { restoreSite } from "@poplin/core/src/actions/sites/restore";
 import type { rollbackSite } from "@poplin/core/src/actions/sites/rollback";
@@ -169,6 +169,7 @@ type ActionCode =
   | CodeOf<typeof changeConfig>
   | CodeOf<typeof listAudit>
   | CodeOf<typeof listTokens>
+  | CodeOf<typeof changeTokenExpiry>
   | CodeOf<typeof addLogin>
   | CodeOf<typeof removeLogin>
   | CodeOf<typeof showLogin>

@@ -1,14 +1,15 @@
 // The Tokens tab: what a waiting row and an allowed row each let a person do, and where a waiting login is still listed with no token beside it.
 
-import { clearPage, type Within } from "../lib/support/page";
+import { clearPage, type Within } from "../../lib/support/page";
 
 import { afterAll, afterEach, describe, expect, test } from "bun:test";
-import { cleanup, fireEvent, render, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 
 import type { AccessActions } from "@/access/access-actions";
 import type { Ended, Token, Waiting, WaitingLogin } from "@/access/access-queries";
-import { TokensTab } from "@/access/tokens-tab";
+import { TokensTab } from "@/access/tokens/tokens-tab";
+import { dayIn } from "@/lib/timezone";
 
 /** A login that waits. */
 const WAITING_LOGIN = { id: "0cbb997f737c56ae", scope: "admin", computer: "build-server", asked: 1_794_700_000_000 } as WaitingLogin;
@@ -90,6 +91,23 @@ describe("the rows of the tokens", () => {
     fireEvent.click(row("build-server").getByRole("button", { name: "Review" }));
 
     expect(asked.reviewed).toEqual([WAITING_LOGIN.id]);
+  });
+
+  // Drift: a token's expiry could be changed from nowhere, or the dialog would open for another token than the row's; and a token with a day would be listed as one that never expires.
+  test("a token's menu offers Change expiry above Revoke, which opens the dialog of the row's own token, and the list says the day a token expires on", async () => {
+    const dated = { ...TOKEN, id: "00000000000000b2", note: "nightly build", expires: Date.UTC(2027, 1, 24, 12) } as Token;
+    render(<Tab tokens={[TOKEN, dated]} waits={[]} />);
+    const expires = [row("report agent"), row("nightly build")].map((entry) => entry.getAllByRole("cell").at(4)?.textContent);
+    await act(async () => fireEvent.click(row("nightly build").getByRole("button", { name: "More for nightly build" })));
+    const entries = (await within(document.body).findAllByRole("menuitem")).map((entry) => entry.textContent);
+    await act(async () => fireEvent.click(within(document.body).getByRole("menuitem", { name: "Change expiry" })));
+    const dialog = within(await within(document.body).findByRole("dialog", { name: "Change expiry" }));
+
+    expect([expires, entries]).toEqual([
+      ["Never", dayIn(dated.expires as number)],
+      ["Change expiry", "Revoke"],
+    ]);
+    expect(dialog.getByText("Name", { selector: "dt" }).nextElementSibling?.textContent).toBe("nightly build");
   });
 });
 

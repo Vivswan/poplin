@@ -1,21 +1,22 @@
 // When a site expires, in its panel: the moment, and the menu that sets another or none. A site that expires moves to the trash.
 
 import { useQueryClient } from "@tanstack/react-query";
-import { lazy, type ReactNode, Suspense, useRef, useState } from "react";
+import { type ReactNode, useRef, useState } from "react";
 
-import { Button } from "@/components/ui/button";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Field, FieldError } from "@/components/ui/field";
 import { answerOf, api, Refused } from "@/lib/api";
 import { sayDone } from "@/lib/notify";
 import type { Site } from "@/lib/sites";
-import { momentIn } from "@/lib/timezone";
 import { PanelFact } from "@/shared/side-panel";
-import { afterDays, backTo, expiryMoment, SPANS, sentFor } from "@/sites/expiry/expiry";
+import { sentFor } from "@/dialog/expiry/expiry-moments";
+import { ExpiryPicker } from "@/dialog/expiry/expiry-picker";
 import { SITES_KEY } from "@/sites/site-queries";
 
-/** The dialog that asks for a day, read from the server when a day is first asked for: it holds the calendar. */
-const ExpiryDayDialog = lazy(async () => ({ default: (await import("@/sites/expiry/expiry-day-dialog")).ExpiryDayDialog }));
+/** The spans a person chooses between, in days from the moment the menu opened. */
+const SPANS = [1, 7, 30] as const;
+
+/** What the calendar says of the day that is picked. */
+const DAY_SAYS = "The site expires when that day starts. Then it moves to the trash.";
 
 /** What stands under the moment: what its link does then, and where the site goes. */
 function afterIt(expires: Site["expires"], now: number): string | undefined {
@@ -31,12 +32,8 @@ function afterIt(expires: Site["expires"], now: number): string | undefined {
  */
 export function ExpiryRow({ site }: { readonly site: Site }): ReactNode {
   const client = useQueryClient();
-  const opener = useRef<HTMLButtonElement>(null);
-  // The moment the menu opened: each span is written as the moment it ends when counted from then, and a choice saves the moment that was written.
-  const [opened, setOpened] = useState(() => Date.now());
-  // Whether a day is asked for now, and whether one ever was: the dialog is read only then.
-  const [picking, setPicking] = useState(false);
-  const [picks, setPicks] = useState(false);
+  // The moment the row was drawn, or its menu last opened: what stands under the fact is read at it.
+  const [now, setNow] = useState(() => Date.now());
   const [refusal, setRefusal] = useState<string>();
   // When the site deletes itself as the server last said: the panel's reading, or a newer answer to a change, which the panel has yet to read.
   const read = useRef(site.expires);
@@ -56,7 +53,7 @@ export function ExpiryRow({ site }: { readonly site: Site }): ReactNode {
 
     void client.invalidateQueries({ queryKey: SITES_KEY });
     // A moment that has passed is not offered again.
-    const undo = (): void => void send(backTo(before), false).then(setRefusal);
+    const undo = (): void => void send(sentFor(before), false).then(setRefusal);
     if (chosen && (before === "never" || before > Date.now())) sayDone("Saved.", { run: undo });
     else sayDone(chosen ? "Saved." : "Put back.");
 
@@ -70,38 +67,12 @@ export function ExpiryRow({ site }: { readonly site: Site }): ReactNode {
 
     return refused;
   };
-  const pickDay = (): void => {
-    setPicks(true);
-    setPicking(true);
-  };
-  const note = afterIt(site.expires, opened);
+  const note = afterIt(site.expires, now);
 
   return (
     <PanelFact name="Expires">
       <div className="flex flex-col gap-1">
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <span>{expiryMoment(site.expires)}</span>
-          <DropdownMenu onOpenChange={(open) => (open ? setOpened(Date.now()) : undefined)}>
-            <DropdownMenuTrigger
-              render={<Button ref={opener} variant="outline" size="xs" aria-label="Change when it expires" className="pointer-coarse:-my-2 pointer-coarse:h-9 pointer-coarse:px-3" />}
-            >
-              Change
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-64">
-              {SPANS.map((days) => (
-                <DropdownMenuItem key={days} onClick={() => void choose(sentFor(afterDays(days, opened)))}>
-                  <span>{days === 1 ? "1 day" : `${days} days`}</span>
-                  <span className="ml-auto text-muted-foreground">{momentIn(afterDays(days, opened))}</span>
-                </DropdownMenuItem>
-              ))}
-              <DropdownMenuItem onClick={pickDay}>On a day...</DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem disabled={site.expires === "never"} onClick={() => void choose("never")}>
-                Never
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
+        <ExpiryPicker expires={site.expires} spans={SPANS} daySays={DAY_SAYS} onChoose={(expires) => void choose(sentFor(expires))} onDay={saveDay} onOpen={setNow} />
         {note === undefined ? null : <p className="text-muted-foreground">{note}</p>}
         {refusal === undefined ? null : (
           <Field invalid>
@@ -109,11 +80,6 @@ export function ExpiryRow({ site }: { readonly site: Site }): ReactNode {
           </Field>
         )}
       </div>
-      {picks ? (
-        <Suspense fallback={null}>
-          <ExpiryDayDialog open={picking} onClose={() => setPicking(false)} onSave={saveDay} returnTo={opener} />
-        </Suspense>
-      ) : null}
     </PanelFact>
   );
 }

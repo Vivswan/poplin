@@ -318,7 +318,7 @@ export const CONSOLE_ROWS: readonly BudgetRow[] = [
       const [login = { id: "", code: "" }] = await waitingLogins(stage, MOST_WAITING, "admin");
       const session = await sessionOf(stage);
 
-      const decision: Decision = { login: login.id, allow: true, scope: "admin", code: login.code };
+      const decision: Decision = { login: login.id, allow: true, scope: "admin", code: login.code, expires: "never" };
 
       return (measured) => post(measured, "/data/logins/decide", decision, session);
     },
@@ -421,6 +421,20 @@ export const CONSOLE_ROWS: readonly BudgetRow[] = [
       const session = await sessionOf(stage);
 
       return (measured) => post(measured, `/data/tokens/${tokenId(1)}/remove`, {}, session);
+    },
+    status: 200,
+    budget: { queries: 2, reads: 0, writes: 0 },
+  },
+  {
+    group,
+    name: "Access screen: change when a token expires",
+    route: "POST /data/tokens/:token/expiry",
+    // One token that works gets a day, with one audit entry.
+    arrange: async (stage) => {
+      await manyTokens(stage, 1);
+      const session = await sessionOf(stage);
+
+      return (measured) => post(measured, `/data/tokens/${tokenId(1)}/expiry`, { expires: "90d" }, session);
     },
     status: 200,
     budget: { queries: 2, reads: 0, writes: 0 },

@@ -5,6 +5,7 @@ import type { SQLiteColumn, SQLiteTable } from "drizzle-orm/sqlite-core";
 import { drizzle } from "drizzle-orm/sqlite-proxy";
 
 import type { SqlValue, Statement } from "./driver";
+import { audit } from "./schema";
 
 /** Where statements are built from the declared schema. None is run here: each goes to the driver, in a batch. */
 export const BUILD = drizzle(() => Promise.reject(new Error("a statement is run by the driver, in a batch")));
@@ -14,6 +15,9 @@ export const CHANGED = fragment`changes() = 1`;
 
 /** A row that stands for "there is one" in a subquery. */
 export const ONE = { one: fragment`1` };
+
+/** The columns an audit entry of a change to no site is written with. */
+export const PLAIN_AUDIT_COLUMNS = [audit.at, audit.actor, audit.action, audit.detail];
 
 /** What the builder gives for one statement. */
 interface BuiltQuery {

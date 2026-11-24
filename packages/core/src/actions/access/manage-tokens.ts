@@ -7,7 +7,8 @@ import type { Actor } from "../../auth/scopes";
 import { type EndedToken, mintToken, type TokenId, type TokenRecord } from "../../auth/tokens";
 import { type Holder, MOMENT, TOKEN_ID } from "../../records/fields";
 import { ADDRESS_LAYOUT } from "../../sites/address-layout";
-import { signedBy } from "./reach";
+import { readExpires } from "../sites/changes";
+import { personOf, signedBy } from "./reach";
 import { type Install, type Refused, refuse } from "../records";
 import { UPDATE_NOTICE } from "../update/update";
 
@@ -32,13 +33,16 @@ export const TOKEN_OBJECT = v.object({
 /** What revoking a token answers, and so a logout: the token as it was. */
 export const REVOKED_TOKEN = v.object({ token: TOKEN_OBJECT });
 
+/** What a change of a token's expiry is asked with: `never`, or when the token is to run out, in a form `readExpires` takes. */
+const TOKEN_EXPIRY = v.strictObject({ expires: v.string() });
+
 /** What the API answers a token that asks who it is: the token, the version the install runs, how its site addresses are laid out, and a newer release when one is known. */
 export const WHOAMI_ANSWER = v.object({ token: TOKEN_OBJECT, version: v.string(), layout: ADDRESS_LAYOUT, update: v.optional(UPDATE_NOTICE) });
 
 /**
  * A token as a caller sees it: never the token itself, nor its hash. Times are milliseconds since the epoch.
  *
- * `expires` is `"never"` for a publisher token, which lives until it is revoked.
+ * `expires` is `"never"` for a token that lives until it is revoked, whatever its scope.
  */
 export type TokenObject = Readonly<v.InferOutput<typeof TOKEN_OBJECT>>;
 
@@ -47,27 +51,25 @@ export type TokenObject = Readonly<v.InferOutput<typeof TOKEN_OBJECT>>;
  *
  * `by` is who removed it, or for `user_removed` who removed the user behind it; a token that ran out has none.
  */
-type EndedTokenObject = { readonly id: TokenId; readonly note: string; readonly created: number; readonly ended: number } & (
-  | { readonly how: "removed" | "user_removed"; readonly scope: "publisher" | "admin"; readonly by: Holder }
-  | { readonly how: "ran_out"; readonly scope: "admin" }
+type EndedTokenObject = { readonly id: TokenId; readonly scope: "publisher" | "admin"; readonly note: string; readonly created: number; readonly ended: number } & (
+  | { readonly how: "removed" | "user_removed"; readonly by: Holder }
+  | { readonly how: "ran_out" }
 );
 
 /** The object of a token that ended. */
 function endedTokenObject(token: EndedToken): EndedTokenObject {
-  const facts = { id: token.id, note: token.note, created: token.createdAt, ended: token.endedAt };
+  const facts = { id: token.id, scope: token.scope, note: token.note, created: token.createdAt, ended: token.endedAt };
 
-  return token.how === "ran_out" ? { ...facts, how: "ran_out", scope: "admin" } : { ...facts, how: token.how, scope: token.scope, by: token.by };
+  return token.how === "ran_out" ? { ...facts, how: "ran_out" } : { ...facts, how: token.how, by: token.by };
 }
 
 /** Build the token object of a stored record. */
 export function tokenObject(record: TokenRecord): TokenObject {
-  const expires = record.scope === "admin" ? record.expiresAt : "never";
-
-  return { id: record.id, scope: record.scope, note: record.note, created: record.createdAt, expires };
+  return { id: record.id, scope: record.scope, note: record.note, created: record.createdAt, expires: record.expires };
 }
 
 /**
- * Issue a new token.
+ * Issue a new token, which runs out as `defaultExpiry` has it for its scope.
  *
  * An admin may issue a publisher token. An admin token is issued only by a person, an actor whose holder is a login: a token that could issue admin tokens would outlive its own expiry.
  *
@@ -85,7 +87,7 @@ export async function issueToken(
   const asked = v.safeParse(TOKEN_REQUEST, request);
   if (!asked.success) return refuse("bad_argument", v.getDotPath(asked.issues[0])?.split(".")[0] ?? "request");
 
-  if (asked.output.scope === "admin" && v.is(TOKEN_ID, actor.holder)) return refuse("not_allowed");
+  if (asked.output.scope === "admin" && personOf(actor) === undefined) return refuse("not_allowed");
 
   const now = install.now();
   const minted = await mintToken({ ...asked.output, now });
@@ -172,4 +174,36 @@ export async function revokeToken(
   if (revoked.kind !== "done") return refuse("not_found");
 
   return { ok: true, token: tokenObject(revoked.token) };
+}
+
+/**
+ * Set when a token that works runs out: later, sooner, or never. The change writes one audit entry, with the expiry before and after it; a token that already runs out then is left as it is.
+ *
+ * Only a person changes it, an actor whose holder is a login: a token that could move an expiry would outlive its own. A token that was revoked or ran out is ended for good.
+ *
+ * @param id - the token's id as sent, never the token itself
+ * @param request - `expires`: `never`, or a moment that is still ahead; anything is taken and checked
+ * @returns the token as it is now. `not_allowed` for anyone but an admin in a browser, and for one removed while they asked; `bad_argument` about `token` or `expires`; `not_found` for a token that does not work
+ * @throws {Error} the database failed
+ */
+export async function changeTokenExpiry(
+  install: Install,
+  actor: Actor,
+  id: string,
+  request: v.InferInput<typeof TOKEN_EXPIRY>,
+): Promise<{ readonly ok: true; readonly token: TokenObject } | Refused<"not_allowed" | "bad_argument" | "not_found">> {
+  const person = personOf(actor);
+  if (person === undefined) return refuse("not_allowed");
+
+  if (!v.is(TOKEN_ID, id)) return refuse("bad_argument", "token");
+
+  const now = install.now();
+  const asked = v.safeParse(TOKEN_EXPIRY, request);
+  const expires = asked.success ? readExpires(asked.output.expires, now) : undefined;
+  if (expires === undefined) return refuse("bad_argument", "expires");
+
+  const changed = await install.database.changeTokenExpiry(id, expires, { as: "person", by: person, at: now });
+  if (changed.kind === "done") return { ok: true, token: tokenObject(changed.token) };
+
+  return refuse(changed.kind === "signer_gone" ? "not_allowed" : "not_found");
 }

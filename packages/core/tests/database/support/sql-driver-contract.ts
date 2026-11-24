@@ -384,10 +384,11 @@ function schemaRules(label: string, makeDriver: DriverFactory): void {
       ["the totals row removed", [{ sql: "DELETE FROM totals", params: [] }]],
       ["a secret that is not the visitor key", [{ sql: "INSERT INTO secrets (name, value, created_at) VALUES ('other', 'x', 0)", params: [] }]],
       ["a site moved to another folder", [{ sql: "UPDATE sites SET folder = 'folder-c' WHERE id = 'aaaaaaaaaaaa'", params: [] }]],
-      ["an admin token that never expires", [{ sql: "INSERT INTO tokens (id, hash, scope, note, created_at, allowed_by) VALUES ('t', 'h', 'admin', '', 0, 'u')", params: [] }]],
+      ["a token of a scope that is neither of the two", [{ sql: "INSERT INTO tokens (id, hash, scope, note, created_at, allowed_by) VALUES ('t', 'h', 'owner', '', 0, 'u')", params: [] }]],
+      ["a pending login that keeps when a token runs out", [{ sql: "UPDATE logins SET token_expires_at = 2 WHERE id = 'login-a'", params: [] }]],
       [
-        "a publisher token that expires",
-        [{ sql: "INSERT INTO tokens (id, hash, scope, note, created_at, expires_at, allowed_by) VALUES ('t', 'h', 'publisher', '', 0, 1, 'u')", params: [] }],
+        "a denied login that keeps when a token runs out",
+        [{ sql: "UPDATE logins SET state = 'denied', decided_by = ?1, token_expires_at = 2 WHERE id = 'login-a'", params: [ADMIN] }],
       ],
       ["a second row of settings", [{ sql: "INSERT INTO settings (id, value, updated_at) VALUES (2, '{}', 0)", params: [] }]],
       ["an upload in a state that is none of the three", [upload("upload-b", "folder-b", "live")]],
@@ -589,7 +590,7 @@ function queryPlans(label: string, makeDriver: DriverFactory): void {
       await database.getComputerLogin(login.id);
       await database.findComputerLogin(login.code);
       await database.listWaitingComputerLogins(NOW);
-      await database.decideComputerLogin(login.code, { state: "allowed", by: ADMIN, at: NOW + 1 });
+      await database.decideComputerLogin(login.code, { state: "allowed", tokenExpires: "never", by: ADMIN, at: NOW + 1 });
       await database.decideComputerLogin(denied.code, { state: "denied", by: ADMIN, at: NOW + 1 });
       const redeemed = await database.redeemComputerLogin(login.id, (await mintToken({ scope: "publisher", note: "laptop", now: NOW + 2 })).record);
       const swept = await database.sweepRunOut(denied.expiresAt);

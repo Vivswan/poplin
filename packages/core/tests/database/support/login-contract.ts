@@ -5,7 +5,7 @@ import { describe, expect, test } from "bun:test";
 import type { LoginId, PendingLogin } from "../../../src/auth/computer-logins";
 import type { Login } from "../../../src/auth/logins";
 import { mintToken, type TokenId, type TokenRecord } from "../../../src/auth/tokens";
-import type { Signed } from "../../../src/database/database";
+import type { Signed, SignedByPerson } from "../../../src/database/database";
 import type { SettingValues } from "../../../src/records/settings";
 import {
   ADA,
@@ -170,7 +170,7 @@ export function tokensAndSettings(label: string, makeDatabase: DatabaseFactory):
       const [kept, removed] = [(await mintToken({ scope: "publisher", note: "ci", now: NOW + 1 })).record, (await mintToken({ scope: "publisher", note: "agent", now: NOW + 2 })).record];
       for (const token of [runsOut, kept, removed]) await database.addToken(token, BY_ADA);
       await database.revokeToken(removed.id, { as: "person", by: ADMIN, at: NOW + 5 });
-      const ranOutAt = runsOut.scope === "admin" ? runsOut.expiresAt : 0;
+      const ranOutAt = NOW + 30 * DAY_MS;
       const gone = { id: removed.id, scope: "publisher", note: "agent", createdAt: NOW + 2, endedAt: NOW + 5, how: "removed", by: ADMIN };
       const ranOut = { id: runsOut.id, scope: "admin", note: "laptop", createdAt: NOW, endedAt: ranOutAt, how: "ran_out" };
 
@@ -197,7 +197,7 @@ export function tokensAndSettings(label: string, makeDatabase: DatabaseFactory):
     test("a token removed after it ran out is listed once, as removed", async () => {
       const database = await opened(makeDatabase);
       const admin = (await mintToken({ scope: "admin", note: "laptop", now: NOW })).record;
-      const ranOutAt = admin.scope === "admin" ? admin.expiresAt : 0;
+      const ranOutAt = NOW + 30 * DAY_MS;
       await database.addToken(admin, BY_ADA);
       await database.revokeToken(admin.id, { as: "token", by: ADA, at: ranOutAt + 7 });
       const removed = { id: admin.id, scope: "admin", note: "laptop", createdAt: NOW, endedAt: ranOutAt + 7, how: "removed", by: ADA };
@@ -233,6 +233,84 @@ export function tokensAndSettings(label: string, makeDatabase: DatabaseFactory):
         ["removed 90 days ago", "removed lately", "works"],
         [[works], ["removed lately", "removed 90 days ago"]],
         [[works], ["removed lately", "removed 90 days ago"]],
+      ]);
+    });
+
+    // Drift: an expiry is the token's own and not its scope's. A sweep that read the scope would remove an admin token set to never once it is 120 days old, and keep the row of a publisher token for ever after its day.
+    test("the sweep goes by a token's end whatever its scope: an admin token set to never and a publisher token whose day is ahead stay, however old, and a publisher token whose day passed over 90 days ago goes", async () => {
+      const database = await opened(makeDatabase);
+      await database.initSettings(SETTINGS, BY_ADA);
+      const longAgo = NOW - 1100 * DAY_MS;
+      const signed = { ...BY_ADA, at: longAgo };
+      const minted = async (scope: "admin" | "publisher", note: string, expires?: number): Promise<TokenRecord> => (await mintToken({ scope, note, now: longAgo, expires })).record;
+      const [endless, ahead] = [await minted("admin", "admin, never"), await minted("publisher", "publisher, day ahead")];
+      const [passedLong, passedLately] = [await minted("publisher", "publisher, day long past", NOW - 90 * DAY_MS - 1), await minted("publisher", "publisher, day lately past", NOW - 90 * DAY_MS)];
+      const all = [endless, ahead, passedLong, passedLately];
+      for (const token of all) await database.addToken(token, signed);
+      // The two that stay were given their expiry by a change, a day after they were made.
+      const byAdmin = { as: "person", by: ADMIN, at: longAgo + DAY_MS } as const;
+      const changed = [await database.changeTokenExpiry(endless.id, "never", byAdmin), await database.changeTokenExpiry(ahead.id, NOW + DAY_MS, byAdmin)];
+
+      await database.sweepRunOut(NOW);
+      const { live, ended } = await database.listTokenStates(NOW, 50);
+
+      expect(changed.map((change) => change.kind)).toEqual(["done", "done"]);
+      expect([...(await database.getTokenNames(all.map((token) => token.id))).values()].sort()).toEqual(["admin, never", "publisher, day ahead", "publisher, day lately past"]);
+      expect<unknown>([live.map((token) => [token.note, token.scope, token.expires]).sort(), ended]).toEqual([
+        [
+          ["admin, never", "admin", "never"],
+          ["publisher, day ahead", "publisher", NOW + DAY_MS],
+        ],
+        [{ id: passedLately.id, scope: "publisher", note: "publisher, day lately past", createdAt: longAgo, endedAt: NOW - 90 * DAY_MS, how: "ran_out" }],
+      ]);
+    });
+
+    // Drift: a change of expiry is how a token outlives the day it was given, so each one is in the log with what it was and is. One that reached an ended token would bring a revoked token back to work.
+    test("a token that works is set to expire later, sooner, or never, each change with one entry of what it was and is; a token that was removed or ran out stays as it ended, and an expiry it has already writes nothing", async () => {
+      const database = await opened(makeDatabase);
+      await database.initSettings(SETTINGS, BY_ADA);
+      const by = (at: number): SignedByPerson => ({ as: "person", by: ADMIN, at });
+      const minted = async (scope: "admin" | "publisher", note: string, now = NOW): Promise<TokenRecord> => (await mintToken({ scope, note, now })).record;
+      const [admin, publisher, revoked, ranOut] = [await minted("admin", "laptop"), await minted("publisher", "ci"), await minted("publisher", "gone"), await minted("admin", "old", NOW - 31 * DAY_MS)];
+      for (const token of [admin, publisher, revoked, ranOut]) await database.addToken(token, by(token.createdAt));
+      await database.revokeToken(revoked.id, by(NOW));
+      const [inThirty, inNinety] = [NOW + 30 * DAY_MS, NOW + 90 * DAY_MS];
+
+      const changes = [
+        await database.changeTokenExpiry(admin.id, "never", by(NOW + 1)),
+        await database.changeTokenExpiry(publisher.id, inNinety, by(NOW + 2)),
+        await database.changeTokenExpiry(publisher.id, NOW + 10, by(NOW + 3)),
+        await database.changeTokenExpiry(publisher.id, NOW + 10, by(NOW + 4)),
+        await database.changeTokenExpiry(admin.id, inThirty, { as: "person", by: "eve@example.com" as Login, at: NOW + 4 }),
+        await database.changeTokenExpiry(admin.id, "never", { as: "person", by: "eve@example.com" as Login, at: NOW + 4 }),
+        await database.changeTokenExpiry(revoked.id, "never", by(NOW + 5)),
+        await database.changeTokenExpiry(ranOut.id, "never", by(NOW + 5)),
+        await database.changeTokenExpiry(BO, "never", by(NOW + 5)),
+        await database.changeTokenExpiry(publisher.id, inNinety, by(NOW + 10)),
+      ];
+      const entries = (await auditTrail(database)).filter((entry) => entry.action === "token_expiry_changed");
+
+      expect<unknown>(changes).toEqual([
+        { kind: "done", token: { ...admin, expires: "never" } },
+        { kind: "done", token: { ...publisher, expires: inNinety } },
+        { kind: "done", token: { ...publisher, expires: NOW + 10 } },
+        { kind: "done", token: { ...publisher, expires: NOW + 10 } },
+        { kind: "signer_gone" },
+        { kind: "signer_gone" },
+        { kind: "not_found" },
+        { kind: "not_found" },
+        { kind: "not_found" },
+        { kind: "not_found" },
+      ]);
+      expect<unknown>([await database.getToken(admin.id), await database.getToken(publisher.id), await database.getToken(ranOut.id)]).toEqual([
+        { ...admin, expires: "never" },
+        { ...publisher, expires: NOW + 10 },
+        ranOut,
+      ]);
+      expect<unknown>(entries.map((entry) => [entry.at, entry.by, entry.detail])).toEqual([
+        [NOW + 1, ADMIN, { token: admin.id, scope: "admin", note: "laptop", from: inThirty, to: null }],
+        [NOW + 2, ADMIN, { token: publisher.id, scope: "publisher", note: "ci", from: null, to: inNinety }],
+        [NOW + 3, ADMIN, { token: publisher.id, scope: "publisher", note: "ci", from: inNinety, to: NOW + 10 }],
       ]);
     });
 
@@ -452,12 +530,12 @@ export function tokensAndSettings(label: string, makeDatabase: DatabaseFactory):
       const login = await pendingLogin();
       const agent = await token("publisher", "agent", NOW + 3);
       await database.addComputerLogin(login, ROOM);
-      await database.decideComputerLogin(login.code, { state: "allowed", by: bo, at: NOW });
+      await database.decideComputerLogin(login.code, { state: "allowed", tokenExpires: "never", by: bo, at: NOW });
       await database.redeemComputerLogin(login.id, agent);
       // An approval the user gave and no terminal collected yet goes with the user too.
       const waiting = await pendingLogin();
       await database.addComputerLogin(waiting, ROOM);
-      await database.decideComputerLogin(waiting.code, { state: "allowed", by: bo, at: NOW });
+      await database.decideComputerLogin(waiting.code, { state: "allowed", tokenExpires: "never", by: bo, at: NOW });
       const held = [...(await database.countUserTokens(NOW + 4))].sort();
       const working = async (): Promise<string[]> => (await database.listTokenStates(NOW + 9, 50)).live.map(({ note }) => note).sort();
 
@@ -640,7 +718,7 @@ export function computerLogins(label: string, makeDatabase: DatabaseFactory): vo
       const stored = async (logins: readonly PendingLogin[]): Promise<(string | undefined)[]> => Promise.all(logins.map(async (login) => (await database.getComputerLogin(login.id))?.state));
       const [stale, allowed, denied] = [await pendingLogin(NOW - 1), await pendingLogin(), await pendingLogin()];
       for (const login of [stale, allowed, denied]) await database.addComputerLogin(login, { perVisitor: 3, all: 4 });
-      await database.decideComputerLogin(allowed.code, { state: "allowed", by: ADMIN, at: NOW });
+      await database.decideComputerLogin(allowed.code, { state: "allowed", tokenExpires: "never", by: ADMIN, at: NOW });
       await database.decideComputerLogin(denied.code, { state: "denied", by: ADMIN, at: NOW });
 
       const own = [await pendingLogin(stale.expiresAt), await pendingLogin(stale.expiresAt + 1), await pendingLogin(stale.expiresAt + 2)];
@@ -663,7 +741,7 @@ export function computerLogins(label: string, makeDatabase: DatabaseFactory): vo
       const database = await opened(makeDatabase);
       const [old, allowed, denied, stale, recent] = [await pendingLogin(NOW - 2), await pendingLogin(NOW - 1), await pendingLogin(NOW - 1), await pendingLogin(NOW - 10 * 60_000), await pendingLogin(NOW)];
       for (const login of [old, allowed, denied, stale, recent]) await database.addComputerLogin(login, ROOM);
-      await database.decideComputerLogin(allowed.code, { state: "allowed", by: ADMIN, at: NOW });
+      await database.decideComputerLogin(allowed.code, { state: "allowed", tokenExpires: "never", by: ADMIN, at: NOW });
       await database.decideComputerLogin(denied.code, { state: "denied", by: ADMIN, at: NOW });
 
       expect([await database.listWaitingComputerLogins(NOW), await database.listWaitingComputerLogins(old.expiresAt), await database.listWaitingComputerLogins(recent.expiresAt)]).toEqual([[recent, old], [recent], []]);
@@ -674,7 +752,7 @@ export function computerLogins(label: string, makeDatabase: DatabaseFactory): vo
       const database = await opened(makeDatabase);
       const [allowed, denied, stale] = await Promise.all([pendingLogin(), pendingLogin(), pendingLogin()]);
       for (const login of [allowed, denied, stale]) await database.addComputerLogin(login, ROOM);
-      const allow = { state: "allowed", by: ADMIN, at: NOW + 1 } as const;
+      const allow = { state: "allowed", tokenExpires: "never", by: ADMIN, at: NOW + 1 } as const;
       const deny = { state: "denied", by: ADMIN, at: NOW + 2 } as const;
 
       expect([
@@ -685,7 +763,7 @@ export function computerLogins(label: string, makeDatabase: DatabaseFactory): vo
         await database.decideComputerLogin(stale.code, { ...allow, at: stale.expiresAt }),
         await database.decideComputerLogin((await pendingLogin()).code, allow),
       ]).toEqual([
-        { kind: "done", login: { ...allowed, state: "allowed", decidedBy: ADMIN } },
+        { kind: "done", login: { ...allowed, state: "allowed", decidedBy: ADMIN, tokenExpires: "never" } },
         { kind: "not_pending" },
         { kind: "done", login: { ...denied, state: "denied", decidedBy: ADMIN } },
         { kind: "not_pending" },
@@ -709,9 +787,9 @@ export function computerLogins(label: string, makeDatabase: DatabaseFactory): vo
       const by = { as: "person", by: ADMIN, at: NOW + 1 } as const;
 
       const decided = [
-        await database.decideComputerLogin(lowered.code, { state: "allowed", asPublisher: true, ...by }),
-        await database.decideComputerLogin(kept.code, { state: "allowed", asPublisher: false, ...by }),
-        await database.decideComputerLogin(denied.code, { state: "denied", asPublisher: true, ...by }),
+        await database.decideComputerLogin(lowered.code, { state: "allowed", asPublisher: true, tokenExpires: "never", ...by }),
+        await database.decideComputerLogin(kept.code, { state: "allowed", asPublisher: false, tokenExpires: "never", ...by }),
+        await database.decideComputerLogin(denied.code, { state: "denied", ...by }),
       ];
       const tokens = { admin: (await mintToken({ scope: "admin", note: "laptop", now: NOW + 2 })).record, publisher: (await mintToken({ scope: "publisher", note: "laptop", now: NOW + 2 })).record };
 
@@ -729,13 +807,65 @@ export function computerLogins(label: string, makeDatabase: DatabaseFactory): vo
       expect([await database.redeemComputerLogin(lowered.id, tokens.admin), await database.redeemComputerLogin(lowered.id, tokens.publisher)]).toEqual([{ kind: "not_allowed" }, { kind: "done" }]);
     });
 
+    // Drift: whoever allows a login chooses when its token runs out. A token stored with another expiry would outlive the day that was chosen, or run out when it was to last.
+    test("an allowed login keeps when its token runs out, whatever its scope, and gives only a token that runs out then", async () => {
+      const database = await opened(makeDatabase);
+      await database.initSettings(SETTINGS, BY_ADA);
+      const asks = async (scope: "admin" | "publisher"): Promise<PendingLogin> => ({ ...(await pendingLogin()), scope });
+      const [dated, endless] = [await asks("publisher"), await asks("admin")];
+      for (const login of [dated, endless]) await database.addComputerLogin(login, ROOM);
+      const [by, day] = [{ by: ADMIN, at: NOW + 1 }, NOW + 90 * DAY_MS];
+      const token = async (scope: "admin" | "publisher", expires: number | "never"): Promise<TokenRecord> => (await mintToken({ scope, note: "laptop", now: NOW + 2, expires })).record;
+
+      expect([
+        await database.decideComputerLogin(dated.code, { state: "allowed", tokenExpires: day, ...by }),
+        await database.decideComputerLogin(endless.code, { state: "allowed", tokenExpires: "never", ...by }),
+      ]).toEqual([
+        { kind: "done", login: { ...dated, state: "allowed", decidedBy: ADMIN, tokenExpires: day } },
+        { kind: "done", login: { ...endless, state: "allowed", decidedBy: ADMIN, tokenExpires: "never" } },
+      ]);
+      expect([
+        await database.redeemComputerLogin(dated.id, await token("publisher", "never")),
+        await database.redeemComputerLogin(dated.id, await token("publisher", day + 1)),
+        await database.redeemComputerLogin(endless.id, await token("admin", NOW + 30 * DAY_MS)),
+        await database.redeemComputerLogin(dated.id, await token("publisher", day)),
+        await database.redeemComputerLogin(endless.id, await token("admin", "never")),
+      ]).toEqual([{ kind: "not_allowed" }, { kind: "not_allowed" }, { kind: "not_allowed" }, { kind: "done" }, { kind: "done" }]);
+      expect<unknown>((await database.listTokens()).map((stored) => [stored.scope, stored.expires]).sort()).toEqual([
+        ["admin", "never"],
+        ["publisher", day],
+      ]);
+    });
+
+    // Drift: a login is collected up to ten minutes after it was allowed, and its token's expiry may lie inside them. A token made at or after its own expiry would be stored and handed out dead.
+    test("an allowed login whose token runs out before it is collected gives the token until that moment, and none from it on", async () => {
+      const database = await opened(makeDatabase);
+      await database.initSettings(SETTINGS, BY_ADA);
+      const [late, inTime] = [await pendingLogin(), await pendingLogin()];
+      const soon = NOW + 60_000;
+      const madeAt = async (now: number): Promise<TokenRecord> => (await mintToken({ scope: "publisher", note: "laptop", now, expires: soon })).record;
+
+      for (const login of [late, inTime]) {
+        await database.addComputerLogin(login, ROOM);
+        await database.decideComputerLogin(login.code, { state: "allowed", tokenExpires: soon, by: ADMIN, at: NOW + 1 });
+      }
+
+      expect<unknown>([
+        await database.redeemComputerLogin(late.id, await madeAt(soon)),
+        await database.redeemComputerLogin(inTime.id, await madeAt(soon - 1)),
+        (await database.listTokens()).map((stored) => [stored.createdAt, stored.expires]),
+        (await database.getComputerLogin(late.id))?.state,
+      ]).toEqual([{ kind: "not_allowed" }, { kind: "done" }, [[soon - 1, soon]], "allowed"]);
+    });
+
     // Drift: two admins, or one who presses twice, decide at the same moment; both heard would leave a login allowed in the audit log and denied in its row.
     test("of an Allow and a Deny made at the same moment one is done, with its one audit entry", async () => {
       const database = await opened(makeDatabase);
       const login = await pendingLogin();
       await database.addComputerLogin(login, ROOM);
 
-      const decided = await Promise.all((["allowed", "denied"] as const).map((state) => database.decideComputerLogin(login.code, { state, by: ADMIN, at: NOW + 1 })));
+      const decisions = [{ state: "allowed", tokenExpires: "never" }, { state: "denied" }] as const;
+      const decided = await Promise.all(decisions.map((decision) => database.decideComputerLogin(login.code, { ...decision, by: ADMIN, at: NOW + 1 })));
       const stored = await database.getComputerLogin(login.id);
 
       expect(decided.map((answer) => answer.kind).sort()).toEqual(["done", "not_pending"]);
@@ -748,7 +878,7 @@ export function computerLogins(label: string, makeDatabase: DatabaseFactory): vo
       await database.initSettings(SETTINGS, BY_ADA);
       const [allowed, pending, denied, stale] = await Promise.all([pendingLogin(), pendingLogin(), pendingLogin(), pendingLogin()]);
       for (const login of [allowed, pending, denied, stale]) await database.addComputerLogin(login, ROOM);
-      for (const login of [allowed, stale]) await database.decideComputerLogin(login.code, { state: "allowed", by: ADMIN, at: NOW + 1 });
+      for (const login of [allowed, stale]) await database.decideComputerLogin(login.code, { state: "allowed", tokenExpires: "never", by: ADMIN, at: NOW + 1 });
       await database.decideComputerLogin(denied.code, { state: "denied", by: ADMIN, at: NOW + 1 });
       const token = async (scope: "publisher" | "admin" = "publisher"): Promise<TokenRecord> => (await mintToken({ scope, note: "laptop", now: NOW + 2 })).record;
 
@@ -776,7 +906,7 @@ export function computerLogins(label: string, makeDatabase: DatabaseFactory): vo
       const database = await opened(makeDatabase);
       const [old, decided, live] = await Promise.all([pendingLogin(), pendingLogin(), pendingLogin(NOW + 1)]);
       for (const login of [old, decided, live]) await database.addComputerLogin(login, ROOM);
-      await database.decideComputerLogin(decided.code, { state: "allowed", by: ADMIN, at: NOW + 1 });
+      await database.decideComputerLogin(decided.code, { state: "allowed", tokenExpires: "never", by: ADMIN, at: NOW + 1 });
 
       expect([await database.sweepRunOut(old.expiresAt - 1), await database.sweepRunOut(old.expiresAt), await database.sweepRunOut(old.expiresAt)]).toEqual([0, 2, 0]);
       expect([await database.getComputerLogin(old.id), await database.getComputerLogin(decided.id), await database.getComputerLogin(live.id)]).toEqual([undefined, undefined, live]);

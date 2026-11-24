@@ -2,7 +2,7 @@
 
 import { describe, expect, test } from "bun:test";
 import { listAudit } from "@poplin/core/src/actions/install/audit-log";
-import { beginLogin } from "@poplin/core/src/actions/access/computer-logins";
+import { beginLogin, redeemLogin } from "@poplin/core/src/actions/access/computer-logins";
 import { mintComputerLogin, parseLoginSecret, showUserCode, type UserCode } from "@poplin/core/src/auth/computer-logins";
 import type { Login } from "@poplin/core/src/auth/logins";
 import { issueToken } from "@poplin/core/src/actions/access/manage-tokens";
@@ -282,6 +282,51 @@ describe("the tokens", () => {
     expect(removed).toEqual({ ok: true, name: "report agent" });
     expect([again.sentence, malformed.sentence]).toEqual(["That token is gone already.", "That token is gone already."]);
     expect((await read(await opened.get("/data/tokens"))).tokens).toEqual([]);
+  });
+
+  // Drift: a token's expiry would be set and the list would still say the old one, a moment that has passed would be taken as the day a token ends, or a revoked token would be brought back to work by a new day.
+  test("expire when the screen says, later, sooner, or never, and are listed so; a moment that has passed is refused at its field, and a token that is gone is said to be gone", async () => {
+    const opened = await openConsole();
+    const issued = await issueToken(opened.base.install, { scope: "admin", holder: opened.base.owner }, { note: "report agent", scope: "publisher" });
+    const [id, now] = [issued.ok ? issued.record.id : "", opened.base.clock.now];
+    const day = now + 90 * DAY_MS;
+    const change = async (token: string, expires: string): Promise<Answer> => read(await opened.change(`/data/tokens/${token}/expiry`, { expires }));
+
+    const dated = await change(id, new Date(day).toISOString());
+    const listed = (await read(await opened.get("/data/tokens"))).tokens;
+    const passed = await change(id, new Date(now).toISOString());
+    const endless = await change(id, "never");
+    await opened.change(`/data/tokens/${id}/remove`, {});
+    const [gone, malformed] = [await change(id, "never"), await change("not-a-token", "never")];
+
+    expect([dated, endless]).toEqual([
+      { ok: true, expires: day },
+      { ok: true, expires: "never" },
+    ]);
+    expect(listed).toEqual([{ id, scope: "publisher", note: "report agent", created: now, expires: day }]);
+    expect([passed.code, passed.about, passed.sentence]).toEqual(["bad_argument", "expires", "Pick a day that is still ahead."]);
+    expect([gone.sentence, malformed.sentence]).toEqual(["That token is gone already.", "That token is gone already."]);
+  });
+
+  // Drift: the expiry an admin chose at the review would be dropped on the way, and the computer would collect a token that lasts as its role does by itself.
+  test("of a login approved with an expiry are made with it: an admin token set to never, and a publisher token with a day", async () => {
+    const opened = await openConsole();
+    const day = opened.base.clock.now + 90 * DAY_MS;
+    const approve = async (computer: string, scope: "admin" | "publisher", expires: string): Promise<unknown> => {
+      opened.base.clock.now += 1000;
+      const begun = await beginLogin(opened.base.install, { scope, computer }, "a-visitor");
+      if (!begun.ok) throw new Error("the login was not begun");
+
+      await opened.change("/data/logins/decide", { login: parseLoginSecret(begun.secret) ?? "", allow: true, scope, code: begun.code, expires });
+      const collected = await redeemLogin(opened.base.install, { secret: begun.secret });
+
+      return collected.ok && collected.state === "allowed" ? [collected.record.scope, collected.record.expires] : collected;
+    };
+
+    expect([await approve("studio-laptop", "admin", "never"), await approve("report agent", "publisher", new Date(day).toISOString())]).toEqual([
+      ["admin", "never"],
+      ["publisher", day],
+    ]);
   });
 
   // Drift: a removed token would vanish from the screen with who removed it, an admin token past its 30 days would stand among the working ones, or an ended token's hash would reach the screen.

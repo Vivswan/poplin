@@ -87,7 +87,7 @@ export const earlierIds = sqliteTable(
   (table) => [index("earlier_ids_by_folder").on(table.folder)],
 );
 
-/** The hashed record of every token; only an admin token expires. `allowed_by` is the user behind it. A removed token keeps its row for a time, with when and by whom, and `user_removed` when its user went; `end_at` is its removal, else its expiry. */
+/** The hashed record of every token. `expires_at` is when it runs out, NULL for one that never does, whatever its scope; `allowed_by` is the user behind it. A removed token keeps its row for a time, with when and by whom. */
 export const tokens = sqliteTable(
   "tokens",
   {
@@ -105,7 +105,6 @@ export const tokens = sqliteTable(
   },
   (table) => [
     check("tokens_scope", sql`${table.scope} IN ('admin', 'publisher')`),
-    check("tokens_admin_expires", sql`(${table.scope} = 'admin') = (${table.expires_at} IS NOT NULL)`),
     check("tokens_removed_names_who", sql`(${table.removed_at} IS NULL) = (${table.removed_by} IS NULL)`),
     check("tokens_user_removed", sql`${table.user_removed} IN (0, 1)`),
     check("tokens_user_removed_is_removed", sql`${table.user_removed} = 0 OR ${table.removed_at} IS NOT NULL`),
@@ -266,7 +265,7 @@ export const uploads = sqliteTable(
   ],
 );
 
-/** A computer asking to be logged in: pending, then allowed or denied, and gone once used or run out. */
+/** A computer asking to be logged in: pending, then allowed or denied, and gone once used or run out. `token_expires_at` is when the token of an allowed one runs out, NULL for a token that never does. */
 export const logins = sqliteTable(
   "logins",
   {
@@ -282,12 +281,14 @@ export const logins = sqliteTable(
     decided_by: text(),
     created_at: integer().notNull(),
     expires_at: integer().notNull(),
+    token_expires_at: integer(),
   },
   (table) => [
     check("logins_scope", sql`${table.scope} IN ('admin', 'publisher')`),
     check("logins_state", sql`${table.state} IN ('pending', 'allowed', 'denied')`),
     check("logins_decided_names_who", sql`(${table.state} = 'pending') = (${table.decided_by} IS NULL)`),
     check("logins_expires_after_creation", sql`${table.expires_at} > ${table.created_at}`),
+    check("logins_token_expiry_is_allowed", sql`${table.token_expires_at} IS NULL OR ${table.state} = 'allowed'`),
     index("logins_by_visitor").on(table.state, table.visitor, table.created_at, table.expires_at),
   ],
 );

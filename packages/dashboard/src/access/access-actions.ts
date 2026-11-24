@@ -1,8 +1,9 @@
-// What is done on the Access screen: a waiting login is allowed or denied, a person is added or taken out, a token is removed, every browser is signed out. Each change is sent and its result said in one line.
+// What is done on the Access screen: a waiting login is allowed or denied, a person is added or taken out, a token is removed or told to expire at another moment, every browser is signed out. Each change is sent and its result said in one line.
 
 import type { InferRequestType } from "hono/client";
 
 import type { Review, Token } from "@/access/access-queries";
+import { type Expiry, sentFor } from "@/dialog/expiry/expiry-moments";
 import { answerOf, api, Refused } from "@/lib/api";
 import { copy, sayDone, sayRefused, send, unsay } from "@/lib/notify";
 
@@ -18,6 +19,9 @@ const SIGNED_OUT = "Everyone is signed out. This can take a few seconds.";
 
 /** How long after a login is allowed its computer has surely asked for its token, in milliseconds: it asks every five seconds. */
 const COLLECTED_AFTER_MS = 6000;
+
+/** The code of the refusal that says a token no longer works: there is nothing left to choose for it. */
+const TOKEN_GONE = "token_gone";
 
 /** What a person's change says once it is done; the sentence of a change that did not reach the domain's login follows it. */
 const PEOPLE_SAID = {
@@ -56,6 +60,9 @@ export interface AccessActions {
   /** Removes a token, which stops working at once. */
   readonly removeToken: (token: Token) => Promise<void>;
 
+  /** Sets when a token that works expires. It answers the sentence of a refusal, which is shown in the dialog, or nothing when it is saved and when the token is gone, which is said in a line. */
+  readonly changeExpiry: (token: Token, expires: Expiry) => Promise<string | undefined>;
+
   /** Copies the command that logs a computer in, and says so. */
   readonly copyCommand: (command: string) => Promise<void>;
 
@@ -73,6 +80,32 @@ function decisionWords(decision: Decision, asked: Review["scope"]): string {
 /** The line of a person who was taken out: the word that it is done, and after it what the server says of a change that did not reach the domain's login. */
 function peopleWords(done: string, note: string | null): string {
   return note === null ? done : `${done} ${note}`;
+}
+
+/**
+ * Send when a token that works expires from now on, and say that it is saved.
+ *
+ * @param onChanged - called once the token is saved or turned out to be gone, so the list reads again
+ * @returns the sentence of a refusal, which is said where the moment was chosen, so the choice is kept for another try; nothing when it is saved, and for a token that is gone, which is said in a line
+ */
+async function changeExpiry(token: Token, expires: Expiry, onChanged: () => void): Promise<string | undefined> {
+  try {
+    await answerOf(api.tokens[":token"].expiry.$post({ param: { token: token.id }, json: { expires: sentFor(expires) } }));
+  } catch (error) {
+    if (!(error instanceof Refused)) throw error;
+
+    if (error.code !== TOKEN_GONE) return error.message;
+
+    sayRefused(error.message);
+    onChanged();
+
+    return undefined;
+  }
+
+  onChanged();
+  sayDone("Saved.");
+
+  return undefined;
 }
 
 /**
@@ -153,6 +186,7 @@ export function accessActions(onChanged: () => void, onUsersChanged: () => void)
       onChanged();
       sayDone("Revoked. Its token works nowhere now.");
     },
+    changeExpiry: (token, expires) => changeExpiry(token, expires, onChanged),
     copyCommand: (command) => copy(command, { done: "Copied.", failed: "Not copied. Select the command and copy it." }),
     signEveryoneOut: async () => {
       const done = await send(api.settings["sign-everyone-out"].$post({ json: {} }));

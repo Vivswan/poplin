@@ -1,4 +1,4 @@
-// The Tokens tab of Access: one list of the logins that wait to be allowed and the tokens that are, with Review or Remove at each row's end, and the removed tokens folded away under it. A token's value and a login's code are never here.
+// The Tokens tab of Access: one list of the logins that wait and the tokens that work, with Review at a waiting row, Change expiry and Revoke at a token, and the removed tokens folded away under it. A token's value and a login's code are never here.
 
 import { CopyIcon, PlusIcon } from "lucide-react";
 import { type ReactNode, useMemo, useState } from "react";
@@ -6,9 +6,10 @@ import { type ReactNode, useMemo, useState } from "react";
 import type { AccessActions } from "@/access/access-actions";
 import type { Ended, Token, Waiting, WaitingLogin } from "@/access/access-queries";
 import { computerName, SCOPE_WORDS, TOKEN_ORDERS } from "@/access/access-values";
-import { RemovedTokens } from "@/access/removed-tokens";
+import { ChangeExpiryDialog } from "@/access/tokens/change-expiry-dialog";
+import { RemovedTokens } from "@/access/tokens/removed-tokens";
 import { RowMenu } from "@/access/row-menu";
-import { type TokenRow, tokenRows } from "@/access/token-rows";
+import { type TokenRow, tokenRows } from "@/access/tokens/token-rows";
 import { Unread } from "@/shared/unread";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -228,6 +229,7 @@ function leavingQuestion(token: Token | undefined): Question | undefined {
 /** Draw the Tokens tab. */
 export function TokensTab({ tokens, ended, waiting, failure, waitingFailure, sort, onSort, onReview, actions, onRetry }: TokensTabProps): ReactNode {
   const [leaving, setLeaving] = useState<Token>();
+  const [changing, setChanging] = useState<Token>();
   // The removed tokens under the list are told what the list measured, so no column of theirs is narrower than the list's. The list is told nothing: opening them moves none of its columns.
   const [fitted, setFitted] = useState<Fitted>();
   const rows = useMemo(() => tokenRows(waiting?.logins ?? [], tokens ?? []), [waiting, tokens]);
@@ -257,7 +259,7 @@ export function TokensTab({ tokens, ended, waiting, failure, waitingFailure, sor
       );
     }
 
-    return <RowMenu name={computerName(row.name).shown} word="Revoke" onRemove={() => setLeaving(row.token)} />;
+    return <RowMenu name={computerName(row.name).shown} word="Revoke" onRemove={() => setLeaving(row.token)} also={{ word: "Change expiry", onChoose: () => setChanging(row.token) }} />;
   };
   const answer = (yes: boolean): void => {
     if (yes && leaving !== undefined) void actions.removeToken(leaving);
@@ -338,6 +340,7 @@ export function TokensTab({ tokens, ended, waiting, failure, waitingFailure, sor
       </div>
       {list()}
       <Confirm question={leavingQuestion(leaving)} onAnswer={answer} />
+      <ChangeExpiryDialog token={changing} actions={actions} onClose={() => setChanging(undefined)} />
     </section>
   );
 }

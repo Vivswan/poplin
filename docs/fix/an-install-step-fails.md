@@ -145,7 +145,7 @@ The login line is `npx poplin login`, with `--server` and your dashboard's URL: 
 | `The login was denied on the dashboard`                    | Deny was pressed; nothing was stored                  | run the login line again                                  |
 | `The login expired before approval`               | the code expired before Approve; nothing was stored   | run the login line again                                  |
 | `Not logged in`                                            | the login did not finish                             | run the login line again                                  |
-| `The token is missing or expired`                                 | the login ran out: it lasts 30 days                  | `npx poplin login`, and approve it again                  |
+| `The token is missing or expired`                                 | the login expired or was revoked: an admin login expires after 30 days unless another expiry was set for it                | `npx poplin login`, and approve it again                  |
 | `Cannot reach the install`                                 | the URL is mistyped, or the network is down          | check the URL after `--server`                            |
 | a line of `poplin doctor` that starts with `failed`        | that one read failed; the rest of the line says why  | fix what it names, then run `npx poplin doctor` again     |
 | `failed  problems`, then kinds                             | something went wrong in the install today            | [Problems](problems.md#what-is-noted) has each kind |

@@ -317,6 +317,8 @@ Can change has two roles to choose from, and the page opens on the second:
 | Admin          | a machine of your own                    | every site, and the settings: `npx poplin config`, `export`, `import`, and `update` need it | 30 days       |
 | Publisher      | a machine that should only publish, such as a shared one | the sites that one login published, and no other                   | until you revoke it   |
 
+The last column is what the page's Expires row starts at. Its Change sets another moment, or never: [Access](../dashboard/access.md#this-machine) has the choices.
+
 An agent on this machine uses the same login. As an admin it reaches a site that an earlier login published. As a publisher it does not: after a new login it no longer reaches the sites of the login before.
 
 The page takes only the whole code your terminal printed. If it still refuses the code once you pasted it whole, or you did not start a login, press Deny.
@@ -362,7 +364,7 @@ ok  trash     0 sites
 ok  problems  none in 7 days
 ```
 
-The login lasts 30 days: after that, `npx poplin login` makes a new one. **If a line does not start with `ok`**, [When the install stops](../fix/an-install-step-fails.md#the-machine-is-not-logged-in) has it.
+The login lasts 30 days, unless another expiry was set for it, on that page or later under Access: after that, `npx poplin login` makes a new one. **If a line does not start with `ok`**, [When the install stops](../fix/an-install-step-fails.md#the-machine-is-not-logged-in) has it.
 
 Your dashboard is at the URL the command printed. It opens on Sites, which says `No sites yet`.
 

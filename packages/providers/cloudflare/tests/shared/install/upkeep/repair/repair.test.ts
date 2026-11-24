@@ -452,9 +452,11 @@ describe.each(BOTH)("a release the install is behind, which the line asks for wi
     const dry = await repaired(account, kind, { run: DRY, ...UPDATE });
     const run = await repaired(account, kind, UPDATE);
     const steps = `Database steps | change | poplin: schema 0 to ${OWN_SCHEMA}`;
+    // The runner stamps a row for each step it applies, so a database brought up from nothing holds every place from 1 to the release's schema.
+    const ledger = Array.from({ length: OWN_SCHEMA }, (_, at) => ({ step: at + 1 }));
 
     expect([dry.changes, shown(dry.done), shown(dry.done)[1]]).toEqual([[], shown(run.done), steps]);
-    expect([run.changes.slice(0, 2), run.done.ok && run.done.ready, (await account.store.call("SELECT step FROM schema_steps", []))[0]?.results]).toEqual([[UPLOAD, QUERY], true, [{ step: OWN_SCHEMA }]]);
+    expect([run.changes.slice(0, 2), run.done.ok && run.done.ready, (await account.store.call("SELECT step FROM schema_steps ORDER BY step", []))[0]?.results]).toEqual([[UPLOAD, QUERY], true, ledger]);
   });
 
   // Drift: records another build wrote are not this release's to change. A run that read them anyway, or that dropped the rows of an upload it made, would say nothing of where the install stands.

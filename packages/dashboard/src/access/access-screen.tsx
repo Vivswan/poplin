@@ -10,7 +10,7 @@ import { TOKENS_PATH, PEOPLE_PATH, tokenSortOf, tokenSortQuery } from "@/access/
 import { useFocusHome } from "@/lib/focus";
 import { PeopleTab } from "@/access/people-tab";
 import { ReviewDialog } from "@/access/review-dialog";
-import { TokensTab } from "@/access/tokens-tab";
+import { TokensTab } from "@/access/tokens/tokens-tab";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { DOMAIN_KEY } from "@/domain/domain-queries";
 import { searchOf, useAddressQuery } from "@/lib/address";

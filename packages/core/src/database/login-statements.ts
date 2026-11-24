@@ -4,15 +4,15 @@ import { and, asc, count, eq, gt, inArray, isNull, lt, or, type SQL, sql as frag
 import { alias } from "drizzle-orm/sqlite-core";
 import * as v from "valibot";
 
-import type { PendingLogin } from "../auth/computer-logins";
-import type { TokenId } from "../auth/tokens";
+import type { LoginId, PendingLogin, UserCode } from "../auth/computer-logins";
+import type { TokenExpiry, TokenId, TokenRecord } from "../auth/tokens";
 import { HISTORY_KEPT_MS } from "../records/audit";
 import { TOKEN_ID } from "../records/fields";
 import type { SettingValues } from "../records/settings";
-import type { Signed } from "./database";
+import type { LoginDecision, Signed, SignedByPerson } from "./database";
 import type { Statement, StatementResult } from "./driver";
 import { audit, logins, settings, tokens } from "./schema";
-import { BUILD, built, CHANGED, insertFrom } from "./statements";
+import { BUILD, built, CHANGED, insertFrom, PLAIN_AUDIT_COLUMNS } from "./statements";
 
 /** The columns a token is written with. */
 export const TOKEN_COLUMNS = [tokens.id, tokens.hash, tokens.scope, tokens.note, tokens.created_at, tokens.expires_at, tokens.allowed_by];
@@ -43,6 +43,11 @@ export function worksAt(now: number): SQL | undefined {
   return and(NOT_REMOVED, or(isNull(tokens.expires_at), gt(tokens.expires_at, now)));
 }
 
+/** A token's expiry as its column holds it: `NULL` for a token that never runs out. */
+export function storedExpiry(expires: TokenExpiry): number | null {
+  return expires === "never" ? null : expires;
+}
+
 /**
  * The user behind a new token: the signer who allows it, or the user behind the token that signs.
  *
@@ -53,7 +58,7 @@ export function userBehind(by: SQL | string): SQL {
 }
 
 /** Whether a column holds one of the stored users: a user who is one still. */
-export function isUser(column: SQL): SQL {
+function isUser(column: SQL): SQL {
   return fragment`EXISTS (SELECT 1 FROM ${settings}, json_each(${settings.value}, '$.users') AS j WHERE ${settings.id} = 1 AND j.value = ${column})`;
 }
 
@@ -146,7 +151,7 @@ export function auditOfSettings(signed: Signed, changes: Partial<SettingValues>,
   const users = fragment`json_set(${JSON.stringify(changes)}, '$.added', json(${usersApart(given, stored)}), '$.removed', json(${usersApart(stored, given)}))`;
   const detail = changes.users === undefined ? fragment`${JSON.stringify(changes)}` : users;
 
-  return insertFrom(audit, [audit.at, audit.actor, audit.action, audit.detail], fragment`SELECT ${signed.at}, ${signed.by}, 'settings_changed', ${detail} FROM ${settings} WHERE ${lands}`);
+  return insertFrom(audit, PLAIN_AUDIT_COLUMNS, fragment`SELECT ${signed.at}, ${signed.by}, 'settings_changed', ${detail} FROM ${settings} WHERE ${lands}`);
 }
 
 /** The tokens that work at a moment, counted by the user behind them. */
@@ -169,7 +174,7 @@ function endTokensWhere(leaves: SQL, signed: Signed, after?: "change"): readonly
   const entries = fragment`SELECT ${signed.at}, ${signed.by}, 'token_revoked', ${named} FROM ${tokens} WHERE ${entered} ORDER BY ${tokens.created_at}, ${tokens.id}`;
 
   return [
-    insertFrom(audit, [audit.at, audit.actor, audit.action, audit.detail], entries),
+    insertFrom(audit, PLAIN_AUDIT_COLUMNS, entries),
     built(BUILD.update(tokens).set({ removed_at: signed.at, removed_by: signed.by, user_removed: 1 }).where(marked)),
   ];
 }
@@ -199,6 +204,66 @@ export function endSignerLeftOut(signed: Signed): readonly [Statement, Statement
 /** The token with the given id, unless it was removed. */
 export function tokenById(id: TokenId): Statement {
   return built(BUILD.select(TOKEN_FIELDS).from(tokens).where(and(eq(tokens.id, id), NOT_REMOVED)));
+}
+
+/** The token with the given id, if it works at a moment. */
+export function workingToken(id: TokenId, at: number): Statement {
+  return built(BUILD.select(TOKEN_FIELDS).from(tokens).where(and(eq(tokens.id, id), worksAt(at))));
+}
+
+/**
+ * Set when a token that works at `signed.at` runs out, for a signer who stands: the audit entry of the change, with the expiry before and after it, then the change, made only where the entry was written.
+ * A token that already runs out then gets neither.
+ */
+export function tokenExpiryChanged(id: TokenId, expires: TokenExpiry, signed: SignedByPerson): readonly [Statement, Statement] {
+  const to = storedExpiry(expires);
+  const detail = fragment`json_object('token', ${tokens.id}, 'scope', ${tokens.scope}, 'note', ${tokens.note}, 'from', ${tokens.expires_at}, 'to', ${to})`;
+  const changes = and(eq(tokens.id, id), worksAt(signed.at), fragment`${tokens.expires_at} IS NOT ${to}`, signerStands(signed));
+  const entry = fragment`SELECT ${signed.at}, ${signed.by}, 'token_expiry_changed', ${detail} FROM ${tokens} WHERE ${changes}`;
+
+  return [insertFrom(audit, PLAIN_AUDIT_COLUMNS, entry), built(BUILD.update(tokens).set({ expires_at: to }).where(and(eq(tokens.id, id), CHANGED)))];
+}
+
+/** What a decision writes into its login: how it was decided and by whom. An allowed login also keeps when its token runs out, and becomes a publisher's when its decider asks so. */
+function decidedColumns(decision: LoginDecision): Partial<typeof logins.$inferInsert> {
+  const decided = { state: decision.state, decided_by: decision.by };
+  if (decision.state === "denied") return decided;
+
+  const allowed = { ...decided, token_expires_at: storedExpiry(decision.tokenExpires) };
+
+  return decision.asPublisher === true ? { ...allowed, scope: "publisher" } : allowed;
+}
+
+/**
+ * Decide the login under a code, only while it is pending and has not run out: the decision, then its audit entry, written only where the decision was. The entry names the scope and the computer, and nothing of the secret.
+ * An allowed login becomes a publisher's when its decider asks so, and keeps when its token runs out.
+ */
+export function loginDecided(code: UserCode, decision: LoginDecision): readonly [Statement, Statement] {
+  const waits = and(eq(logins.code, code), eq(logins.state, "pending"), gt(logins.expires_at, decision.at));
+  const action = decision.state === "allowed" ? "login_allowed" : "login_denied";
+  const entry = fragment`SELECT ${decision.at}, ${decision.by}, ${action}, json_object('scope', ${logins.scope}, 'computer', ${logins.computer}) FROM ${logins} WHERE ${logins.code} = ${code} AND ${CHANGED}`;
+
+  return [built(BUILD.update(logins).set(decidedColumns(decision)).where(waits)), insertFrom(audit, PLAIN_AUDIT_COLUMNS, entry)];
+}
+
+/**
+ * Turn an allowed login into its token: the token's record, its `token_added` audit entry, and the removal of the login, each made only where the one before it was.
+ * A token is stored only while the login is allowed, has not run out, is of the token's scope, keeps the token's expiry, and whoever allowed it is a user still.
+ */
+export function loginRedeemed(id: LoginId, token: TokenRecord): readonly [Statement, Statement, Statement] {
+  const expires = storedExpiry(token.expires);
+  const detail = JSON.stringify({ token: token.id, scope: token.scope, note: token.note });
+  const decided = fragment`${logins.state} = 'allowed' AND ${isUser(fragment`${logins.decided_by}`)}`;
+  // A token that would be made at or after its own expiry is not made: the terminal is answered as for a login that ran out, and keeps the login it has.
+  const ahead = fragment`(${logins.token_expires_at} IS NULL OR ${logins.token_expires_at} > ${token.createdAt})`;
+  const fits = fragment`${logins.scope} = ${token.scope} AND ${logins.token_expires_at} IS ${expires} AND ${ahead}`;
+  const allowed = fragment`${logins.id} = ${id} AND ${decided} AND ${logins.expires_at} > ${token.createdAt} AND ${fits}`;
+  const idIsFree = fragment`NOT EXISTS (SELECT 1 FROM ${tokens} WHERE ${tokens.id} = ${token.id})`;
+  const stored = fragment`SELECT ${token.id}, ${token.hash}, ${logins.scope}, ${token.note}, ${token.createdAt}, ${logins.token_expires_at}, ${logins.decided_by} FROM ${logins} WHERE ${allowed} AND ${idIsFree}`;
+  // The entry is signed by whoever allowed the login, and the login goes only when the entry was written.
+  const entry = fragment`SELECT ${token.createdAt}, ${logins.decided_by}, 'token_added', ${detail} FROM ${logins} WHERE ${logins.id} = ${id} AND ${CHANGED}`;
+
+  return [insertFrom(tokens, TOKEN_COLUMNS, stored), insertFrom(audit, PLAIN_AUDIT_COLUMNS, entry), built(BUILD.delete(logins).where(and(eq(logins.id, id), CHANGED)))];
 }
 
 /** The id and the note of each of these tokens that has a note, removed or not: a name proves nothing. The ids are the only values bound to the statement, and a database binds only so many. */

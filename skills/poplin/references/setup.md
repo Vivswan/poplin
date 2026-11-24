@@ -355,7 +355,7 @@ On a new install Cloudflare's login comes first: it asks for the user's email an
 | sees the page refuse the code         | pastes the whole code again, as you gave it            |
 | sees the page refuse the code again   | presses Deny: that page is of some other login         |
 
-The page has one choice, Can change, and it starts at Publisher. Tell the user both rows before they press Approve. The choice is theirs: you use the login they approve.
+The page asks what the login can change, and it starts at Publisher. Its Expires starts at what the last column says, and the user can set another moment there. Tell the user both rows before they press Approve. The choice is theirs: you use the login they approve.
 
 | Can change     | The guide says it is for                  | You then reach                                                        | The login lasts        |
 | -------------- | ----------------------------------------- | --------------------------------------------------------------------- | ---------------------- |

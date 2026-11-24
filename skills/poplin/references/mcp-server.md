@@ -54,4 +54,4 @@ In PowerShell the first line is `$env:POPLIN_CONFIG_DIR = "C:\Users\user\poplin-
 | each change you make shows that name           | the dashboard's Activity screen, until the login is removed: then its id |
 | the user can end it alone                      | Remove, in the menu of its row under Tokens; their own login stays |
 
-The login is stored as a file in that folder, and it expires after 30 days, like the user's own. A command you run outside the server uses the machine's stored login, unless the variable is set for it too.
+The login is stored as a file in that folder. It expires when the user set it to, at approval or later under Access: left alone, an admin login expires after 30 days and a publisher login never. A command you run outside the server uses the machine's stored login, unless the variable is set for it too.
