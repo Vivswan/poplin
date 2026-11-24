@@ -9,7 +9,11 @@
       "release-type": "simple",
       "draft": true,
       "force-tag-creation": true,
-      "extra-files": [{ "type": "json", "path": "packages/cli/package.json", "jsonpath": "$.version" }]
+      "extra-files": [
+        { "type": "json", "path": "packages/cli/package.json", "jsonpath": "$.version" },
+        { "type": "json", "path": ".claude-plugin/marketplace.json", "jsonpath": "$.plugins[0].version" },
+        { "type": "json", "path": "skills/poplin-mcp/.claude-plugin/plugin.json", "jsonpath": "$.version" }
+      ]
     }
   }
 }

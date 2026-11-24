@@ -1,4 +1,5 @@
-// Scope: the pages an agent reads under `skills/poplin/` name only tools, refusal codes, commands, and flags that exist, and the skill's own files agree with each other. What the prose says is out of scope.
+// Scope: the pages an agent reads under `skills/poplin/` name only tools, refusal codes, commands, and flags that exist, and the skill's own files agree with each other.
+// The plugin and the add-on under `skills/poplin-mcp/` start the MCP server one way, ship the skill, and follow the package. What the prose says is out of scope.
 
 import { describe, expect, test } from "bun:test";
 import { join, posix } from "node:path";
@@ -17,6 +18,21 @@ const ROOT = join(import.meta.dir, "..");
 
 /** The folder the skill sits in, as the start of the path of a file in it. */
 const SKILL_PLACE = "skills/poplin/";
+
+/** The folder of the add-on that starts the MCP server in Claude Code, written the same way. */
+const ADD_ON_PLACE = "skills/poplin-mcp/";
+
+/** The file the add-on and the plugin both start the server from. */
+const SERVER_FILE = `${ADD_ON_PLACE}.mcp.json`;
+
+/** The file that lists the plugin. */
+const MARKETPLACE = ".claude-plugin/marketplace.json";
+
+/** How Claude Code has that file open every path it writes: it reads no other path as one inside the plugin. */
+const FROM_ITS_FOLDER = "./";
+
+/** The manifest of the package the server is started from. */
+const PACKAGE = "packages/cli/package.json";
 
 /** A page, by the ending of its name. */
 const PAGE_ENDING = ".md";
@@ -54,6 +70,12 @@ const JSON_BLOCK = "json";
 /** The frontmatter of a skill: the YAML between the two rules the file opens with. */
 const FRONTMATTER = /^---\n([\s\S]*?)\n---\n/;
 
+/** How a sentence of a description opens when it names the requests that load its skill. */
+const TRIGGER = /^Use when /;
+
+/** The space between two sentences of a description. */
+const BETWEEN_SENTENCES = /(?<=\.)\s+/;
+
 /** The folder of the skill's sub-pages, as the start of a link to one. */
 const REFERENCES = "references/";
 
@@ -70,8 +92,50 @@ interface Shown {
   readonly interface?: Readonly<Record<string, unknown>>;
 }
 
+/** What the frontmatter of a skill's main page holds, by its keys. */
+type Frontmatter = Readonly<Record<string, unknown>>;
+
+/** What the package's manifest says of the package. */
+interface Package {
+  readonly name: string;
+  readonly version: string;
+  readonly description: string;
+  readonly homepage: string;
+  readonly license: string;
+  readonly repository: { readonly url: string };
+  readonly bin: Readonly<Record<string, string>>;
+}
+
+/** The plugin, as the marketplace file lists it: its paths are counted from `source`. */
+interface Listed {
+  readonly source: string;
+  readonly version: string;
+  readonly description: string;
+  readonly homepage: string;
+  readonly license: string;
+  readonly repository: string;
+  readonly skills: readonly string[];
+  readonly mcpServers: string;
+}
+
+/** What the add-on's own manifest says of it. */
+interface AddOn {
+  readonly version: string;
+  readonly mcpServers?: unknown;
+}
+
 async function read(root: string, name: string): Promise<string> {
   return Bun.file(join(root, SKILL_PLACE, name)).text();
+}
+
+/** What the frontmatter of a skill's main page holds, read as YAML. It throws on text that is no YAML, which the skills CLI passes over with its skill. */
+function frontmatterOf(page: string): Frontmatter {
+  return Bun.YAML.parse(FRONTMATTER.exec(page)?.[1] ?? "") as Frontmatter;
+}
+
+/** The sentences of a skill's description, or none where its frontmatter gives no text for one. */
+function sentences({ description }: Frontmatter): string[] {
+  return typeof description === "string" ? description.split(BETWEEN_SENTENCES) : [];
 }
 
 /** Every page of a repository's skill, as a path from the skill's folder. */
@@ -130,9 +194,7 @@ function refusalOf(line: string): string | undefined {
 
 describe("the agent skill", () => {
   test("the frontmatter names the skill and says when to use it: an agent's loader reads those two keys, and without them it skips the file or never picks it", async () => {
-    const frontmatter: unknown = Bun.YAML.parse(FRONTMATTER.exec(await read(ROOT, "SKILL.md"))?.[1] ?? "");
-
-    expect(frontmatter).toEqual({ name: "poplin", description: expect.stringMatching(/^Use when /) });
+    expect(frontmatterOf(await read(ROOT, "SKILL.md"))).toEqual({ name: "poplin", description: expect.stringMatching(TRIGGER) });
   });
 
   test("the pages cover every tool, and every other word in code font is an input of a tool or a code: without this a renamed tool or input, of one word or several, stays in a page an agent follows", async () => {
@@ -225,5 +287,49 @@ describe("the agent skill", () => {
       manifest.interface?.brandColor,
     ]);
     expect(manifest.interface?.displayName).toBe(title);
+  });
+});
+
+describe("the plugin, and the add-on that starts the MCP server in Claude Code", () => {
+  // Claude Code keeps the add-on out of every request by its switch. An agent that reads descriptions alone decides by the sentences, so none of them may name a request.
+  test("the add-on's frontmatter is YAML that names its folder, and no request loads it: without this the skills CLI passes the folder over, or a request to publish loads two skills", async () => {
+    const addOn = frontmatterOf(await Bun.file(join(ROOT, ADD_ON_PLACE, "SKILL.md")).text());
+    const skill = sentences(frontmatterOf(await read(ROOT, "SKILL.md")));
+
+    expect(addOn).toEqual({ name: posix.basename(ADD_ON_PLACE), description: expect.stringMatching(/\p{L}/u), "disable-model-invocation": true });
+    expect(sentences(addOn).filter((sentence) => TRIGGER.test(sentence) || skill.includes(sentence))).toEqual([]);
+  });
+
+  // The package is named with its tag: in a checkout of this repository a bare `npx poplin` finds the workspace's unbuilt package, and the shell answers `poplin: command not found`.
+  // `-y` answers npx's own question, which nobody sees on a server's stdio.
+  test("the server starts as the released package, named in full, with no question asked: without this it does not start in a checkout of this repository, or it waits on a question nobody sees", async () => {
+    const cli: Package = await Bun.file(join(ROOT, PACKAGE)).json();
+    const entry: ServerEntry = await Bun.file(join(ROOT, SERVER_FILE)).json();
+    const { command, args = [] } = entry.mcpServers?.poplin ?? {};
+
+    expect([command, ...args.slice(0, 3)]).toEqual(["npx", "-y", `--package=${cli.name}@latest`, ...Object.keys(cli.bin)]);
+    expect(parseCommand(args.slice(3), READ_ON).kind).toBe("mcp");
+  });
+
+  test("the plugin ships the skill by its folder, and starts the server from the add-on's own file: without this a moved skill leaves a plugin with no instructions, or the two commands drift apart and Claude Code shows every tool twice", async () => {
+    const { plugins }: { readonly plugins: readonly Listed[] } = await Bun.file(join(ROOT, MARKETPLACE)).json();
+    const addOn: AddOn = await Bun.file(join(ROOT, ADD_ON_PLACE, ".claude-plugin", "plugin.json")).json();
+    const written = plugins.flatMap(({ source, skills, mcpServers }) => [source, ...skills, mcpServers]);
+    const shipped = plugins.map(({ source, skills, mcpServers }) => ({ skills: skills.map((skill) => `${posix.join(source, skill)}/`), server: posix.join(source, mcpServers) }));
+
+    expect(written.filter((path) => !path.startsWith(FROM_ITS_FOLDER))).toEqual([]);
+    expect(shipped).toEqual([{ skills: [SKILL_PLACE], server: SERVER_FILE }]);
+    expect(addOn.mcpServers).toBeUndefined();
+  });
+
+  test("the plugin and the add-on carry the package's version, and the plugin its description, home page, license, and repository: without this a release leaves a manifest behind, or the listing says what the package no longer does", async () => {
+    const cli: Package = await Bun.file(join(ROOT, PACKAGE)).json();
+    const { plugins }: { readonly plugins: readonly Listed[] } = await Bun.file(join(ROOT, MARKETPLACE)).json();
+    const addOn: AddOn = await Bun.file(join(ROOT, ADD_ON_PLACE, ".claude-plugin", "plugin.json")).json();
+    const { hostname, pathname } = new URL(cli.repository.url);
+    const listed = plugins.map(({ version, description, homepage, license, repository }) => ({ version, description, homepage, license, repository }));
+
+    expect(listed).toEqual([{ version: cli.version, description: cli.description, homepage: cli.homepage, license: cli.license, repository: `https://${hostname}${pathname.replace(/\.git$/, "")}` }]);
+    expect(addOn.version).toBe(cli.version);
   });
 });

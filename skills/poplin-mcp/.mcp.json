@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "poplin": {
+      "command": "npx",
+      "args": ["-y", "--package=poplin@latest", "poplin", "mcp"]
+    }
+  }
+}

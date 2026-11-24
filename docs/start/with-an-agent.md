@@ -19,9 +19,28 @@ Paste it into an agent, such as Claude Code or Codex: an AI tool that runs in a 
 npx skills add Vivswan/poplin
 ```
 
-It asks what it needs, such as which agents get the skill, and whether for this folder or for you. `npx skills add Vivswan/poplin -g -y` skips those questions: `-g` installs for you, in every folder, and `-y` takes the defaults for the rest.
+It offers two skills, and asks what else it needs, such as which agents get them, and whether for this folder or for you.
 
-The skill is enough for an agent that runs commands: without poplin's MCP server, it publishes with `npx poplin` itself.
+| Skill        | Gives                                                                                |
+| ------------ | ------------------------------------------------------------------------------------ |
+| `poplin`     | the skill: enough for an agent that runs commands, which publishes with `npx poplin` |
+| `poplin-mcp` | poplin's MCP server, started by Claude Code itself. Other agents leave it unused     |
+
+`npx skills add Vivswan/poplin -g -y` skips the questions and takes both: `-g` installs for you, in every folder, and `-y` takes the defaults for the rest.
+
+**In Claude Code, `poplin-mcp` also starts poplin's MCP server**, so step 5 below is done already. Claude Code takes the skill and the server as one plugin too:
+
+```sh
+claude plugin marketplace add Vivswan/poplin
+claude plugin install poplin@poplin
+```
+
+| In Claude Code           | Switch it off                                 | Take it away                                                             |
+| ------------------------ | --------------------------------------------- | ------------------------------------------------------------------------ |
+| the add-on, `poplin-mcp` | `claude plugin disable poplin-mcp@skills-dir` | `npx skills remove poplin-mcp`, with `-g` where it was installed for you |
+| the plugin               | `claude plugin disable poplin@poplin`         | `claude plugin uninstall poplin@poplin`                                  |
+
+The add-on and the plugin start one server between them, and it runs until both are off or gone. A server an earlier setup added by hand is a second one beside it: `claude mcp remove poplin` takes that one out.
 
 **Have ready** what [What you need](install.md#what-you-need) lists. The domain is your choice: the agent asks.
 

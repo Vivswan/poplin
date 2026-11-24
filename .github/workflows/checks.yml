@@ -40,8 +40,9 @@ jobs:
       - name: Build the Worker bundle and test the Worker (Workers runtime)
         run: bun run test:worker
 
-  # The tests of `check` again, with the package told one minor version above its own, as a release tells it. A test
-  # that states today's version passes on every other pull request and fails on the release's own.
+  # The tests of `check` again, with the package told one minor version above its own, as a release tells it, and with
+  # every other file a release bumps told the same. A test that states today's version passes on every other pull
+  # request and fails on the release's own.
   next-version:
     name: test / next version
     runs-on: ubuntu-latest
@@ -53,9 +54,12 @@ jobs:
           # The upgrade tests read the last release from the tags, and its code and one older commit from the history.
           fetch-depth: 0
       - uses: ./.github/actions/setup
-      - name: Tell the package the next version
+      # The files a release bumps are the `extra-files` of release-please-config.json, which the second command reads.
+      - name: Tell the package the next version, and every file a release bumps
         working-directory: packages/cli
-        run: bun pm version minor --no-git-tag-version
+        run: |
+          bun pm version minor --no-git-tag-version
+          bun run tell-version
       - name: Test
         run: bun run test --path-ignore-patterns 'tests/fuzz/**'
       - name: Test the dashboard's client

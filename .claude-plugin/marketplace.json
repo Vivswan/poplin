@@ -1,0 +1,29 @@
+{
+  "name": "poplin",
+  "owner": {
+    "name": "Vivswan",
+    "url": "https://github.com/Vivswan"
+  },
+  "metadata": {
+    "description": "Poplin as one plugin: its skill and its MCP server"
+  },
+  "plugins": [
+    {
+      "name": "poplin",
+      "source": "./skills",
+      "description": "Agents publish static sites to your own Cloudflare account: private by default, shareable by secret link, or public.",
+      "version": "0.1.2",
+      "author": {
+        "name": "Vivswan",
+        "url": "https://github.com/Vivswan"
+      },
+      "homepage": "https://vivswan.github.io/poplin/",
+      "repository": "https://github.com/Vivswan/poplin",
+      "license": "SEE LICENSE IN LICENSE.md",
+      "skills": [
+        "./poplin"
+      ],
+      "mcpServers": "./poplin-mcp/.mcp.json"
+    }
+  ]
+}
