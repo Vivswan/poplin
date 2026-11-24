@@ -30,7 +30,15 @@ The table starts with the columns Site, Who can open it, Link, and Updated. Colu
 
 Every heading but Site is dragged to another place, and a heading's edge to another width. Site is always shown. The browser keeps the layout.
 
-For a site that is not in the trash, the panel has the link, who can open it, the versions, the files of the live version, and two switches under Settings: Show in search engines, and Allow embedding. It also says the site's Visits, Size, and Updated, and when it Expires. At its foot are New link, Duplicate, and Delete.
+For a site that is not in the trash, the panel has the link and who can open it, then three folds, and at its foot New link, Duplicate, and Delete.
+
+| Fold     | Holds                                                                                              |
+| -------- | -------------------------------------------------------------------------------------------------- |
+| Files    | the files of the live version, as a tree                                                           |
+| Versions | the kept versions, the newest first, with Make live beside each but the live one; the number after Versions is how many |
+| Details  | the site's Visits, Size, and Updated, when it Expires, and two switches: Show in search engines, and Allow embedding |
+
+A press on a fold's heading opens it, and a second press folds it again. All three start folded. The browser keeps which ones you left open, for every site's panel and for your next visit.
 
 | In the panel                  | Does, or says                                                                    |
 | ----------------------------- | -------------------------------------------------------------------------------- |
@@ -39,7 +47,7 @@ For a site that is not in the trash, the panel has the link, who can open it, th
 | Show in search engines        | on any site, while Let search engines in is off: `Off for every site in Settings.` |
 | Show in search engines        | on a site that is not public, while it is on: `Only a public site is listed.`    |
 | Allow embedding               | on, as a new site has it: `Other pages may show this site in a frame and load its files.` Off stops both; [Between sites](../about/between-sites.md) has the rows |
-| Change, after Expires         | opens a menu; a choice is saved at once, with Undo                               |
+| the pencil, after Expires     | opens a menu; a choice is saved at once, with Undo                               |
 
 | In the menu           | The site expires                                                                     |
 | --------------------- | ------------------------------------------------------------------------------------ |
@@ -49,7 +57,7 @@ For a site that is not in the trash, the panel has the link, who can open it, th
 
 For a site that expires, the panel then shows the day and time, and `Then its link stops working, and it moves to the trash.`
 
-Files, under the versions, is folded until you press it. It shows the live version alone, as a tree: the folders first, then the files, each with its size. Once it was opened, the number after Files is how many files that version holds; Size counts every kept version.
+Files shows the live version alone, as a tree: the folders first, then the files, each with its size. Once the top of that version was read, the number after Files is how many files the version holds; Size, under Details, counts every kept version.
 
 | Under Files           | Does                                                                              |
 | --------------------- | --------------------------------------------------------------------------------- |
@@ -58,7 +66,13 @@ Files, under the versions, is folded until you press it. It shows the live versi
 | Show more             | reads the next rows of a folder that holds more, up to 200 at a time                |
 | the arrow keys        | move from row to row; Right opens a folder, Left closes it, and Enter opens a file |
 
-Nothing is read while Files is folded, and what was read is kept while the dashboard stays open. A new link starts the site's files over. [What one action costs](../upkeep/cost/what-one-action-costs.md) has the numbers of a read.
+Files folded and opened again has its folders as they were. Another version made live starts with every folder closed.
+
+No folder is read while Files is folded. While it is open, the panel reads the top folder of the version that is live. A folder that was read is kept while the dashboard stays open, and is not read again.
+
+A panel reads its site each time it opens, and Files waits for the answer. Where the site could not be read, Files says why and reads no folder.
+
+A new link starts the site's files over. [What one action costs](../upkeep/cost/what-one-action-costs.md) has the numbers of a read.
 
 Where a site was deleted for good and imported again, a folder of its live version that was read before does not read on: Show more says `This list is out of date. Load the page again.`
 
@@ -88,7 +102,7 @@ A copy whose job stops without a word is removed about a day after it began, and
 
 A Worker with no Workflow has no background job: [What one action costs](../upkeep/cost/what-one-action-costs.md) says which. There the page copies, and a tab closed half way makes no site; the files are removed in about a day, and Problems shows `A copy of a site was not made`.
 
-For a site in the trash, the panel has Restore and Delete for good. Its row has Restore alone.
+For a site in the trash, the panel has Details, with the site's Visits, Size, and Updated alone, then Restore and Delete for good. Its row has Restore alone.
 
 The table of the trash has the column Leaves the trash: the day the site is gone for good. On a phone the row says it, as `Leaves the trash on 20 Nov 2026`.
 

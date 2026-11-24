@@ -1,11 +1,12 @@
 // What sets when something expires: the moment it is set to now, the menu of spans, a day, and never, and the calendar a day is picked in. A site's panel and a token's two dialogs draw it.
 
+import { PencilIcon } from "lucide-react";
 import { lazy, type ReactNode, Suspense, useRef, useState } from "react";
 
-import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { afterDays, type Expiry, expiryMoment, spanWords } from "@/dialog/expiry/expiry-moments";
 import { momentIn } from "@/lib/timezone";
+import { IconButton } from "@/shared/icon-button";
 
 /** The dialog that asks for a day, read from the server when a day is first asked for: it holds the calendar. */
 const ExpiryDayDialog = lazy(async () => ({ default: (await import("@/dialog/expiry/expiry-day-dialog")).ExpiryDayDialog }));
@@ -31,7 +32,7 @@ interface ExpiryPickerProps {
   readonly onOpen?: (now: number) => void;
 }
 
-/** Draw when something expires, with the button that changes it. A choice saves nothing by itself: whoever draws the picker does. */
+/** Draw when something expires, with the pencil beside it that opens the menu of what it may be changed to. A choice saves nothing by itself: whoever draws the picker does. */
 export function ExpiryPicker({ expires, spans, daySays, onChoose, onDay, onOpen }: ExpiryPickerProps): ReactNode {
   const opener = useRef<HTMLButtonElement>(null);
   // The moment the menu opened: each span is written as the moment it ends when counted from then, and a choice takes the moment that was written.
@@ -56,11 +57,9 @@ export function ExpiryPicker({ expires, spans, daySays, onChoose, onDay, onOpen 
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
         <span>{expiryMoment(expires)}</span>
         <DropdownMenu onOpenChange={(next) => (next ? open() : undefined)}>
-          <DropdownMenuTrigger
-            render={<Button ref={opener} type="button" variant="outline" size="xs" aria-label="Change when it expires" className="pointer-coarse:-my-2 pointer-coarse:h-9 pointer-coarse:px-3" />}
-          >
-            Change
-          </DropdownMenuTrigger>
+          <IconButton label="Change when it expires" opens={<DropdownMenuTrigger ref={opener} type="button" />} className="-my-1 pointer-coarse:-my-2.5">
+            <PencilIcon />
+          </IconButton>
           <DropdownMenuContent align="start" className="w-64">
             {spans.map((days) => (
               <DropdownMenuItem key={days} onClick={() => onChoose(afterDays(days, opened))}>

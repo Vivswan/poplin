@@ -1,7 +1,9 @@
-// One site, over the end of the table: its link, who can open it, its facts and versions, the files of its live version, the settings it is seldom given, and what is done to the whole of it.
+// One site, over the end of the table: its link, who can open it, and what is done to the whole of it.
+// Between them, each folded away until it is asked for: the files of its live version, its versions, and its facts with the settings it is seldom given.
 
 import { ScrollArea as ScrollAreaParts } from "@base-ui/react/scroll-area";
 import { showBytes } from "@poplin/core/src/records/settings";
+import type { UseQueryResult } from "@tanstack/react-query";
 import { CatchBoundary, Link } from "@tanstack/react-router";
 import { cn } from "cn";
 import { ChevronRightIcon, CopyIcon, ExternalLinkIcon, PencilIcon } from "lucide-react";
@@ -9,7 +11,6 @@ import { lazy, type ReactElement, type ReactNode, Suspense, useEffect, useId, us
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
@@ -19,7 +20,7 @@ import { ACCESSES, type Access, addressParts, fileAddress, type Site, shortMomen
 import { settingAddress } from "@/settings/setting-address";
 import { IconButton } from "@/shared/icon-button";
 import { useOnePress } from "@/dialog/one-press";
-import { PanelBlock, PanelFact, PanelFacts, PanelLoading, PanelSwitch, SidePanel } from "@/shared/side-panel";
+import { type Fold, PanelBlock, PanelFact, PanelFacts, PanelFold, PanelLoading, PanelSwitch, SidePanel, usePanelFold } from "@/shared/side-panel";
 import { Who } from "@/shared/who";
 import { DeleteForGood } from "@/sites/delete-for-good/delete-for-good";
 import { ExpiryRow } from "@/sites/expiry/expiry-row";
@@ -34,23 +35,35 @@ const EMBEDDING_NOTE = "Other pages may show this site in a frame and load its f
 /** The code of the refusal that says no site is at a label. */
 const GONE = "not_found";
 
+/** The folds of the panel, each by its own name among the folds the browser keeps. */
+const FOLDS = { files: "site.files", versions: "site.versions", details: "site.details" } as const;
+
 /** What joins the parts of a file's path. A folder's row in the tree is named by its path and one after it, and the row that reads on by one and the folder's path: no file's path ends or begins with one. */
 const SEPARATOR = "/";
 
 /** What is said where the tree's own code did not arrive. */
 const TREE_NOT_LOADED = "The files did not load. Check the connection, then try again.";
 
-/** How high the room of the tree may be: eight rows of 28 px, or of 40 px where a finger presses them. A longer tree scrolls in it. */
-const TREE_ROOM = "*:data-[slot=scroll-area-viewport]:max-h-56 max-md:*:data-[slot=scroll-area-viewport]:max-h-80";
+/** How high the room of the tree may be: eight rows of one line each, at 36 px, or at 44 px where a finger presses them. A longer tree scrolls in it. */
+const TREE_ROOM = "*:data-[slot=scroll-area-viewport]:max-h-72 max-md:*:data-[slot=scroll-area-viewport]:max-h-88";
+
+/** The rows of the tree in their room, with room around them. They end a step before the bar that scrolls the room, which lies over its right edge: a row's band stays clear of the bar, and a file's size stands 12 px before it. */
+const TREE_LIST = "flex flex-col py-2 pr-3.5 pl-2";
 
 /** An item of the tree. The keys move the focus from item to item, and it is drawn around the item's own row, not around the rows inside it. */
 const TREE_ITEM = "outline-none [&:focus-visible>[data-slot=tree-label]]:ring-2 [&:focus-visible>[data-slot=tree-label]]:ring-ring/50";
 
-/** A row of the tree: a folder, a file, or the row that reads on. Each can be pressed, so each shows the hand. */
-const TREE_ROW = "flex min-h-7 cursor-pointer items-center gap-1.5 rounded-sm px-1.5 py-1 font-mono text-xs hover:bg-muted max-md:min-h-10";
+/** A row of the tree: a folder, a file, or the row that reads on, at least as high as a row of the versions, and higher where its name takes more lines. Each can be pressed, so each shows the hand. */
+const TREE_ROW = "flex min-h-9 cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 hover:bg-muted max-md:min-h-11";
+
+/** The name of a folder or a file in its row, written as the number of a version is. It is written whole, on as many lines as it takes, with every space it has. */
+const TREE_NAME = "min-w-0 font-mono text-xs wrap-anywhere whitespace-pre-wrap";
+
+/** What a folder holds, under the folder's row: a line leads down from the folder's arrow, and the rows start an arrow's room further in. */
+const TREE_INSIDE = "ml-3.5 border-l pl-px";
 
 /** A sentence in the tree, where the rows of a folder would be: why the folder could not be read. */
-const TREE_SAYS = "px-1.5 py-1 text-muted-foreground";
+const TREE_SAYS = "px-2 py-2 text-muted-foreground";
 
 /** The room a folder's arrow takes before its name: a row without one starts after as much. */
 const ARROW_ROOM = "size-4 shrink-0";
@@ -131,6 +144,9 @@ interface FilesTreeProps {
   readonly onOpened: (opened: string[]) => void;
 }
 
+/** What Files takes of the reading of its site: whether the server answered one since the panel was drawn, whether one is under way, and the refusal of the last. */
+type SiteRead = Pick<UseQueryResult<Shown>, "isFetchedAfterMount" | "isSuccess" | "isFetching" | "error">;
+
 /** The site's link: its id is left out until it is shown, with Copy and Open beside it. A public site's other address is written the same way, under the one eye. */
 function LinkBlock({ site, actions, reveal }: { readonly site: Site; readonly actions: SiteActions; readonly reveal: Reveal }): ReactNode {
   const whole = reveal.shows(site);
@@ -186,59 +202,6 @@ function AccessBlock({ site, onChoose }: { readonly site: Site; readonly onChoos
   );
 }
 
-/** Word a count of visits. A count is an estimate, so it says "about", but for none: "about 0" reads as a slip. */
-function aboutCount(count: number): string {
-  return count === 0 ? "0" : `about ${showCount(count)}`;
-}
-
-function FactsBlock({ site }: { readonly site: Site }): ReactNode {
-  return (
-    <PanelBlock>
-      <PanelFacts>
-        <PanelFact name="Visits">{site.views === null ? "Not known" : `${aboutCount(site.views.today)} today, ${aboutCount(site.views.week)} in 7 days`}</PanelFact>
-        <PanelFact name="Size">
-          {showBytes(site.bytes)}, {site.files} {site.files === 1 ? "file" : "files"}
-        </PanelFact>
-        <PanelFact name="Updated">
-          <time title={wholeMoment(site.updated)}>{shortMoment(site.updated)}</time>
-        </PanelFact>
-        {site.state === "trash" ? null : <ExpiryRow site={site} />}
-      </PanelFacts>
-    </PanelBlock>
-  );
-}
-
-/** The kept versions, the newest first, each with who published it. */
-function VersionsBlock({ shown, onMakeLive }: { readonly shown: Shown; readonly onMakeLive: (version: number) => void }): ReactNode {
-  const { site, logins } = shown;
-  const newestFirst = [...site.versions].sort((left, right) => right.number - left.number);
-
-  return (
-    <PanelBlock label="Versions">
-      <ul className="flex flex-col">
-        {newestFirst.map((version) => (
-          <li key={version.number} className="flex h-9 items-center gap-3 max-md:h-11">
-            <span className="w-7 font-mono text-xs">v{version.number}</span>
-            <time title={wholeMoment(version.published)} className="w-24 shrink-0 text-muted-foreground">
-              {shortMoment(version.published)}
-            </time>
-            <span className="min-w-0 flex-1 truncate text-muted-foreground">
-              <Who by={version.published_by} logins={logins} />
-            </span>
-            {version.number === site.live_version ? (
-              <Badge variant="secondary">Live</Badge>
-            ) : (
-              <Button variant="outline" size="xs" aria-label={`Make live: version ${version.number}`} onClick={() => onMakeLive(version.number)}>
-                Make live
-              </Button>
-            )}
-          </li>
-        ))}
-      </ul>
-    </PanelBlock>
-  );
-}
-
 /** What a file or a folder is called in its row: the last part of its path. */
 function nameOf(path: string): string {
   return path.slice(path.lastIndexOf(SEPARATOR) + 1);
@@ -247,12 +210,17 @@ function nameOf(path: string): string {
 /** The grey lines that stand for the tree while its code and its top folder are read. */
 function FilesWaiting(): ReactNode {
   return (
-    <div className="flex flex-col gap-2 px-1.5 py-1.5" aria-busy="true">
+    <div className="flex flex-col gap-3 px-2 py-2" aria-busy="true">
       {WAITING_ROWS.map((width) => (
         <Skeleton key={width} className={cn("h-4", width)} />
       ))}
     </div>
   );
+}
+
+/** What stands where the tree would be while there is no row to draw: the grey lines while a read is under way, or the sentence of the refusal that ended it. */
+function Unread({ error }: { readonly error: Error | null }): ReactNode {
+  return error === null ? <FilesWaiting /> : <p className="text-muted-foreground">{error.message}</p>;
 }
 
 /**
@@ -278,7 +246,7 @@ function MoreRow({ parts, path, more, focus, read, above }: FolderProps & { read
 
   return (
     <TreeItem value={value} className={TREE_ITEM}>
-      <TreeItemLabel className={cn(TREE_ROW, "font-sans text-link")}>
+      <TreeItemLabel className={cn(TREE_ROW, "text-link")}>
         {(state) => (
           <>
             <span className={cn(ARROW_ROOM, "flex items-center justify-center")}>{state.pending ? <Spinner className="size-3" /> : null}</span>
@@ -313,8 +281,8 @@ function FolderRows({ parts, site, path, more, focus, read }: FolderProps & { re
         <TreeItem key={file.path} value={file.path} label={nameOf(file.path)} className={TREE_ITEM}>
           <TreeItemLabel render={<a href={fileAddress(site.url, file.path)} target="_blank" rel="noreferrer" />} className={cn(TREE_ROW, "group/file")}>
             <span className={ARROW_ROOM} />
-            <span className="min-w-0 flex-1 wrap-anywhere whitespace-pre-wrap group-hover/file:underline">{nameOf(file.path)}</span>
-            <span className="shrink-0 font-sans text-muted-foreground tabular-nums">{showBytes(file.size)}</span>
+            <span className={cn(TREE_NAME, "flex-1 group-hover/file:underline")}>{nameOf(file.path)}</span>
+            <span className="shrink-0 pl-2 text-muted-foreground tabular-nums">{showBytes(file.size)}</span>
           </TreeItemLabel>
         </TreeItem>
       ))}
@@ -340,14 +308,14 @@ function FolderItem({ parts, site, path, more, focus }: FolderProps): ReactNode 
         <TreeItemIndicator className={cn(ARROW_ROOM, "flex items-center justify-center")}>
           {(state) => (state.loading ? <Spinner className="size-3" /> : <ChevronRightIcon aria-hidden="true" className={cn("size-3.5 transition-transform", state.expanded && "rotate-90")} />)}
         </TreeItemIndicator>
-        <span className="min-w-0 wrap-anywhere whitespace-pre-wrap">{`${nameOf(path)}${SEPARATOR}`}</span>
+        <span className={TREE_NAME}>{`${nameOf(path)}${SEPARATOR}`}</span>
       </TreeItemLabel>
       {data === undefined ? null : (
-        <TreeGroup className="pl-4">
+        <TreeGroup className={TREE_INSIDE}>
           <FolderRows parts={parts} site={site} path={path} more={more} focus={focus} read={read} />
         </TreeGroup>
       )}
-      {data === undefined && error !== null ? <p className={cn(TREE_SAYS, "pl-7")}>{error.message}</p> : null}
+      {data === undefined && error !== null ? <p className={cn(TREE_SAYS, "pl-8")}>{error.message}</p> : null}
     </TreeItem>
   );
 }
@@ -371,7 +339,7 @@ function DrawnTree({ parts, site, top, opened, onOpened }: FilesTreeProps & { re
   const [controller] = useState(() => parts.createTreeController());
   const readFolder = useSiteFolderRead(site);
   const [first] = top.data?.pages ?? [];
-  if (first === undefined) return top.error === null ? <FilesWaiting /> : <p className="text-muted-foreground">{top.error.message}</p>;
+  if (first === undefined) return <Unread error={top.error} />;
 
   if (first.folders.length === 0 && first.files.length === 0 && first.next === null) return <p className="text-muted-foreground">No files.</p>;
 
@@ -381,7 +349,7 @@ function DrawnTree({ parts, site, top, opened, onOpened }: FilesTreeProps & { re
         <Tree
           aria-label="Files"
           mode="none"
-          className="flex flex-col p-1"
+          className={TREE_LIST}
           expanded={opened}
           onExpandedChange={onOpened}
           controller={controller}
@@ -396,36 +364,86 @@ function DrawnTree({ parts, site, top, opened, onOpened }: FilesTreeProps & { re
 }
 
 /**
- * The files of the live version as a tree of its folders, folded away until it is asked for.
+ * The tree of one live version's files, and which of its folders are open.
  *
- * Nothing is read before: the first opening reads the top folder and loads the tree's code, and a folder is read when it is opened.
+ * It is drawn only while it is in sight: its code is a file of its own, which a browser loads when the tree is first drawn. The open folders stay while it is not, so the tree is as it was when it is in sight again.
  */
-function FilesBlock({ site }: { readonly site: Site }): ReactNode {
-  const [open, setOpen] = useState(false);
+function VersionTree({ site, top, inSight }: { readonly site: Site; readonly top: FolderRead; readonly inSight: boolean }): ReactNode {
   const [opened, setOpened] = useState<string[]>([]);
-  const top = useSiteFolder(site, "", open);
-  const total = top.data?.pages[0]?.total;
+  if (!inSight) return null;
 
   return (
-    <PanelBlock>
-      <Collapsible open={open} onOpenChange={setOpen}>
-        <h3>
-          <CollapsibleTrigger render={<Button variant="ghost" size="xs" className="group/files -ml-2 text-muted-foreground max-md:min-h-10" />}>
-            <ChevronRightIcon className="transition-transform group-data-[panel-open]/files:rotate-90" />
-            Files
-            {total === undefined ? null : <span className="font-normal text-faint tabular-nums">{showCount(total)}</span>}
-          </CollapsibleTrigger>
-        </h3>
-        <CollapsibleContent className="flex flex-col gap-2 pt-2">
-          <CatchBoundary getResetKey={() => site.id} errorComponent={TreeNotLoaded}>
-            <Suspense fallback={<FilesWaiting />}>
-              <FilesTree site={site} top={top} opened={opened} onOpened={setOpened} />
-            </Suspense>
-          </CatchBoundary>
-        </CollapsibleContent>
-      </Collapsible>
-    </PanelBlock>
+    <CatchBoundary getResetKey={() => site.id} errorComponent={TreeNotLoaded}>
+      <Suspense fallback={<FilesWaiting />}>
+        <FilesTree site={site} top={top} opened={opened} onOpened={setOpened} />
+      </Suspense>
+    </CatchBoundary>
   );
+}
+
+/**
+ * The files of the live version as a tree of its folders, folded away until it is asked for.
+ *
+ * Nothing is read while it is folded. Open, it reads the top folder: at the press that opens it, or as the panel is drawn where the browser kept it open. A folder is read when it is opened.
+ * Other files are another tree, with none of its folders open; the fold and its heading stay as they are over them.
+ *
+ * Which version is live is known once the server has answered a reading of the site made since the panel was drawn, and until it refuses a later one.
+ * A site kept from before may name a version that is live no more: until it is known, no file is listed and no kept row is shown, and a refusal is said where the tree would be.
+ */
+function FilesBlock({ site, read, fold }: { readonly site: Site; readonly read: SiteRead; readonly fold: Fold }): ReactNode {
+  const [open] = fold;
+  const known = read.isFetchedAfterMount && read.isSuccess;
+  const settled = known && !read.isFetching;
+  // A reading that is under way may name another version. The tree that is in sight stays over it; no other row comes into sight, and the top folder is not read, until it is answered.
+  const [wasInSight, setWasInSight] = useState(false);
+  const inSight = open && (settled || (known && wasInSight));
+  if (wasInSight !== inSight) setWasInSight(inSight);
+
+  const top = useSiteFolder(site, "", open && settled);
+  const total = known ? top.data?.pages[0]?.total : undefined;
+
+  return (
+    <PanelFold fold={fold} name="Files" fact={total === undefined ? undefined : showCount(total)}>
+      {open && !inSight ? <Unread error={read.error} /> : null}
+      <VersionTree key={siteFilesKey(site)} site={site} top={top} inSight={inSight} />
+    </PanelFold>
+  );
+}
+
+/** The kept versions, the newest first, each with who published it, folded away under how many are kept. */
+function VersionsBlock({ shown, fold, onMakeLive }: { readonly shown: Shown; readonly fold: Fold; readonly onMakeLive: (version: number) => void }): ReactNode {
+  const { site, logins } = shown;
+  const newestFirst = site.versions.toSorted((left, right) => right.number - left.number);
+
+  return (
+    <PanelFold fold={fold} name="Versions" fact={showCount(site.versions.length)}>
+      <ul className="flex flex-col">
+        {newestFirst.map((version) => (
+          <li key={version.number} className="flex h-9 items-center gap-3 max-md:h-11">
+            <span className="w-7 font-mono text-xs">v{version.number}</span>
+            <time title={wholeMoment(version.published)} className="w-24 shrink-0 text-muted-foreground">
+              {shortMoment(version.published)}
+            </time>
+            <span className="min-w-0 flex-1 truncate text-muted-foreground">
+              <Who by={version.published_by} logins={logins} />
+            </span>
+            {version.number === site.live_version ? (
+              <Badge variant="secondary">Live</Badge>
+            ) : (
+              <Button variant="outline" size="xs" aria-label={`Make live: version ${version.number}`} onClick={() => onMakeLive(version.number)}>
+                Make live
+              </Button>
+            )}
+          </li>
+        ))}
+      </ul>
+    </PanelFold>
+  );
+}
+
+/** Word a count of visits. A count is an estimate, so it says "about", but for none: "about 0" reads as a slip. */
+function aboutCount(count: number): string {
+  return count === 0 ? "0" : `about ${showCount(count)}`;
 }
 
 /** What stands under the switch for search engines while it changes nothing: the install keeps search engines out of every site, which is said with the way to that setting, or the site is not public. Where both hold, the install's is said alone. */
@@ -442,6 +460,49 @@ function searchNote({ open, allowed }: { readonly open: boolean; readonly allowe
       </Link>
       .
     </>
+  );
+}
+
+/**
+ * What is seldom looked at, folded away: the site's facts, and under them the two settings it is seldom given.
+ *
+ * A site in the trash has its facts alone, without the day it expires: it is served to nobody, and it comes back with its settings.
+ */
+function DetailsBlock({ shown, actions, fold }: { readonly shown: Shown; readonly actions: SiteActions; readonly fold: Fold }): ReactNode {
+  const { site } = shown;
+  const trashed = site.state === "trash";
+
+  return (
+    <PanelFold fold={fold} name="Details">
+      <PanelFacts>
+        <PanelFact name="Visits">{site.views === null ? "Not known" : `${aboutCount(site.views.today)} today, ${aboutCount(site.views.week)} in 7 days`}</PanelFact>
+        <PanelFact name="Size">
+          {showBytes(site.bytes)}, {site.files} {site.files === 1 ? "file" : "files"}
+        </PanelFact>
+        <PanelFact name="Updated">
+          <time title={wholeMoment(site.updated)}>{shortMoment(site.updated)}</time>
+        </PanelFact>
+        {trashed ? null : <ExpiryRow site={site} />}
+      </PanelFacts>
+      {trashed ? null : (
+        <div className="flex flex-col gap-2 pt-2">
+          <PanelSwitch
+            id="site-search-engines"
+            label="Show in search engines"
+            on={site.search_engines}
+            onChange={(on) => actions.setSetting(site, "search_engines", on)}
+            note={searchNote({ open: site.access === "public", allowed: shown.search_engines_allowed })}
+          />
+          <PanelSwitch
+            id="site-embeddable"
+            label="Allow embedding"
+            on={site.embeddable}
+            onChange={(on) => actions.setSetting(site, "embeddable", on)}
+            note={EMBEDDING_NOTE}
+          />
+        </div>
+      )}
+    </PanelFold>
   );
 }
 
@@ -467,8 +528,11 @@ function TrashBlock({ site, onRestore, onGone }: { readonly site: Site; readonly
 
 /** Draw the panel of one site. It reads the site when it opens and after every change. */
 export function SitePanel({ label, actions, reveal, onAsk, closeLink, onClose, opener, onMoved }: SitePanelProps): ReactNode {
-  const { data, error, isFetching } = useSite(label);
+  const read = useSite(label);
+  const { data, error, isFetching } = read;
   const failure = error?.message;
+  // The panel holds its folds, so each stays as it is for as long as the panel is drawn, also where a change draws its block anew: a site that comes back from the trash has its Details in another place.
+  const folds = { files: usePanelFold(FOLDS.files), versions: usePanelFold(FOLDS.versions), details: usePanelFold(FOLDS.details) };
 
   // A site reached under a label it no longer has is shown at the address of the one it has now. Only a fresh answer says so: one kept from before a rename may name a label the site has left again.
   const moved = data !== undefined && !isFetching && data.site.label !== label ? data.site : undefined;
@@ -505,7 +569,7 @@ export function SitePanel({ label, actions, reveal, onAsk, closeLink, onClose, o
   if (site.state === "trash") {
     return (
       <SidePanel title={shownName(site)} {...frame}>
-        <FactsBlock site={site} />
+        <DetailsBlock shown={data} actions={actions} fold={folds.details} />
         <TrashBlock site={site} onRestore={() => actions.restore(site)} onGone={onClose} />
       </SidePanel>
     );
@@ -521,26 +585,9 @@ export function SitePanel({ label, actions, reveal, onAsk, closeLink, onClose, o
     <SidePanel title={shownName(site)} beside={editButton} {...frame}>
       <LinkBlock site={site} actions={actions} reveal={reveal} />
       <AccessBlock site={site} onChoose={choose} />
-      <FactsBlock site={site} />
-      <VersionsBlock shown={data} onMakeLive={(number) => void actions.makeLive(site, number)} />
-      {/* Other files are another tree: it starts folded, with nothing read and no folder open. */}
-      <FilesBlock key={siteFilesKey(site)} site={site} />
-      <PanelBlock label="Settings">
-        <PanelSwitch
-          id="site-search-engines"
-          label="Show in search engines"
-          on={site.search_engines}
-          onChange={(on) => actions.setSetting(site, "search_engines", on)}
-          note={searchNote({ open: site.access === "public", allowed: data.search_engines_allowed })}
-        />
-        <PanelSwitch
-          id="site-embeddable"
-          label="Allow embedding"
-          on={site.embeddable}
-          onChange={(on) => actions.setSetting(site, "embeddable", on)}
-          note={EMBEDDING_NOTE}
-        />
-      </PanelBlock>
+      <FilesBlock site={site} read={read} fold={folds.files} />
+      <VersionsBlock shown={data} fold={folds.versions} onMakeLive={(number) => void actions.makeLive(site, number)} />
+      <DetailsBlock shown={data} actions={actions} fold={folds.details} />
       <PanelBlock>
         <div className="flex items-center gap-2">
           <Button variant="outline" onClick={() => onAsk(site, { kind: "new-link" })}>

@@ -2,10 +2,13 @@
 
 import { expect, type Locator, type Page } from "@playwright/test";
 
-import { arrive, SECTIONS_BUTTON, test, toSection } from "./visit";
+import { arrive, openFold, openPanel, SECTIONS_BUTTON, test, toSection } from "./visit";
 
 /** The least a control measures on a phone, each way, in pixels. */
 const FINGER = 40;
+
+/** The sample site whose panel is opened, by its title. */
+const PANEL_OF = "Pricing";
 
 /** How far from a control's middle a finger still lands on it, in pixels: a pixel inside half a finger. */
 const REACH = FINGER / 2 - 1;
@@ -92,7 +95,24 @@ test.describe("on a phone, with a pointer that is not a finger", () => {
     });
   }
 
-  // Drift: the way back to a setting's default, a link inside the words about the setting, would stay as low as its line of text under a finger.
+  // Drift: the pencil beside a value is an icon button that is also a menu's trigger, and would be drawn as the trigger alone, 28 px each way, where the rule for a phone's sizes finds a button by its class.
+  test("the pencil that changes when a site expires, in the site's panel, is at least a finger each way", async ({ page }) => {
+    await arrive(page);
+    await openPanel(page, PANEL_OF);
+    const panel = page.getByRole("dialog", { name: PANEL_OF, exact: true });
+    await openFold(panel, "Details");
+
+    // The panel slides into place as it opens: the pencil is measured until it has its whole size.
+    const pencil = panel.getByRole("button", { name: "Change when it expires", exact: true });
+    const least = async (): Promise<number> => {
+      const [, width, height] = await measured(pencil);
+
+      return Math.min(width, height);
+    };
+
+    await expect.poll(least, "the smaller of the pencil's width and height").toBeGreaterThanOrEqual(FINGER);
+  });
+
   test("the Reset of a changed setting, in what a phone says about the setting, is at least a finger high", async ({ page }) => {
     await arrive(page);
     await toSection(page, "Settings");

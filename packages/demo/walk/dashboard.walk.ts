@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 
 import { expect, type Locator, type Page } from "@playwright/test";
 
-import { arrive, isUnanswered, onPage, openPanel, ownClipboard, reset, SECTIONS_BUTTON, said, screenHeading, siteName, TRASH, test, toSection } from "./visit";
+import { arrive, isUnanswered, onPage, openFold, openPanel, ownClipboard, reset, SECTIONS_BUTTON, said, screenHeading, siteName, TRASH, test, toSection } from "./visit";
 
 /** The screens the walk is taken on. A wide one shows tables and the side navigation; a narrow one shows lists, and the sections behind a button. */
 const VIEWPORTS = [
@@ -184,7 +184,7 @@ const STOPS: readonly Stop[] = [
     open: (page) => openPanel(page, SAMPLE.site),
     shows: (page) => [
       panel(page).getByRole("heading", { name: SAMPLE.site, exact: true }),
-      panel(page).getByRole("heading", { name: "Versions", exact: true }),
+      panel(page).getByRole("heading", { name: /^Versions ?\d+$/ }),
     ],
   },
   {
@@ -797,6 +797,7 @@ test.describe("on a screen 1440 px wide, under a site's panel", () => {
     await expect(row(SAMPLE.site)).toBeFocused();
 
     await openPanel(page, SAMPLE.site);
+    await openFold(panel(page), "Details");
     await panel(page).getByRole("switch", { name: "Allow embedding", exact: true }).click();
     await lines(page).getByRole("button", { name: "Undo", exact: true }).click();
     await expect(lines(page).filter({ hasText: "Put back." })).toBeVisible();
@@ -918,6 +919,7 @@ test.describe("on a phone, while a line says a result", () => {
   test("the last control of a site's panel is pressed after one move of the panel while a result is said, a newer result takes the older one's place, and a result with no button leaves at a press", async ({ page }) => {
     await arrive(page);
     await openPanel(page, SAMPLE.site);
+    await openFold(panel(page), "Details");
     await panel(page).getByRole("switch", { name: "Allow embedding", exact: true }).click();
     await expect(lines(page).filter({ hasText: "Saved." })).toBeVisible();
 
@@ -925,6 +927,7 @@ test.describe("on a phone, while a line says a result", () => {
     await panel(page).getByRole("button", { name: "New link", exact: true }).click({ timeout: 2000 });
     await leaveBy("Cancel")(page);
 
+    await openFold(panel(page), "Versions");
     await panel(page).getByRole("button", { name: /^Make live: version \d+$/u }).first().click();
     await expect(lines(page).filter({ hasText: /is live now/ })).toBeVisible();
     await expect(lines(page)).toHaveCount(1);
@@ -981,6 +984,7 @@ for (const size of [PHONE, FITS_FROM]) {
 test("a result's Undo is reached with the keys the result names, and Close comes after it", async ({ page }) => {
   await arrive(page);
   await openPanel(page, SAMPLE.site);
+  await openFold(panel(page), "Details");
   await panel(page).getByRole("switch", { name: "Allow embedding", exact: true }).click();
   const saved = lines(page).filter({ hasText: "Saved." });
   await expect(saved).toContainText("Press Alt+T to reach Undo.");
@@ -999,6 +1003,7 @@ test("a result's Undo is reached with the keys the result names, and Close comes
 test("a result with a button lies inside the header, at 1440 and at 1024 px", async ({ page }) => {
   await arrive(page);
   await openPanel(page, SAMPLE.site);
+  await openFold(panel(page), "Details");
   await panel(page).getByRole("switch", { name: "Allow embedding", exact: true }).click();
   const saved = lines(page).filter({ hasText: "Press Alt+T to reach Undo." });
   const header = page.locator("header").filter({ has: screenHeading(page, "Sites") });
@@ -1219,6 +1224,7 @@ test("a public site is asked about before its public link ends, Cancel leaves it
 test("after a change the focus is where the next key is of use: the panel's heading, also after Undo, the refused field, the button that adds a user, another page's first row, the button of one site's mark, a reset setting's field", async ({ page }) => {
   await arrive(page);
   await openPanel(page, SAMPLE.site);
+  await openFold(panel(page), "Versions");
   await panel(page).getByRole("button", { name: /^Make live: version \d+$/u }).first().click();
   await expect(page.getByText(/is live now/)).toBeVisible();
   await expect(panel(page).getByRole("heading", { name: SAMPLE.site, exact: true })).toBeFocused();
@@ -1436,23 +1442,27 @@ test("two times of the same length take the same room in the face the dashboard 
   expect(measured.control[0]).not.toBe(measured.control[1]);
 });
 
-// Drift: a site could be told when to delete itself from a terminal alone, or the panel would show a span where the day it ends on is asked for.
+// Drift: a site could be told when to delete itself from a terminal alone, or the panel would show a span where the day it ends on is asked for;
+// or a button with a word of its own would stand beside the moment again, where the pencil is that says what it changes in its hint.
 test("in a site's panel, a span is shown as the moment it ends before it is saved and after, Undo takes it away again, and a day is picked in a dialog that one Escape leaves", async ({ page }) => {
   const fact = panel(page).locator("dd").filter({ has: page.getByRole("button", { name: "Change when it expires", exact: true }) });
   const change = panel(page).getByRole("button", { name: "Change when it expires", exact: true });
   await arrive(page);
   await openPanel(page, SAMPLE.site);
-  await expect(fact).toHaveText("NeverChange");
+  await openFold(panel(page), "Details");
+  await expect(fact).toHaveText("Never");
+  await change.hover();
+  await expect(page.locator("[data-slot=tooltip-content]")).toHaveText("Change when it expires");
 
   await change.click();
   await expect(page.getByRole("menuitem")).toHaveText([new RegExp(`^1 day${MOMENT}$`), new RegExp(`^7 days${MOMENT}$`), new RegExp(`^30 days${MOMENT}$`), "On a day...", "Never"]);
   await page.getByRole("menuitem", { name: /^7 days/ }).click();
   await expect(said(page, "Saved.")).toBeVisible();
-  await expect(fact).toHaveText(new RegExp(`^${MOMENT}ChangeThen its link stops working, and it moves to the trash\\.$`));
+  await expect(fact).toHaveText(new RegExp(`^${MOMENT}Then its link stops working, and it moves to the trash\\.$`));
 
   await lines(page).filter({ hasText: "Saved." }).getByRole("button", { name: "Undo", exact: true }).click();
   await expect(said(page, "Put back.")).toBeVisible();
-  await expect(fact).toHaveText("NeverChange");
+  await expect(fact).toHaveText("Never");
 
   await change.click();
   await page.getByRole("menuitem", { name: "On a day...", exact: true }).click();
@@ -1465,7 +1475,7 @@ test("in a site's panel, a span is shown as the moment it ends before it is save
   await pressEscape(page);
   await expect(day).toBeHidden();
   await expect(change).toBeFocused();
-  await expect(fact).toHaveText("NeverChange");
+  await expect(fact).toHaveText("Never");
 });
 
 // Drift: a site in the trash could be removed for good from a terminal alone, or one press would remove it, with its title or its bare name where its label is asked for: two sites may share a name.

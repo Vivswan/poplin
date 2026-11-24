@@ -28,7 +28,8 @@ Cloudflare's free plan     one request: 50 database queries
 | Download a file of the Activity log | 1 | 4 | 2,003 | 0 | 0 | 0 |
 
 - **A screen** counts its own requests. The frame around every screen is one more, of 2 queries.
-- **A site's files**, in its panel, are read a page of up to 200 rows at a time: one request with one listing of the storage for each folder that is first opened, and for each Show more. [Sites](../../dashboard/sites.md) says when a folder is read.
+- **A site's panel** reads its site each time it opens: one request, with no listing of the storage.
+- **A site's files**, in its panel, are read a page of up to 200 rows at a time: one request with one listing of the storage for each folder that is first opened, and for each Show more. A panel that opens with Files left open opens the top folder, unless that folder is kept from before. [Sites](../../dashboard/sites.md) says when a folder is read.
 - **A publish** is three requests: its start, its one file, its finish. One of more than 100 files adds a request for every 100 files, which reads 2 rows and writes none.
 - **With the upload key** a file is no request to the install: a publish of 5 files is 2 requests in place of 7, and one of 500 files is 7 in place of 507. The bucket's writes stay the same, and the read before each write goes.
 - **A copy** of up to 112 files is one request. A larger one goes on in rounds, each with a read and a write for every file it copies and a listing for every 1,000 files of the site.

@@ -82,7 +82,7 @@ An install begins two logins a minute from one address, and eight a minute for a
 
 The page that approves a login starts at the role Publisher, whatever the machine asked for. A publisher changes its own sites only. Choose Admin there for a machine that changes settings or sees every site.
 
-The same page says when the token expires, and its Change sets another moment. Until you choose one, the expiry follows the role: an Admin token expires after 30 days, a Publisher token never.
+The same page says when the token expires, and the pencil beside that sets another moment. Until you choose one, the expiry follows the role: an Admin token expires after 30 days, a Publisher token never.
 
 | Expires                  | The token stops working                                                        |
 | ------------------------ | ------------------------------------------------------------------------------ |

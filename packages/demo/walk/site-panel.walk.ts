@@ -1,13 +1,19 @@
 // A site's panel on the screens between a phone and the widest: it lies over the end of the list, which stays in sight and in reach beside it. And its Edit, which starts from what the site holds every time it is opened.
-// And the fields that take a site's name or a user's email, which keep one that is too long and say so. And where a phone's panel breaks a long link. And the tree of a site's files.
+// And the fields that take a site's name or a user's email, which keep one that is too long and say so. And where a phone's panel breaks a long link. And its three folds, and the tree of a site's files.
 
-import { expect } from "@playwright/test";
+import { expect, type Locator } from "@playwright/test";
 
-import { arrive, onPage, openPanel, siteName, test, toSection } from "./visit";
+import { arrive, FIRST_LOAD_MS, FOLDS, foldOf, onPage, openFold, openPanel, siteName, test, toSection } from "./visit";
 
 /** The screens the walk is taken on: the narrowest the Sites table fits, and one between it and the widest. */
 const SCREENS = [
   { width: 1024, height: 768 },
+  { width: 1280, height: 800 },
+] as const;
+
+/** The screens the folds are walked on: a phone, where the panel takes the list's place, and one it lies over the list on. */
+const FOLD_SCREENS = [
+  { width: 390, height: 844 },
   { width: 1280, height: 800 },
 ] as const;
 
@@ -35,6 +41,20 @@ const NAMED = [
   { opens: "Duplicate", dialog: `Duplicate ${SAMPLE.opened}?`, field: "Name", sends: "Duplicate" },
   { opens: "Public", dialog: `Make ${SAMPLE.opened} public?`, field: "Public name", sends: "Make it public" },
 ] as const;
+
+/** Whether each fold of a panel is open, as its heading says it, in the order of the screen. */
+function folds(panel: Locator): Promise<(string | null)[]> {
+  return Promise.all(FOLDS.map((name) => foldOf(panel, name).getAttribute("aria-expanded")));
+}
+
+/** Make another version of the panel's site live, and wait until the panel shows it live: the button that was pressed leaves then. */
+async function makeLive(panel: Locator): Promise<void> {
+  const button = panel.getByRole("button", { name: /^Make live: version \d+$/u }).first();
+  const pressed = (await button.getAttribute("aria-label")) ?? "";
+  await button.click();
+
+  await expect(panel.getByRole("button", { name: pressed, exact: true })).toHaveCount(0);
+}
 
 for (const size of SCREENS) {
   test.describe(`on a screen ${size.width} px wide, under a site's panel`, () => {
@@ -144,6 +164,82 @@ test.describe("on a phone, in a site's panel", () => {
   });
 });
 
+for (const size of FOLD_SCREENS) {
+  test.describe(`on a screen ${size.width} px wide, at the folds of a site's panel`, () => {
+    test.use({ viewport: size });
+
+    // Drift: the files, the versions, and the facts would stand open again over a panel as long as it was; Tab would reach the folds in another order than the screen has them in;
+    // a fold would close over a change made in it; or one a person opened would be folded again in the next site's panel, and after the page is loaded again.
+    test("the folds start folded and follow who can open the site in the order of the keys; they stay open over Make live, and as they were left in the next site's panel and after the page is loaded again", async ({ page }) => {
+      await arrive(page);
+      await openPanel(page, NESTED.title);
+      const first = page.getByRole("dialog", { name: NESTED.title, exact: true });
+      await expect(foldOf(first, "Details")).toBeVisible();
+      expect(await folds(first)).toEqual(["false", "false", "false"]);
+
+      await first.getByRole("button", { name: "Public", exact: true }).focus();
+      for (const name of FOLDS) {
+        await page.keyboard.press("Tab");
+        await expect(foldOf(first, name)).toBeFocused();
+      }
+      await page.keyboard.press("Enter");
+      await expect(first.getByRole("switch", { name: "Allow embedding", exact: true })).toBeVisible();
+      for (const name of ["Files", "Versions"] as const) await foldOf(first, name).press("Enter");
+
+      // Another version live is another tree of files: Files stays open over it, as Versions does over the button that was pressed.
+      await makeLive(first);
+      await expect(first.getByRole("tree", { name: "Files", exact: true })).toBeVisible();
+      expect(await folds(first)).toEqual(["true", "true", "true"]);
+
+      await foldOf(first, "Versions").press("Enter");
+      await page.keyboard.press("Escape");
+      await expect(page.getByRole("dialog")).toHaveCount(0);
+      await openPanel(page, SAMPLE.opened);
+      const next = page.getByRole("dialog", { name: SAMPLE.opened, exact: true });
+      await expect(next.getByRole("tree", { name: "Files", exact: true })).toBeVisible();
+      expect(await folds(next)).toEqual(["true", "false", "true"]);
+
+      // The address holds the open panel, so the page comes back with it.
+      await page.reload();
+      await expect(next.getByRole("tree", { name: "Files", exact: true })).toBeVisible({ timeout: FIRST_LOAD_MS });
+      await expect(next.getByRole("switch", { name: "Allow embedding", exact: true })).toBeVisible();
+      expect(await folds(next)).toEqual(["true", "false", "true"]);
+    });
+  });
+}
+
+// Drift: a fold that another tab folded away would take with it the question that is open in it and the control that holds the focus, which Firefox and WebKit then leave on the page itself, outside the panel;
+// or Files would be drawn anew with another live version's tree, as the other tab left it.
+test("a fold that is drawn stays as it is when another tab folds it away, with the focus in it and over Make live; the next panel that is drawn has it folded", async ({ page, context }) => {
+  await arrive(page);
+  await openPanel(page, NESTED.title);
+  const panel = page.getByRole("dialog", { name: NESTED.title, exact: true });
+  const embedding = panel.getByRole("switch", { name: "Allow embedding", exact: true });
+  for (const name of FOLDS) await openFold(panel, name);
+  await embedding.focus();
+
+  const other = await context.newPage();
+  await arrive(other);
+  await openPanel(other, NESTED.title);
+  const there = other.getByRole("dialog", { name: NESTED.title, exact: true });
+  for (const name of ["Files", "Details"] as const) {
+    await foldOf(there, name).click();
+    await expect(foldOf(there, name)).toHaveAttribute("aria-expanded", "false");
+  }
+
+  await page.bringToFront();
+  await expect(embedding).toBeFocused();
+  await makeLive(panel);
+  await expect(panel.getByRole("tree", { name: "Files", exact: true })).toBeVisible();
+  expect(await folds(panel)).toEqual(["true", "true", "true"]);
+
+  await page.keyboard.press("Escape");
+  await openPanel(page, SAMPLE.opened);
+  const next = page.getByRole("dialog", { name: SAMPLE.opened, exact: true });
+  await expect(foldOf(next, "Versions")).toHaveAttribute("aria-expanded", "true");
+  expect(await folds(next)).toEqual(["false", "true", "false"]);
+});
+
 // Drift: the panel would say how many files a site holds and name none of them; or a folder would open on nothing, or a file's row lead to another file than the one it names.
 test("Files in a site's panel opens as a tree with the folders first, a folder opens on what it holds, and a file in it opens that file of the site in a new tab", async ({ page }) => {
   await arrive(page);
@@ -152,7 +248,7 @@ test("Files in a site's panel opens as a tree with the folders first, a folder o
   const tree = panel.getByRole("tree", { name: "Files", exact: true });
   await expect(tree).toHaveCount(0);
 
-  await panel.getByRole("button", { name: /^Files/ }).click();
+  await openFold(panel, "Files");
   const top = tree.locator("[role='treeitem'][aria-level='1']");
   await expect(top.first()).toBeVisible();
   // A folder's row is pressed, so it shows the hand, as every other control does.

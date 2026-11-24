@@ -1,4 +1,5 @@
-// The panel of one site: what stands under the switch for search engines while the switch changes nothing, and under the one for embedding, who can open it, and how its visits are worded.
+// The panel of one site: what stands under the switch for search engines while the switch changes nothing, and under the one for embedding, who can open it, how its visits are worded,
+// its three folds, and the files of its live version.
 
 import { clearPage } from "../lib/support/page";
 
@@ -10,6 +11,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import type { SiteActions } from "@/sites/site-actions";
 import { SitePanel } from "@/sites/site-panel";
 
+import { openFold } from "../lib/support/fold";
 import { drawAt } from "../lib/support/router";
 
 /** The runtime's own `fetch`, put back after each test. */
@@ -17,6 +19,9 @@ const OWN_FETCH = globalThis.fetch;
 
 /** The line under the switch for embedding, which every site's panel carries. */
 const EMBEDDING = "Other pages may show this site in a frame and load its files.";
+
+/** What the server answers while it reads no site: the day's requests are used up. */
+const BUSY = { ok: false, code: "allowance_spent", about: "requests_per_day", sentence: "The install takes no more requests today." };
 
 /** A site as the server answers it. */
 const SITE = {
@@ -41,7 +46,7 @@ const SITE = {
   views: { today: 0, week: 0 },
 };
 
-/** Draw the panel of a site that anyone, or only its owner, can open, on an install that lets search engines in or keeps them out, with the visits the site counted. */
+/** Draw the panel of a site that anyone, or only its owner, can open, on an install that lets search engines in or keeps them out, with the visits the site counted, and open its Details. */
 async function draw(access: string, allowed: boolean, views: typeof SITE.views = SITE.views): Promise<void> {
   globalThis.fetch = (async () => Response.json({ ok: true, site: { ...SITE, access, views }, logins: {}, search_engines_allowed: allowed })) as unknown as typeof fetch;
   await drawAt(
@@ -61,7 +66,13 @@ async function draw(access: string, allowed: boolean, views: typeof SITE.views =
       </TooltipProvider>
     </QueryClientProvider>,
   );
+  await openFold("Details");
   await within(document.body).findByText("Show in search engines");
+}
+
+/** What each row of the tree of a site's files says, from the top down. */
+function rows(): readonly string[] {
+  return [...document.querySelectorAll("[role='tree'] [data-slot='tree-label']")].map((row) => row.textContent ?? "");
 }
 
 /** The line each of the two switches is described by, as a screen reader says it after the switch's name, in the panel's order. */
@@ -154,7 +165,7 @@ describe("a panel whose site is no longer there", () => {
   test("closes once the site it showed is gone, and an address that never named a site keeps its sentence", async () => {
     const there = { on: true };
     const shown = await drawn(there);
-    await within(document.body).findByText("Show in search engines");
+    await within(document.body).findByText("New link");
     there.on = false;
     // The site's read is made again and refused, with the site it read before still held, as after a delete in another tab.
     await act(async () => shown.client.invalidateQueries());
@@ -165,6 +176,290 @@ describe("a panel whose site is no longer there", () => {
     await within(document.body).findByText(GONE.sentence);
 
     expect(never.closed()).toBe(0);
+  });
+});
+
+describe("the folds of a site's panel", () => {
+  /** The folds, by their headings. */
+  const FOLDS = ["Files", "Versions", "Details"] as const;
+
+  /** The top of a site's files as the server answers it: one file. */
+  const TOP = { ok: true, folders: [], files: [{ path: "index.html", size: 7 }], next: null, total: 1 };
+
+  /** A second site, with two versions, the newer one live. */
+  const OTHER = {
+    ...SITE,
+    id: "xyz789uvw012",
+    label: "road-map--xyz789uvw012",
+    name: "road-map",
+    title: "Road map",
+    versions: [...SITE.versions, { number: 2, published: 1_700_086_400_000, published_by: "mira@example.com" }],
+    live_version: 2,
+  };
+
+  /** What a server answers of a site at the time: the site, a refusal in its place while `refused` holds, and neither before `until` is settled. */
+  interface Served {
+    site: typeof SITE;
+    refused?: boolean;
+    until?: Promise<void>;
+  }
+
+  /** A place that keeps a reading of a site for half a minute, as the dashboard's own does: a panel drawn inside that time finds the site kept, and still fresh. */
+  function keeping(): QueryClient {
+    return new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: 30_000 } } });
+  }
+
+  /**
+   * Draw the panel of a site over a server that answers of the site what `served` holds at the time, and holds back the top of its files until it is told to answer.
+   *
+   * @param actions - the changes of a site that a test presses; left out, the panel has none
+   * @param client - what the panel keeps of the server's answers; left out, it keeps nothing from before
+   * @returns `asked`, the version of each request for the files, `listed`, how many there were, and `answer`, which waits for such a request, answers every one that waits, and waits for the rows of the tree
+   */
+  async function drawn(
+    served: Served,
+    { actions = {}, client = new QueryClient({ defaultOptions: { queries: { retry: false } } }) }: { readonly actions?: Partial<SiteActions>; readonly client?: QueryClient } = {},
+  ): Promise<{ readonly client: QueryClient; readonly asked: readonly string[]; readonly listed: () => number; readonly answer: () => Promise<void> }> {
+    const waiting: ReturnType<typeof Promise.withResolvers<void>>[] = [];
+    const asked: string[] = [];
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const { pathname, searchParams } = new URL(String(input), "https://dashboard.example.com");
+      if (!pathname.endsWith("/files")) {
+        await served.until;
+
+        return served.refused === true ? Response.json(BUSY, { status: 429 }) : Response.json({ ok: true, site: served.site, logins: {}, search_engines_allowed: true });
+      }
+
+      asked.push(searchParams.get("version") ?? "");
+      const held = Promise.withResolvers<void>();
+      waiting.push(held);
+      await held.promise;
+
+      return Response.json(TOP);
+    }) as unknown as typeof fetch;
+    await drawAt(
+      "/",
+      <QueryClientProvider client={client}>
+        <TooltipProvider>
+          <SitePanel
+            label={served.site.label}
+            actions={actions as SiteActions}
+            reveal={{ shows: () => false, toggle: () => undefined }}
+            onAsk={() => undefined}
+            closeLink={<a href="/">Close</a>}
+            onClose={() => undefined}
+            opener={() => undefined}
+            onMoved={() => undefined}
+          />
+        </TooltipProvider>
+      </QueryClientProvider>,
+    );
+    await within(document.body).findByRole("button", { name: "Details" });
+
+    const answer = async (): Promise<void> => {
+      await waitFor(() => expect(waiting.length > 0).toBe(true));
+      await act(async () => {
+        for (const held of waiting.splice(0)) held.resolve();
+      });
+      await waitFor(() => expect(rows().length).toBe(1));
+    };
+
+    return { client, asked, listed: () => asked.length, answer };
+  }
+
+  /** The folds whose heading is a button that tells a screen reader it is open, and the ones whose button says it is folded. A fold with no such button is in neither. */
+  function folds(): { readonly open: readonly string[]; readonly folded: readonly string[] } {
+    const saying = (expanded: boolean): readonly string[] => FOLDS.filter((name) => within(document.body).queryByRole("button", { name: new RegExp(`^${name}`), expanded }) !== null);
+
+    return { open: saying(true), folded: saying(false) };
+  }
+
+  /** What of the folds the panel shows, as a screen reader finds it: the names of the facts, how many versions are listed, how many switches there are, and the rows of the files. What a fold holds while it is folded is on the page, hidden. */
+  function held(): object {
+    const panel = within(within(document.body).getByRole("complementary"));
+
+    return {
+      facts: panel.queryAllByRole("term").map((name) => name.textContent ?? ""),
+      versions: panel.queryAllByRole("listitem").length,
+      switches: panel.queryAllByRole("switch").length,
+      files: rows(),
+    };
+  }
+
+  // Drift: the files, the versions, and the facts would stand open again over a panel as long as it was; a fold's heading would be words that no key opens and no screen reader calls folded;
+  // or a look at the versions or the facts would list the storage, which the install counts against its day.
+  test("start folded, each under a button that says so, with nothing of them in sight; Versions and Details, once pressed, are in sight and read no files", async () => {
+    const { listed } = await drawn({ site: OTHER });
+    const before = [folds(), held(), listed()];
+    await openFold("Versions");
+    await openFold("Details");
+
+    expect(before).toEqual([{ open: [], folded: [...FOLDS] }, { facts: [], versions: 0, switches: 0, files: [] }, 0]);
+    expect([folds(), held(), listed()]).toEqual([
+      { open: ["Versions", "Details"], folded: ["Files"] },
+      { facts: ["Visits", "Size", "Updated", "Expires"], versions: 2, switches: 2, files: [] },
+      0,
+    ]);
+  });
+
+  // Drift: the panel would forget which folds a person left open, so the next site's panel would start folded again; or Files, left open, would stay grey lines that read nothing.
+  test("are as a person left them in the panel of the next site: the open ones are drawn open, the one closed again stays folded, and Files left open reads its top once as the panel is drawn", async () => {
+    const first = await drawn({ site: SITE });
+    for (const name of FOLDS) await openFold(name);
+    await first.answer();
+    fireEvent.click(await openFold("Versions"));
+    cleanup();
+
+    const next = await drawn({ site: OTHER });
+    await next.answer();
+
+    expect([folds(), held(), next.listed()]).toEqual([
+      { open: ["Files", "Details"], folded: ["Versions"] },
+      { facts: ["Visits", "Size", "Updated", "Expires"], versions: 0, switches: 2, files: ["index.html7 B"] },
+      1,
+    ]);
+  });
+
+  // Drift: the site is read again after every change, as after Make live, and a fold would close over the control that was pressed, or be drawn anew and drop the focus its heading holds;
+  // or the files of the version that was live would stay under the heading, with their count, while the files of the one that is live are read.
+  test("stay open, with the focus on a heading left there, when the site is read again with another version live; Files then shows neither the rows nor the count of the version that was live while it reads the one that is", async () => {
+    const served = { site: OTHER };
+    const { client, listed, answer } = await drawn(served);
+    const heading = (): HTMLElement => within(document.body).getByRole("button", { name: /^Files/ });
+    const files = (): readonly unknown[] => [heading().textContent, rows()];
+    for (const name of FOLDS) await openFold(name);
+    await answer();
+    const read = files();
+    act(() => heading().focus());
+
+    served.site = { ...OTHER, live_version: 1, embeddable: true };
+    await act(async () => client.invalidateQueries());
+    await waitFor(() => expect(listed()).toBe(2));
+    const reading = [folds(), files(), document.activeElement === heading()];
+    await answer();
+
+    expect([read, reading, files()]).toEqual([["Files1", ["index.html7 B"]], [{ open: [...FOLDS], folded: [] }, ["Files", []], true], ["Files1", ["index.html7 B"]]]);
+    expect(within(document.body).getByRole("switch", { name: "Allow embedding" }).getAttribute("aria-checked")).toBe("true");
+  });
+
+  // Drift: a panel drawn from a site that is kept from before, with Files left open, would list the files of a version that is live no more: a listing of the storage for nothing.
+  // A panel drawn inside the time a reading stands would not ask the server at all, and take the kept site at its word.
+  test("left open, Files waits for the server's word on the site: a panel drawn from a kept one that still stands, whose live version has changed since, lists the live version alone", async () => {
+    const client = keeping();
+    const served: Served = { site: { ...OTHER, live_version: 1 } };
+    await drawn(served, { client });
+    cleanup();
+    const other = await drawn({ site: SITE }, { client });
+    await openFold("Files");
+    await other.answer();
+    cleanup();
+
+    served.site = OTHER;
+    const again = await drawn(served, { client });
+    await again.answer();
+
+    expect([again.asked, folds().open]).toEqual([["2"], ["Files"]]);
+  });
+
+  // Drift: the rows kept of a version that was live would stand under a panel drawn from a kept site, over links that serve another version by now;
+  // or a site the server would not read again would be taken at its word, and its files listed.
+  test("left open, Files shows no kept row and lists nothing until the server has said which version is live: grey lines while the site is read, the refusal's sentence where it is refused, the live version's files once it is answered", async () => {
+    const client = keeping();
+    const served: Served = { site: { ...OTHER, live_version: 1 } };
+    const first = await drawn(served, { client });
+    await openFold("Files");
+    await first.answer();
+    cleanup();
+    const files = (): readonly unknown[] => [within(document.body).getByRole("button", { name: /^Files/ }).textContent, rows()];
+
+    const read = Promise.withResolvers<void>();
+    Object.assign(served, { site: OTHER, refused: true, until: read.promise });
+    const again = await drawn(served, { client });
+    const reading = [files(), document.querySelectorAll("[aria-busy='true']").length, again.listed()];
+    await act(async () => read.resolve());
+    await within(document.body).findByText(BUSY.sentence);
+    const refused = [files(), document.querySelectorAll("[aria-busy='true']").length, again.listed()];
+
+    served.refused = false;
+    await act(async () => client.invalidateQueries());
+    await again.answer();
+
+    expect([reading, refused]).toEqual([[["Files", []], 1, 0], [["Files", []], 0, 0]]);
+    expect([files(), again.asked, within(document.body).queryByText(BUSY.sentence)]).toEqual([["Files1", ["index.html7 B"]], ["2"], null]);
+  });
+
+  // Drift: Files opened while the site is read again, as after Make live, would list the version that was live, and then the one that is: two listings of the storage for one tree;
+  // or it would show the rows kept of the version that was live, over links that serve the other by then.
+  test.each([
+    ["never read", false, [], ["1"]],
+    ["read before, and kept", true, ["2"], ["2", "1"]],
+  ])("opened while the site is read again, Files shows no row and lists nothing until the server answers, and then lists the version that is live: the files of the one that was live were %s", async (_what, kept, before, listed) => {
+    const served: Served = { site: OTHER };
+    const { client, asked, answer } = await drawn(served);
+    if (kept) {
+      const heading = await openFold("Files");
+      await answer();
+      fireEvent.click(heading);
+    }
+
+    const read = Promise.withResolvers<void>();
+    Object.assign(served, { site: { ...OTHER, live_version: 1 }, until: read.promise });
+    act(() => void client.invalidateQueries());
+    await openFold("Files");
+    const meanwhile = [rows(), [...asked]];
+    await act(async () => read.resolve());
+    await answer();
+
+    expect([meanwhile, asked]).toEqual([[[], before], listed]);
+  });
+
+  // Drift: a fold that drew what it holds anew at every opening would lose what a control in it has yet to say: a switch that is being saved would show what is stored again, and take a second press.
+  test("keep what they hold while they are folded: a switch that is being saved is as it was pressed when Details is opened again, and takes no second press", async () => {
+    const saved = Promise.withResolvers<typeof SITE>();
+    const sent: boolean[] = [];
+    const setSetting = (_site: unknown, _setting: string, on: boolean): Promise<typeof SITE> => {
+      sent.push(on);
+
+      return saved.promise;
+    };
+    await drawn({ site: SITE }, { actions: { setSetting } as unknown as Partial<SiteActions> });
+    const details = await openFold("Details");
+    const embedding = (): HTMLElement => within(document.body).getByRole("switch", { name: "Allow embedding" });
+
+    fireEvent.click(embedding());
+    fireEvent.click(details);
+    const folded = within(document.body).queryByRole("switch", { name: "Allow embedding" });
+    fireEvent.click(details);
+    fireEvent.click(embedding());
+    const pressed = embedding().getAttribute("aria-checked");
+    await act(async () => saved.resolve({ ...SITE, embeddable: true }));
+
+    expect([sent, folded, pressed]).toEqual([[true], null, "true"]);
+  });
+
+  // Drift: a site in the trash would show its facts unfolded, or the files and the versions of a site that is served to nobody, or the settings it cannot be given there.
+  test("of a site in the trash are Details alone: its facts without the day it expires, and no setting", async () => {
+    await drawn({ site: { ...SITE, state: "trash" } });
+    const before = [folds(), held()];
+    await openFold("Details");
+
+    expect(before).toEqual([{ open: [], folded: ["Details"] }, { facts: [], versions: 0, switches: 0, files: [] }]);
+    expect([folds(), held()]).toEqual([{ open: ["Details"], folded: [] }, { facts: ["Visits", "Size", "Updated"], versions: 0, switches: 0, files: [] }]);
+  });
+
+  // Drift: a block that held its own fold would take what the browser keeps by then where its panel draws it anew, as it does Details when a site comes back from the trash:
+  // another tab's fold would close it without a press.
+  test("stay as they are in a panel whose site comes back from the trash, whatever the browser keeps by then", async () => {
+    const served: Served = { site: { ...SITE, state: "trash" } };
+    const { client } = await drawn(served);
+    await openFold("Details");
+    window.localStorage.clear();
+
+    served.site = SITE;
+    await act(async () => client.invalidateQueries());
+    await within(document.body).findByRole("button", { name: "New link" });
+
+    expect(folds()).toEqual({ open: ["Details"], folded: ["Files", "Versions"] });
   });
 });
 
@@ -201,15 +496,21 @@ describe("the files of a site", () => {
   /**
    * Draw the panel over a server that answers the site, and each folder of its files by the query it is asked with: a folder, or `undefined` for the refusal that the day's listings are used up.
    *
-   * @returns `asked`, the queries the folders were asked with, in the order they came, and `live`, the version the server says is live
+   * @returns `asked`, the queries the folders were asked with, in the order they came, and `live`, the version the server says is live, and whether it refuses to read the site
    */
-  async function drawn(answer: (query: string) => Answer | undefined): Promise<{ readonly client: QueryClient; readonly asked: string[]; readonly live: { version: number } }> {
+  async function drawn(
+    answer: (query: string) => Answer | undefined,
+  ): Promise<{ readonly client: QueryClient; readonly asked: string[]; readonly live: { version: number; refused: boolean } }> {
     const asked: string[] = [];
-    const live = { version: 1 };
+    const live = { version: 1, refused: false };
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     globalThis.fetch = (async (input: RequestInfo | URL) => {
       const { pathname, searchParams } = new URL(String(input), "https://dashboard.example.com");
-      if (!pathname.endsWith("/files")) return Response.json({ ok: true, site: { ...SITE, live_version: live.version, versions: kept(live.version) }, logins: {}, search_engines_allowed: true });
+      if (!pathname.endsWith("/files")) {
+        const site = { ...SITE, live_version: live.version, versions: kept(live.version) };
+
+        return live.refused ? Response.json(BUSY, { status: 429 }) : Response.json({ ok: true, site, logins: {}, search_engines_allowed: true });
+      }
 
       // The keys are put in one order: the order an address has them in is nothing the server reads.
       const query = [...searchParams].map(([key, value]) => `${key}=${value}`).sort().join("&");
@@ -235,7 +536,7 @@ describe("the files of a site", () => {
         </TooltipProvider>
       </QueryClientProvider>,
     );
-    await within(document.body).findByText("Show in search engines");
+    await within(document.body).findByText("New link");
 
     return { client, asked, live };
   }
@@ -243,11 +544,6 @@ describe("the files of a site", () => {
   /** The button that folds the files away and opens them. */
   function fold(): HTMLElement {
     return within(document.body).getByRole("button", { name: /^Files/ });
-  }
-
-  /** What each row of the tree says, from the top down. */
-  function rows(): readonly string[] {
-    return [...document.querySelectorAll("[role='tree'] [data-slot='tree-label']")].map((row) => row.textContent ?? "");
   }
 
   /** A row of the tree, by what it says. */
@@ -312,7 +608,7 @@ describe("the files of a site", () => {
       ["https://example.com/trip-notes/notes%20%26%20more.txt", "_blank"],
     ]);
 
-    // Folded and opened again, the tree is as it was. A folder that was read is not read again, also when the new tree is told to open it. Another version live is another tree: folded, and read anew when it is opened.
+    // Folded and opened again, the tree is as it was. A folder that was read is not read again, also when the new tree is told to open it.
     press("constructor/");
     fireEvent.click(fold());
     fireEvent.click(fold());
@@ -320,13 +616,33 @@ describe("the files of a site", () => {
     press("constructor/");
     await waitFor(() => expect(rows().length).toBe(9));
     const reopened = asked.length;
+
+    // Another version live is another tree: Files stays open as it was left, with no folder open, and its top is read anew.
     live.version = 2;
     await act(async () => client.invalidateQueries());
-    await waitFor(() => expect(fold().textContent).toBe("Files"));
-    fireEvent.click(fold());
     await waitFor(() => expect(rows().join()).toBe("index.html7 B,only.html8 B"));
 
-    expect([reopened, asked.slice(reopened), fold().textContent]).toEqual([4, ["version=2"], "Files2"]);
+    expect([reopened, asked.slice(reopened), fold().textContent, fold().getAttribute("aria-expanded")]).toEqual([4, ["version=2"], "Files2", "true"]);
+  });
+
+  // Drift: a reading of the site that was refused would take the tree away with the folders that were open in it, and the next answered one would bring it back with every folder closed.
+  test("are as they were once the site is read again after a refusal: the refusal stands where the tree was, and the tree comes back with its open folder and reads nothing anew", async () => {
+    const { client, asked, live } = await drawn((query) => NESTED[query]);
+    fireEvent.click(fold());
+    await waitFor(() => expect(rows().length).toBe(4));
+    press("assets/");
+    await waitFor(() => expect(rows().length).toBe(6));
+    const open = rows();
+
+    live.refused = true;
+    await act(async () => client.invalidateQueries());
+    await within(document.body).findByText(BUSY.sentence);
+    const refused = rows();
+    live.refused = false;
+    await act(async () => client.invalidateQueries());
+    await waitFor(() => expect(rows().length > 0).toBe(true));
+
+    expect([refused, rows(), asked]).toEqual([[], open, ["version=1", "folder=assets&version=1"]]);
   });
 
   // Drift: a folder of more files than one page holds would end where the page does, with no word that more are there; a second press while the next page is on its way would ask for that page twice;

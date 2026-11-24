@@ -29,6 +29,9 @@ export const SECTIONS_BUTTON = new RegExp(`^Sections(, (${MARK}))?$`);
 /** The address of the Sites screen when it shows the trash. */
 export const TRASH = "./?view=trash";
 
+/** The folds of a site's panel, by their headings, in the order of the screen. */
+export const FOLDS = ["Files", "Versions", "Details"] as const;
+
 /** What a visitor's browser did that no page of the demo may do. */
 interface Seen {
   /** The errors its pages threw. */
@@ -107,6 +110,19 @@ export async function openPanel(page: Page, name: string): Promise<void> {
 
   // On a phone the button lies under the row's words and controls: the press lands in the row's own corner, where nothing lies over it.
   await list.getByRole("listitem").getByRole("button", { name: `Details of ${name}`, exact: true }).click({ position: { x: 6, y: 6 } });
+}
+
+/** The heading of a fold of a site's panel, which is the button that opens it and folds it away. A heading says how many things it folds away after its name. */
+export function foldOf(panel: Locator, name: (typeof FOLDS)[number]): Locator {
+  return panel.getByRole("button", { name: new RegExp(`^${name}`) });
+}
+
+/** Open a fold of a site's panel. One that is open stays open. */
+export async function openFold(panel: Locator, name: (typeof FOLDS)[number]): Promise<void> {
+  const heading = foldOf(panel, name);
+  if ((await heading.getAttribute("aria-expanded")) !== "true") await heading.click();
+
+  await expect(heading).toHaveAttribute("aria-expanded", "true");
 }
 
 /** The line that says a change was done or refused, by its words. */

@@ -4,9 +4,12 @@
 import { Dialog } from "@base-ui/react/dialog";
 import { useMediaQuery } from "@base-ui/react/unstable-use-media-query";
 import { cn } from "cn";
-import { XIcon } from "lucide-react";
+import { ChevronRightIcon, XIcon } from "lucide-react";
 import { type ReactElement, type ReactNode, useEffect, useRef, useState } from "react";
+import useLocalStorageState from "use-local-storage-state";
 
+import { Button } from "@/components/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
@@ -22,6 +25,9 @@ const OWN_PLACES = `${ROWS}, [data-sonner-toaster], [role='dialog'], [role='aler
 
 /** The library's own stops before and after a panel's content: Tab lands on one at an end of the panel, and the library moves the focus on to the other end a frame later. */
 const TURNS = "[data-base-ui-focus-guard]";
+
+/** The first part of every key the browser keeps under whether a fold is open. */
+const FOLD_KEY_PREFIX = "poplin.fold.";
 
 /** What a panel is drawn from. */
 interface SidePanelProps {
@@ -47,6 +53,24 @@ interface SidePanelProps {
   readonly children: ReactNode;
 }
 
+/** A fold of a panel as the browser keeps it: whether it is open, and the way to open or close it. */
+export type Fold = readonly [open: boolean, setOpen: (open: boolean) => void];
+
+/** What one fold of a panel is drawn from. */
+interface PanelFoldProps {
+  /** The fold, as `usePanelFold` gives it. */
+  readonly fold: Fold;
+
+  /** The fold's heading. */
+  readonly name: string;
+
+  /** A fact beside the heading, such as how many things are folded away; left out, the heading stands alone. */
+  readonly fact?: string;
+
+  /** What is folded away. */
+  readonly children: ReactNode;
+}
+
 /**
  * Whether a panel lies over the end of its list, at its own width, with the start of the list in sight beside it: on every screen wider than a phone.
  *
@@ -67,6 +91,51 @@ export function PanelBlock({ label, children }: { readonly label?: string; reado
       {label === undefined ? null : <h3 className="text-xs text-muted-foreground">{label}</h3>}
       {children}
     </section>
+  );
+}
+
+/**
+ * A fold of a panel, by its name among the folds the browser keeps. It is closed until a person opens it, and a panel that is drawn shows it as it was last left.
+ *
+ * Once drawn, it changes at a press on it alone. What another tab keeps shows when a panel is next drawn: a fold that another tab could close would take with it the question that is open in it, and the control that holds the focus.
+ * So the panel itself asks for its folds, not the blocks it folds: a block may be drawn anew while its panel stays, and would then take what another tab keeps.
+ *
+ * @param id - the fold's name there, such as `site.files`
+ */
+export function usePanelFold(id: string): Fold {
+  const [kept, keep] = useLocalStorageState<unknown>(`${FOLD_KEY_PREFIX}${id}`);
+  const [open, setOpen] = useState(kept === true);
+  const change = (next: boolean): void => {
+    setOpen(next);
+    keep(next);
+  };
+
+  return [open, change];
+}
+
+/**
+ * One block of a panel that is folded away under its heading: a button with an arrow, the block's name, and a fact about it.
+ *
+ * What it holds is out of sight while it is folded, and stays as it is: a control in it keeps what it has yet to say, such as a save that is on its way or a refusal.
+ */
+export function PanelFold({ fold, name, fact, children }: PanelFoldProps): ReactNode {
+  const [open, setOpen] = fold;
+
+  return (
+    <PanelBlock>
+      <Collapsible open={open} onOpenChange={setOpen}>
+        <h3>
+          <CollapsibleTrigger render={<Button variant="ghost" size="xs" className="group/fold -ml-2 text-muted-foreground max-md:min-h-10" />}>
+            <ChevronRightIcon className="transition-transform group-data-[panel-open]/fold:rotate-90" />
+            {name}
+            {fact === undefined ? null : <span className="font-normal text-faint tabular-nums">{fact}</span>}
+          </CollapsibleTrigger>
+        </h3>
+        <CollapsibleContent keepMounted className="flex flex-col gap-2 pt-2">
+          {children}
+        </CollapsibleContent>
+      </Collapsible>
+    </PanelBlock>
   );
 }
 
