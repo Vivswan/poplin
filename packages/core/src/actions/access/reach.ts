@@ -1,11 +1,12 @@
-// The way into every action: the install's settings, the site a reference names, and whether the actor may touch it.
+// The way into every action: the install's settings, the site a reference names, whether the actor may touch it, and the person behind an actor.
 
 import * as v from "valibot";
 
+import type { Login } from "../../auth/logins";
 import { type Actor, mayReachSite, SWEEPER } from "../../auth/scopes";
 import type { SettingsAndSite, ShownSite, Signed, SitesShown } from "../../database/database";
 import { parsePublicName } from "../../names/names";
-import { TOKEN_ID } from "../../records/fields";
+import { LOGIN, TOKEN_ID } from "../../records/fields";
 import type { SettingValues } from "../../records/settings";
 import type { Site } from "../../records/site";
 import { dayOf } from "../../records/views";
@@ -73,6 +74,17 @@ async function findSite(install: Install, reference: string, shown: SitesShown |
 /** Whether everyone may open the site at `now`, so that it exists is no secret. */
 function isOpenToAll(site: Site, now: number): boolean {
   return site.access === "public" && site.state === "live" && (site.expires === "never" || site.expires > now);
+}
+
+/**
+ * The person behind an actor: the email of an admin in a browser. What only a person may do goes through here, since a token that did it would outlive its own expiry.
+ *
+ * @returns nothing for a token, whatever its scope, and for a publisher
+ */
+export function personOf(actor: Actor): Login | undefined {
+  if (actor.scope !== "admin" || !v.is(LOGIN, actor.holder)) return undefined;
+
+  return actor.holder;
 }
 
 /**

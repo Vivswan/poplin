@@ -37,6 +37,9 @@ const OPENED = Date.UTC(2031, 4, 6, 12, 0, 0);
 /** What the server refuses a change with. */
 const REFUSAL = "Pick a day that is still ahead.";
 
+/** The key the browser keeps the dashboard's choice of time zone under. */
+const TIME_ZONE_KEY = "poplin.timezone";
+
 /** A site as the server answers it, as far as the row reads it. */
 const SITE = { label: "trip-notes--abc123def456", name: "trip-notes", title: "Trip notes", expires: "never", state: "live" } as unknown as Site;
 
@@ -200,5 +203,25 @@ describe("when a site deletes itself, in its panel", () => {
     const kept = document.querySelectorAll("[data-selected-single='true']").length;
 
     expect([sent.length, picked?.includes(dayIn(set.getTime(), "own")), [set.getHours(), set.getMinutes()], kept]).toEqual([1, true, [0, 0], 1]);
+  });
+
+  // Drift: a day picked under one time zone stayed picked when the choice was changed in another tab. Its start is another moment there, and it can lie before the first day the calendar then offers.
+  test("a day picked in the calendar is let go when the dashboard's time zone changes, and Save waits for a day again", async () => {
+    drawn("never");
+    await openMenu();
+    await press("menuitem", "On a day...");
+    const dialog = within(await within(document.body).findByRole("dialog", { name: "Pick a day" }));
+    const day = dialog.getAllByRole("button").find((button) => button.closest("td") !== null && !button.hasAttribute("disabled"));
+    await act(async () => fireEvent.click(day as HTMLElement));
+    const picked = [dialog.queryAllByText(/^Expires /).length, dialog.getByRole("button", { name: "Save" }).hasAttribute("disabled")];
+    await act(async () => {
+      window.localStorage.setItem(TIME_ZONE_KEY, JSON.stringify("utc"));
+      window.dispatchEvent(new StorageEvent("storage", { key: TIME_ZONE_KEY, newValue: JSON.stringify("utc"), storageArea: window.localStorage }));
+    });
+
+    expect([picked, [dialog.queryAllByText("No day picked.").length, dialog.getByRole("button", { name: "Save" }).hasAttribute("disabled")]]).toEqual([
+      [1, false],
+      [1, true],
+    ]);
   });
 });

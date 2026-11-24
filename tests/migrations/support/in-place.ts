@@ -1,6 +1,8 @@
 // The upgrade in place: what an install answered and served under the code that made it, and whether this code, opened over the same database and the same objects, answers and serves the same.
 
 import type { SqlDriver } from "../../../packages/core/src/database/driver";
+import { LEDGER_TABLE } from "../../../packages/core/src/migrations/migrate";
+import { STEPS } from "../../../packages/core/src/migrations/registry";
 import { fault, field, type Machine, type Ran, runCli } from "./command";
 import { attempt, differences, type Finding, found, type Shape } from "./findings";
 import type { Seeded } from "./seeded-install";
@@ -38,6 +40,9 @@ const PLACE_SEGMENTS = 2;
 
 /** The most sites shown one by one: a listing already holds every site whole. */
 const MOST_SHOWN = 2;
+
+/** Where an answer says whether updating to the release the install knows of changes the database: the key of its notice, and the field of that. */
+const NOTICE_DATABASE = ["update", "database"] as const;
 
 /** One read: the shape its answer shows, and its command with the flags after it. */
 type Read = readonly [shape: Shape, line: readonly string[]];
@@ -217,6 +222,35 @@ async function pageFaults(running: Running, before: Before): Promise<string[]> {
   return faults;
 }
 
+/** What an answer's notice says of the database: nothing where the answer holds no notice. */
+function noticedDatabase(answer: unknown): unknown {
+  const [notice, says] = NOTICE_DATABASE;
+
+  return field(field(answer, notice), says);
+}
+
+/** An answer without what its notice says of the database, which is compared by itself. */
+function besideTheNotice(answer: unknown): unknown {
+  const [notice, says] = NOTICE_DATABASE;
+  const held = field(answer, notice);
+  if (typeof held !== "object" || held === null) return answer;
+
+  return { ...Object(answer), [notice]: Object.fromEntries(Object.entries(held).filter(([key]) => key !== says)) };
+}
+
+/**
+ * Whether the notice says of the database what it must after the upgrade. This is the one field an upgrade may move: it is true of a release whose schema is not the answering code's own.
+ * The older code's seed gives the release it knows of that code's schema, so the field is false there, and true here once this code has a step more.
+ */
+function noticeFaults(before: Before, was: unknown, is: unknown, at: string): string[] {
+  const stepped = (before.rows.get(LEDGER_TABLE) ?? 0) < STEPS.length;
+  const must = was === false && stepped ? true : was;
+  // What the older code did not say is no difference, as with every value this code adds.
+  if (was === undefined || is === must) return [];
+
+  return [`${[at, ...NOTICE_DATABASE].join(".")} was ${JSON.stringify(was)} and is ${JSON.stringify(is)}, where this code must say ${JSON.stringify(must)}`];
+}
+
 /** The reads again, asked by this code's command of this code's install, each beside what it answered before. */
 async function readFaults(upgrading: Upgrading, before: Before, machine: Machine): Promise<Finding[]> {
   const shown = before.reads.slice(before.asked.length).map(({ ran }) => ran.line.split(" ").at(-1) ?? "");
@@ -228,7 +262,10 @@ async function readFaults(upgrading: Upgrading, before: Before, machine: Machine
 
     if (now.exit !== 0) return found(shape, [fault(now) ?? `\`${now.line}\` asks for an update of the command, which is this code's own`]);
 
-    return found(shape, differences(ran.answer, now.answer, upgrading.machine.login.server, `\`${ran.line}\``));
+    const line = `\`${ran.line}\``;
+    const kept = differences(besideTheNotice(ran.answer), besideTheNotice(now.answer), upgrading.machine.login.server, line);
+
+    return found(shape, [...kept, ...noticeFaults(before, noticedDatabase(ran.answer), noticedDatabase(now.answer), line)]);
   });
 }
 

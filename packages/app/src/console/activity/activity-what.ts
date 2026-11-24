@@ -17,6 +17,7 @@ const WORDS: Readonly<Record<Exclude<AuditEntry["action"], "domain_synced">, str
   duplicate: "Made the site as a copy",
   token_added: "Added a token",
   token_revoked: "Revoked a token",
+  token_expiry_changed: "Changed when a token expires",
   settings_set: "Set the first settings",
   settings_changed: "Changed the settings",
   signed_everyone_out: "Signed everyone out",
@@ -35,6 +36,7 @@ const WITH_DETAIL: Readonly<Partial<Record<keyof typeof WORDS, (detail: AuditEnt
   details: detailsWords,
   token_added: (detail) => named("Added the token", detail.note),
   token_revoked: (detail) => named(typeof detail.user === "string" ? "Revoked with its user, the token" : "Revoked the token", detail.note),
+  token_expiry_changed: expiryWords,
   login_allowed: (detail) => named("Approved the token", detail.computer),
   login_denied: (detail) => named("Denied the token", detail.computer),
   settings_changed: usersWords,
@@ -60,8 +62,45 @@ const USERS_MOVED = "Changed the order of the users";
 /** The keys an entry of new users holds for the users: the list, who it adds, and who it leaves out. Any other key is a setting changed in the same step. */
 const USER_KEYS = ["users", "added", "removed"];
 
+/** How a day of the log's own clock is read apart, in UTC: the parts are joined as 24 Feb 2027, with three letters for every month. */
+const UTC_DAY = new Intl.DateTimeFormat("en-US", { day: "2-digit", month: "short", year: "numeric", timeZone: "UTC" });
+
+/** What each way of writing a time holds beyond the hour and the minute, each finer than the one before: nothing, the second, and the millisecond, which is as fine as an expiry is stored. */
+const FINER: readonly Intl.DateTimeFormatOptions[] = [{}, { second: "2-digit" }, { second: "2-digit", fractionalSecondDigits: 3 }];
+
+/** How the time of a moment is written in UTC, in each of those ways. */
+const UTC_TIMES = FINER.map((finer) => new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", ...finer, hourCycle: "h23", timeZone: "UTC" }));
+
 function named(words: string, name: unknown): string | undefined {
   return typeof name === "string" && name !== "" ? `${words} "${name}"` : undefined;
+}
+
+/** When a token runs out as an entry holds it: `never` for nothing, else the day and the times of the moment in UTC, as the log's own times are. Nothing for what is neither. */
+function expiryIn(value: unknown): "never" | { readonly day: string; readonly times: readonly string[] } | undefined {
+  if (value === null) return "never";
+
+  if (typeof value !== "number" || Number.isNaN(new Date(value).getTime())) return undefined;
+
+  const parts = UTC_DAY.formatToParts(value);
+  const [day, month, year] = (["day", "month", "year"] as const).map((type) => parts.find((part) => part.type === type)?.value ?? "");
+
+  return { day: `${day} ${month} ${year}`, times: UTC_TIMES.map((format) => format.format(value)) };
+}
+
+/**
+ * A change of a token's expiry names the token, and says when it ran out before and when it runs out now.
+ * Each is written as its day; two moments of one day are told apart by their times, written no finer than it takes.
+ */
+function expiryWords(detail: AuditEntry["detail"]): string | undefined {
+  const [from, to] = [expiryIn(detail.from), expiryIn(detail.to)];
+  if (from === undefined || to === undefined || (from === "never" && to === "never")) return undefined;
+
+  const sameDay = from !== "never" && to !== "never" && from.day === to.day;
+  // An entry is written only for two moments that differ, so one of the ways tells them apart.
+  const precise = sameDay ? Math.max(0, from.times.findIndex((time, at) => time !== to.times[at])) : 0;
+  const [was, is] = [from, to].map((end) => (end === "never" ? end : `${end.day}${sameDay ? `, ${end.times[precise]}` : ""}`));
+
+  return `Changed when ${named("the token", detail.note) ?? "a token"} expires, from ${was} to ${is}, in UTC`;
 }
 
 /** A change of one thing of a site says which, and so does a change of its title and name together. Any other says that the site's settings changed. */

@@ -7,7 +7,7 @@
 
 import type { ComputerLogin, LoginId, PendingLogin, UserCode } from "../auth/computer-logins";
 import type { Login } from "../auth/logins";
-import type { EndedToken, TokenId, TokenRecord } from "../auth/tokens";
+import type { EndedToken, TokenExpiry, TokenId, TokenRecord } from "../auth/tokens";
 import type { PublicName, SiteName } from "../names/names";
 import type { AuditAction, AuditEntry } from "../records/audit";
 import type { CarriedRules, CarriedUsers, DomainCheck, RememberedCheck } from "../records/domain-check";
@@ -50,6 +50,9 @@ export interface SiteNow extends SiteNamed {
  * A token and a person change the settings, the users, and the tokens only while they stand: see `changeSettings` and `addToken`.
  */
 export type Signed = { readonly at: number } & ({ readonly as: "token"; readonly by: TokenId } | { readonly as: "person" | "first_login" | "sweeper" | "repair"; readonly by: Login });
+
+/** The signature of a person in a browser, for a change no token may make. */
+export type SignedByPerson = Signed & { readonly as: "person" };
 
 /**
  * What a new site is made from.
@@ -372,20 +375,19 @@ export interface LoginRoom {
   readonly all: number;
 }
 
-/** What an admin decides about a pending login, and when. */
-export interface LoginDecision {
-  /** Whether the computer is let in. */
-  readonly state: "allowed" | "denied";
+/** What an admin decides about a pending login, and when: `by` is the admin, whose email signs the audit entry, and `at` the clock in milliseconds since the epoch, since a login that ran out by then is not decided. */
+export type LoginDecision = { readonly by: Login; readonly at: number } & (
+  | { readonly state: "denied" }
+  | {
+      readonly state: "allowed";
 
-  /** Whether an allowed computer becomes a publisher whatever it asked to be. Left out, it becomes what it asked: a decision never gives more. */
-  readonly asPublisher?: boolean;
+      /** Whether the computer becomes a publisher whatever it asked to be. Left out, it becomes what it asked: a decision never gives more. */
+      readonly asPublisher?: boolean;
 
-  /** The admin who decides, whose email signs the audit entry. */
-  readonly by: Login;
-
-  /** The clock, in milliseconds since the epoch: a login that ran out by then is not decided. */
-  readonly at: number;
-}
+      /** When the token the computer collects runs out. */
+      readonly tokenExpires: TokenExpiry;
+    }
+);
 
 /** Which entries of the audit log one page holds. */
 export interface AuditQuery {
@@ -835,6 +837,16 @@ export interface Database {
   revokeToken(id: TokenId, signed: Signed): Promise<{ readonly kind: "done"; readonly token: TokenRecord } | Refused<"not_found">>;
 
   /**
+   * Set when a token that works at `signed.at` runs out, with one `token_expiry_changed` audit entry: the token, its scope and note, and the expiry `from` before and `to` after, each a moment or `null` for never.
+   * A token that was removed or has run out is ended for good, and is left as it ended. One that already runs out at `expires` is left as it is, with no entry, and is answered as done.
+   *
+   * @param expires - when the token runs out from now on; whether the moment has passed is the caller's to check
+   * @param signed - the person who changes it: a token signs no change of an expiry
+   * @returns the token as it is now; `not_found` for a token that does not work; `signer_gone` for a signer who no longer stands, as `addToken` has it
+   */
+  changeTokenExpiry(id: TokenId, expires: TokenExpiry, signed: SignedByPerson): Promise<{ readonly kind: "done"; readonly token: TokenRecord } | Refused<"not_found" | "signer_gone">>;
+
+  /**
    * Store a pending login, and make room for it among the logins that wait: the pending ones that have not run out at its `createdAt`. It writes no audit entry: a pending login grants nothing.
    *
    * Its visitor keeps the newest `room.perVisitor` of their waiting logins, this one among them. Once `room.all` logins wait, the oldest one of the visitor with the most gives way. A decided login is never removed here.
@@ -855,7 +867,7 @@ export interface Database {
   /**
    * Allow or deny the login under a code, only while it is pending and has not run out. It writes one `login_allowed` or `login_denied` audit entry, which holds the scope and the computer's name and nothing of the secret.
    *
-   * A login allowed as a publisher is stored with that scope, so its token and its audit entry are a publisher's.
+   * A login allowed as a publisher is stored with that scope, so its token and its audit entry are a publisher's. An allowed login keeps when its token runs out.
    *
    * @returns the login after the decision, or `not_pending` for a code of no login and for a login that was decided or ran out
    */
@@ -866,8 +878,8 @@ export interface Database {
    *
    * Of calls made at the same moment one is done, so a login gives one token.
    *
-   * @param token - a new token's record, of the login's scope, made at the clock's time
-   * @returns `not_allowed` for a login that is pending, denied, gone, run out at the token's `createdAt`, of another scope than the token, or allowed by somebody who is no user any more
+   * @param token - a new token's record, of the login's scope and of the expiry the login keeps, made at the clock's time
+   * @returns `not_allowed` for a login that is pending, denied, gone, run out at the token's `createdAt`, of another scope or expiry than the token, of an expiry that has come by then, or allowed by somebody who is no user any more
    */
   redeemComputerLogin(id: LoginId, token: TokenRecord): Promise<{ readonly kind: "done" } | Refused<"not_allowed">>;
 

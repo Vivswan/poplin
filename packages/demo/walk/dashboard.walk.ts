@@ -289,6 +289,16 @@ const STOPS: readonly Stop[] = [
     close: pressEscape,
   },
   {
+    name: "the dialog that changes when a token expires, which names the token and saves nothing until another moment is chosen",
+    open: (page) => fromRowMenu(page, SAMPLE.token, "Change expiry"),
+    shows: (page) => [
+      expiryDialog(page).getByText(SAMPLE.token, { exact: true }),
+      expiryDialog(page).getByRole("button", { name: "Change when it expires", exact: true }),
+      expiryDialog(page).getByRole("button", { name: "Save", exact: true, disabled: true }),
+    ],
+    close: (page) => expiryDialog(page).getByRole("button", { name: "Cancel", exact: true }).click(),
+  },
+  {
     name: "the question before a token is revoked",
     open: (page) => fromRowMenu(page, SAMPLE.token, "Revoke"),
     shows: (page) => [question(page, `Revoke ${SAMPLE.token}?`)],
@@ -437,6 +447,11 @@ function reviewOf(page: Page, wide: boolean, name: string): Locator {
     .getByRole(wide ? "row" : "listitem")
     .filter({ hasText: name })
     .getByRole("button", { name: "Review", exact: true });
+}
+
+/** The dialog that changes when a token expires. */
+function expiryDialog(page: Page): Locator {
+  return page.getByRole("dialog", { name: "Change expiry", exact: true });
 }
 
 /** Press one entry of the menu at the end of a row, which is named after what the row holds. */

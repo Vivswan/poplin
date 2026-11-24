@@ -118,4 +118,5 @@ The restore also undoes what was removed after the moment it goes back to. Go th
 | After the restore                                             | So                                                         | Do                                                                           |
 | ------------------------------------------------------------- | ---------------------------------------------------------- | ---------------------------------------------------------------------------- |
 | a token revoked after that moment is a token again            | it works again, unless it expired since                    | Access, Tokens: revoke it again. It is in the list above Revoked tokens      |
+| a token set to expire sooner after that moment expires when it did before | it works until then, or for good, though its sooner day has passed | Access, Tokens: revoke it, or set a day that is still ahead with Change expiry in the menu of its row |
 | a user removed after that moment is a user again              | their email is in `users` again                            | Access, Users: remove them again, before the next Repair                     |

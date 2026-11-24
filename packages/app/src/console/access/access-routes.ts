@@ -2,17 +2,18 @@
 //
 //   GET  /logins                   the newest logins that wait, and how many more wait
 //   GET  /logins/<id>              one waiting login, to review: no part of its code
-//   POST /logins/decide            deny a login, or allow it with the scope the person chose and its code, which they typed or pasted; counted as a try at a code
+//   POST /logins/decide            deny a login, or allow it with the scope the person chose, when its token expires, and its code, which they typed or pasted; counted as a try at a code
 //   GET  /people                   the emails that can log in, which one asks, and how many tokens that work each is behind
 //   POST /people/add, /remove      one email in, or out with every token that user allowed, in one step each; the users are then carried to the provider's list, and `note` is the sentence of a change that did not reach it
 //   GET  /tokens                   every token that works, never its value; ?sort= with ?dir=; and the newest that ended
 //   POST /tokens/<id>/remove       the token stops working, and is listed among the ended ones
+//   POST /tokens/<id>/expiry       a token that works expires later, sooner, or never
 
 import { vValidator } from "@hono/valibot-validator";
 import { decideLogin, listLogins, showLogin } from "@poplin/core/src/actions/access/computer-logins";
 import { readConfig } from "@poplin/core/src/actions/install/config";
 import { addLogin, removeLogin } from "@poplin/core/src/actions/access/logins";
-import { countUserTokens, listTokenStates, revokeToken } from "@poplin/core/src/actions/access/manage-tokens";
+import { changeTokenExpiry, countUserTokens, listTokenStates, revokeToken } from "@poplin/core/src/actions/access/manage-tokens";
 import { type Context, Hono, type MiddlewareHandler } from "hono";
 import * as v from "valibot";
 
@@ -37,11 +38,17 @@ const ONE_LOGIN = v.object({ login: v.string() });
 /** What names one token in a route's path: its id. */
 const ONE_TOKEN = v.object({ token: v.string() });
 
-/** What a decision carries: the login's id and whether the computer is let in; for one that is, the scope the person chose, which is never left to what the computer asked, and the code they typed or pasted. */
+/**
+ * What a decision carries: the login's id and whether the computer is let in; for one that is, the scope the person chose, which is never left to what the computer asked, and the code they typed or pasted.
+ * `expires` is when its token expires, `never` or a moment; left out, the token lasts as long as one of that scope does when nobody chose.
+ */
 const DECISION = v.variant("allow", [
   v.object({ login: v.string(), allow: v.literal(false) }),
-  v.object({ login: v.string(), allow: v.literal(true), scope: v.picklist(["publisher", "admin"]), code: v.string() }),
+  v.object({ login: v.string(), allow: v.literal(true), scope: v.picklist(["publisher", "admin"]), code: v.string(), expires: v.optional(v.string()) }),
 ]);
+
+/** When a token is to expire from now on: `never`, or a moment that is still ahead. */
+const EXPIRY = v.object({ expires: v.string() });
 
 /** What a change of the users says in a console that carries none of them to the provider and has a Domain screen: a repair there carries them. */
 const NEXT_REPAIR = "Next, open Domain and press Repair.";
@@ -151,4 +158,14 @@ export const accessRoutes = new Hono<Shared>()
     if (revoked.ok) return context.json({ ok: true as const, name: revoked.token.note });
 
     return refused(context, revoked.code === "not_allowed" ? revoked : { code: "token_gone" });
+  })
+  .post("/tokens/:token/expiry", vValidator("param", ONE_TOKEN, refuseInvalid), vValidator("json", EXPIRY, refuseInvalid), async (context) => {
+    const { install, actor } = context.get("asker");
+    const changed = await changeTokenExpiry(install, actor, context.req.valid("param").token, context.req.valid("json"));
+    if (changed.ok) return context.json({ ok: true as const, expires: changed.token.expires });
+
+    // A token that was revoked or ran out is ended for good, and an id of no token names none: either is gone to whoever would change it.
+    const gone = changed.code === "not_found" || changed.about === "token";
+
+    return refused(context, gone ? { code: "token_gone" } : changed);
   });

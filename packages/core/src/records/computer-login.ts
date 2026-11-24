@@ -29,10 +29,11 @@ const ALWAYS = {
   expires_at: MOMENT,
 };
 
-/** A row of the logins table. Only a login that was decided names who decided it. */
+/** A row of the logins table. Only a login that was decided names who decided it, and only an allowed one may hold when its token runs out: NULL there is a token that never does. */
 const LOGIN_ROW = v.variant("state", [
-  v.strictObject({ ...ALWAYS, state: v.literal("pending"), decided_by: v.null() }),
-  v.strictObject({ ...ALWAYS, state: v.picklist(["allowed", "denied"]), decided_by: LOGIN }),
+  v.strictObject({ ...ALWAYS, state: v.literal("pending"), decided_by: v.null(), token_expires_at: v.null() }),
+  v.strictObject({ ...ALWAYS, state: v.literal("denied"), decided_by: LOGIN, token_expires_at: v.null() }),
+  v.strictObject({ ...ALWAYS, state: v.literal("allowed"), decided_by: LOGIN, token_expires_at: v.nullable(MOMENT) }),
 ]);
 
 function isLoginId(value: unknown): boolean {
@@ -57,5 +58,7 @@ export function computerLoginFromRow(row: unknown): ComputerLogin {
   const facts = { id, code, hash, scope, computer, visitor, createdAt, expiresAt };
   if (parsed.output.state === "pending") return { ...facts, state: "pending" };
 
-  return { ...facts, state: parsed.output.state, decidedBy: parsed.output.decided_by };
+  if (parsed.output.state === "denied") return { ...facts, state: "denied", decidedBy: parsed.output.decided_by };
+
+  return { ...facts, state: "allowed", decidedBy: parsed.output.decided_by, tokenExpires: parsed.output.token_expires_at ?? "never" };
 }

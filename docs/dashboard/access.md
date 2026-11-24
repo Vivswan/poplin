@@ -82,6 +82,14 @@ An install begins two logins a minute from one address, and eight a minute for a
 
 The page that approves a login starts at the role Publisher, whatever the machine asked for. A publisher changes its own sites only. Choose Admin there for a machine that changes settings or sees every site.
 
+The same page says when the token expires, and its Change sets another moment. Until you choose one, the expiry follows the role: an Admin token expires after 30 days, a Publisher token never.
+
+| Expires                  | The token stops working                                                        |
+| ------------------------ | ------------------------------------------------------------------------------ |
+| 30 days, 90 days, 1 year | at the day and time the menu shows beside it: that long after the menu opened  |
+| On a day...              | when the day you pick starts, in the time zone the dashboard shows             |
+| Never                    | when you revoke it, or when the user who approved it is removed                |
+
 A machine keeps one saved login: a new `poplin login` replaces it. An agent on the machine uses that login and does not log in itself. `POPLIN_SERVER` and `POPLIN_TOKEN` in the environment stand in for a saved login.
 
 `POPLIN_CONFIG_DIR` in the environment names another folder for the saved login, read when the two names above are not set. Set for an agent's tools alone, it gives the agent a login of its own, which shows under its own name: [the skill's page](../../skills/poplin/references/mcp-server.md#optional-a-login-of-your-own) has the step.
@@ -93,8 +101,11 @@ A machine's login is a token. The dashboard lists them under Access, Tokens.
 | In the list                    | Shows                                                                      |
 | ------------------------------ | -------------------------------------------------------------------------- |
 | a token that works             | its name, its role as `Admin (everything)` or `Publisher (own sites only)`, when it was approved, when it expires |
+| Change expiry, in the menu of its row | sets when a token that works expires: later, sooner, or never, with the same choices as the page that approves a login |
 | Revoke, in the menu of its row | ends it at once                                                            |
 | Revoked tokens, folded         | the 50 that ended last in the past 90 days, each with `Revoked by` and who did it, `Logged out`, `Expired`, or `Its user was removed` |
+
+A token that has expired is ended as a revoked one is: Change expiry is for a token that still works. Each change of an expiry is written to Activity, with what it was and what it is: a day, or never.
 
 A revoked token never logs in again, and nothing brings it back: `poplin login` makes a new one. `Logged out` is a token that `poplin logout` gave back. `Its user was removed` is a token that ended with the user who approved it. [Security](../about/security.md#hardening) says what the install stores of a token.
 

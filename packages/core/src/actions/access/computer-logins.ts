@@ -9,11 +9,11 @@
 import * as v from "valibot";
 
 import { type ComputerLogin, holdsSecret, isShownUserCode, type LoginId, mintComputerLogin, parseLoginId, parseLoginSecret, sameUserCode, showUserCode } from "../../auth/computer-logins";
-import type { Login } from "../../auth/logins";
 import type { Actor } from "../../auth/scopes";
-import { mintToken } from "../../auth/tokens";
-import { LOGIN } from "../../records/fields";
+import { defaultExpiry, mintToken } from "../../auth/tokens";
+import { readExpires } from "../sites/changes";
 import { TOKEN_OBJECT, tokenObject } from "./manage-tokens";
+import { personOf } from "./reach";
 import { type Install, type Refused, refuse } from "../records";
 
 /** The longest name a computer gives itself, in characters. */
@@ -52,10 +52,13 @@ export const LOGIN_REQUEST = v.strictObject({
 /** What a terminal asks for its token with. */
 export const LOGIN_SECRET = v.strictObject({ secret: v.pipe(v.string(), v.maxLength(MAX_SECRET_LENGTH)) });
 
-/** What an admin decides about one waiting login, named by its id. To let it in they name its scope, so none is let in with a scope nobody chose, and give its `code`, which the terminal alone shows. */
+/**
+ * What an admin decides about one waiting login, named by its id. To let it in they name its scope, so none is let in with a scope nobody chose, and give its `code`, which the terminal alone shows.
+ * `expires` is when its token runs out, in a form `readExpires` takes; left out, the token lasts as `defaultExpiry` has it for its scope.
+ */
 const LOGIN_DECISION = v.variant("allow", [
   v.strictObject({ login: v.string(), allow: v.literal(false) }),
-  v.strictObject({ login: v.string(), allow: v.literal(true), scope: v.picklist(["publisher", "admin"]), code: v.string() }),
+  v.strictObject({ login: v.string(), allow: v.literal(true), scope: v.picklist(["publisher", "admin"]), code: v.string(), expires: v.optional(v.string()) }),
 ]);
 
 /**
@@ -98,13 +101,6 @@ export type Redeemed = Readonly<v.InferOutput<typeof REDEEMED_LOGIN>>;
 
 function loginObject(login: ComputerLogin): LoginObject {
   return { id: login.id, scope: login.scope, computer: login.computer, asked: login.createdAt, expires: login.expiresAt };
-}
-
-/** The email of an admin in a browser. A token allows no computer in, so no token outlives its own expiry through a login it allowed. */
-function personOf(actor: Actor): Login | undefined {
-  if (actor.scope !== "admin" || !v.is(LOGIN, actor.holder)) return undefined;
-
-  return actor.holder;
 }
 
 /** The login a person may still decide, by its id: pending, and not run out. */
@@ -176,10 +172,11 @@ export async function showLogin(install: Install, actor: Actor, id: string): Pro
 /**
  * Allow or deny one waiting login. The decision is made once and writes one audit entry; an allowed login gives its token to the terminal that holds its secret.
  *
- * An admin may allow a computer for less than it asked, never for more. Only one who has the terminal's code allows it: the code is in no answer and no address.
+ * An admin may allow a computer for less than it asked, never for more, and chooses when its token runs out. Only one who has the terminal's code allows it: the code is in no answer and no address.
  *
- * @param decision - the login's id and whether the computer is let in; for one that is, its scope and its code, as typed or pasted; anything is taken and checked
- * @returns the login as it was decided, `not_allowed` for anyone but an admin in a browser, `not_confirmed` for anything but the whole code, `bad_argument` about `scope` for more than was asked, or `no_such_login`
+ * @param decision - the login's id and whether the computer is let in; for one that is, its scope, its code, as typed or pasted, and when its token runs out; anything is taken and checked
+ * @returns the login as it was decided, `not_allowed` for anyone but an admin in a browser, `not_confirmed` for anything but the whole code, or `no_such_login`;
+ *   `bad_argument` about `scope` for more than was asked, and about `expires` for a moment that is not ahead
  * @throws {Error} the database failed
  */
 export async function decideLogin(
@@ -196,15 +193,24 @@ export async function decideLogin(
   const login = await waitingLogin(install, asked.output.login);
   if (login === undefined) return refuse("no_such_login");
 
-  const scope = asked.output.allow ? asked.output.scope : undefined;
-  if (asked.output.allow && !(await sameUserCode(asked.output.code, login.code))) return refuse("not_confirmed", "code");
+  if (!asked.output.allow) return decided(await install.database.decideComputerLogin(login.code, { state: "denied", by: admin, at: install.now() }));
+
+  const { scope, code, expires } = asked.output;
+  if (!(await sameUserCode(code, login.code))) return refuse("not_confirmed", "code");
 
   if (scope === "admin" && login.scope !== "admin") return refuse("bad_argument", "scope");
 
-  const decided = await install.database.decideComputerLogin(login.code, { state: asked.output.allow ? "allowed" : "denied", asPublisher: scope === "publisher", by: admin, at: install.now() });
-  if (decided.kind !== "done") return refuse("no_such_login");
+  // The clock is read once the code is confirmed, which takes a moment: a login that ran out meanwhile is not allowed.
+  const at = install.now();
+  const tokenExpires = expires === undefined ? defaultExpiry(scope, at) : readExpires(expires, at);
+  if (tokenExpires === undefined) return refuse("bad_argument", "expires");
 
-  return { ok: true, login: loginObject(decided.login) };
+  return decided(await install.database.decideComputerLogin(login.code, { state: "allowed", asPublisher: scope === "publisher", tokenExpires, by: admin, at }));
+}
+
+/** What a decision the database made, or found no pending login for, answers. */
+function decided(stored: Awaited<ReturnType<Install["database"]["decideComputerLogin"]>>): { readonly ok: true; readonly login: LoginObject } | Refused<"no_such_login"> {
+  return stored.kind === "done" ? { ok: true, login: loginObject(stored.login) } : refuse("no_such_login");
 }
 
 /**
@@ -228,7 +234,7 @@ export async function redeemLogin(install: Install, request: v.InferInput<typeof
 
   if (login.state !== "allowed") return { ok: true, state: login.state };
 
-  const minted = await mintToken({ scope: login.scope, note: login.computer === "" ? UNNAMED : login.computer, now });
+  const minted = await mintToken({ scope: login.scope, note: login.computer === "" ? UNNAMED : login.computer, now, expires: login.tokenExpires });
   const redeemed = await install.database.redeemComputerLogin(login.id, minted.record);
   if (redeemed.kind !== "done") return { ok: true, state: "expired" };
 

@@ -2,10 +2,10 @@
 
 import { clearPage, type Within } from "../lib/support/page";
 
-import { afterAll, afterEach, describe, expect, test } from "bun:test";
+import { afterAll, afterEach, describe, expect, setSystemTime, test } from "bun:test";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { parseUserCode } from "@poplin/core/src/auth/computer-logins";
-import { cleanup, fireEvent, render, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, waitFor, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 
 import type { AccessActions, Decided, Decision } from "@/access/access-actions";
@@ -76,6 +76,35 @@ function pressed(): readonly string[] {
     .map((choice) => `${choice.textContent}: ${choice.getAttribute("aria-pressed")}`);
 }
 
+/** A day in milliseconds. */
+const DAY_MS = 86_400_000;
+
+/** How a moment is written: the day with two figures, and the time to the minute. */
+const MOMENT = /^\d{2} [A-Z][a-z]{2} \d{4}, \d{2}:\d{2}$/;
+
+/** A minute in milliseconds. */
+const MINUTE_MS = 60_000;
+
+/** The moment a review opens at, in the tests that move the clock before Approve is pressed. */
+const OPENED = Date.UTC(2031, 4, 6, 12, 0, 0);
+
+/** The moment so many days after the review opened, as a decision sends it. */
+function after(days: number): string {
+  return new Date(OPENED + days * DAY_MS).toISOString();
+}
+
+/** When the token expires as the review says it, without the button beside it. */
+function expiry(): string | null | undefined {
+  return dialog().getByText("Expires", { selector: "dt" }).nextElementSibling?.querySelector("span")?.textContent;
+}
+
+/** Open the menu that changes the expiry, and press one of its entries. */
+async function choose(entry: RegExp): Promise<void> {
+  await act(async () => fireEvent.click(dialog().getByRole("button", { name: "Change when it expires" })));
+  await waitFor(() => expect(within(document.body).queryAllByRole("menuitem", { name: "Never" }).length).toBe(1));
+  await act(async () => fireEvent.click(within(document.body).getByRole("menuitem", { name: entry })));
+}
+
 function allowIsOff(): boolean {
   return dialog().getByRole("button", { name: "Approve" }).hasAttribute("disabled");
 }
@@ -107,25 +136,28 @@ afterAll(async () => {
 
 afterEach(() => {
   cleanup();
+  setSystemTime();
   sent.length = 0;
 });
 
 describe("the review", () => {
   // Drift: the choice would start at what the login asked, so a stranger's login would be one press from everything; or a computer that asked to publish would be offered more.
   test.each([
-    ["one that asked to publish is offered no choice", PUBLISHER, undefined, [], "Publisher (own sites only)", "publisher"],
-    ["one that asked for everything starts at its own sites only", ADMIN, undefined, ["Publisher: true", "Admin: false"], "Admin (everything)", "publisher"],
-    ["one that asked for everything gets it once Admin is pressed", ADMIN, "Admin", ["Publisher: true", "Admin: false"], "Admin (everything)", "admin"],
-  ] as const)("%s", async (_case, login, press, starts, asks, scope) => {
+    ["one that asked to publish is offered no choice", PUBLISHER, undefined, [], "Publisher (own sites only)", { scope: "publisher", expires: "never" }],
+    ["one that asked for everything starts at its own sites only", ADMIN, undefined, ["Publisher: true", "Admin: false"], "Admin (everything)", { scope: "publisher", expires: "never" }],
+    ["one that asked for everything gets it once Admin is pressed, for 30 days from when the review opened", ADMIN, "Admin", ["Publisher: true", "Admin: false"], "Admin (everything)", { scope: "admin", expires: after(30) }],
+  ] as const)("%s", async (_case, login, press, starts, asks, approved) => {
     let closed = 0;
+    setSystemTime(new Date(OPENED));
     render(<Reviewing login={login} onClose={() => (closed += 1)} />);
     const [began, asked] = [pressed(), fact("Asks for")];
     if (press !== undefined) fireEvent.click(dialog().getByRole("button", { name: press }));
     type(CODE);
+    setSystemTime(new Date(OPENED + 10 * MINUTE_MS));
     await decide("Approve");
 
     expect([began, asked]).toEqual([starts, asks]);
-    expect([sent, closed]).toEqual([[{ login: login.id, allow: true, code: CODE, scope }], 1]);
+    expect([sent, closed]).toEqual([[{ login: login.id, allow: true, code: CODE, ...approved }], 1]);
   });
 
   // Drift: keeping a computer out would ask for the code that only letting one in needs.
@@ -170,7 +202,7 @@ describe("the review", () => {
     await decide("Approve");
 
     expect([before, refused]).toEqual([["Type or paste it to approve."], [0, WRONG_CODE, true, "true", [WRONG_CODE]]]);
-    expect([cleared, sent, closed]).toEqual([0, [{ login: PUBLISHER.id, allow: true, code: CODE, scope: "publisher" }], 1]);
+    expect([cleared, sent, closed]).toEqual([0, [{ login: PUBLISHER.id, allow: true, code: CODE, scope: "publisher", expires: "never" }], 1]);
   });
 });
 
@@ -190,7 +222,7 @@ describe("the name a login gave itself", () => {
       .map((button) => button.getAttribute("aria-label") ?? button.textContent);
     const outside = (named.textContent ?? "").replace(shown, "");
 
-    expect([within(named).getByRole("heading").textContent, fact("Name it gave"), buttons]).toEqual([TITLE, shown, ["Publisher", "Admin", "Deny", "Approve", "Close"]]);
+    expect([within(named).getByRole("heading").textContent, fact("Name it gave"), buttons]).toEqual([TITLE, shown, ["Publisher", "Admin", "Change when it expires", "Deny", "Approve", "Close"]]);
     expect(computer !== "" && outside.includes(computer)).toBe(false);
   });
 });
@@ -228,5 +260,43 @@ describe("a review opened by a link", () => {
       code: false,
       allowOff: true,
     });
+  });
+});
+
+describe("when the token expires", () => {
+  // Drift: an admin token would be approved with no end because the choice still stood at the publisher's, or a span picked by hand would be lost at the next press on a role.
+  test("the expiry is the role's own, follows the role until one is picked by hand, and then stays as the menu wrote it", async () => {
+    setSystemTime(new Date(OPENED));
+    render(<Reviewing login={ADMIN} />);
+    const starts = expiry();
+    fireEvent.click(dialog().getByRole("button", { name: "Admin" }));
+    const asAdmin = expiry();
+    fireEvent.click(dialog().getByRole("button", { name: "Publisher" }));
+    const back = expiry();
+    await choose(/^90 days/);
+    fireEvent.click(dialog().getByRole("button", { name: "Admin" }));
+    const picked = expiry();
+    type(CODE);
+    setSystemTime(new Date(OPENED + 10 * MINUTE_MS));
+    await decide("Approve");
+
+    expect([starts, MOMENT.test(asAdmin ?? ""), back, MOMENT.test(picked ?? "")]).toEqual(["Never", true, "Never", true]);
+    expect(sent).toEqual([{ login: ADMIN.id, allow: true, code: CODE, scope: "admin", expires: after(90) }]);
+  });
+
+  // Drift: an admin token with no end would be approved with nothing said of it, or the line would be said of a publisher token, which never had an end.
+  test("an admin token set to never is told that it works until it is revoked, and a publisher token is told nothing", async () => {
+    render(<Reviewing login={ADMIN} />);
+    const told = (): number => dialog().queryAllByText("It works until you revoke it.").length;
+    const asPublisher = told();
+    fireEvent.click(dialog().getByRole("button", { name: "Admin" }));
+    const dated = told();
+    await choose(/^Never$/);
+    const endless = told();
+    type(CODE);
+    await decide("Approve");
+
+    expect([asPublisher, dated, endless]).toEqual([0, 0, 1]);
+    expect(sent).toEqual([{ login: ADMIN.id, allow: true, code: CODE, scope: "admin", expires: "never" }]);
   });
 });

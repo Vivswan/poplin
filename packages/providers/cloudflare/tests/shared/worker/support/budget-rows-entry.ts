@@ -295,23 +295,23 @@ export const ENTRY_ROWS: readonly BudgetRow[] = [
     group: BACKGROUND,
     name: "the first request of a new install",
     start: "new",
-    // Worst start: the database is empty, so the schema is made, the first settings stored, and the visitor key drawn before the request is answered.
+    // Worst start: the database is empty, so the schema is made step by step, the first settings stored, and the visitor key drawn before the request is answered.
     arrange: async () => {
       await reset();
 
       return (measured) => get(measured, `${ADMIN}/api/whoami`);
     },
     status: 401,
-    budget: { queries: 6, read: 59, reads: 0, writes: 0 },
+    budget: { queries: 7, read: 419, reads: 0, writes: 0 },
   },
   {
     group: BACKGROUND,
     name: "the first request of a new instance",
     start: "new",
-    // What a start adds to any request: the schema's step read, the settings, and the visitor key.
+    // What a start adds to any request: the schema's steps read, a row each, the settings, and the visitor key.
     arrange: async () => (measured) => get(measured, `${ADMIN}/api/whoami`),
     status: 401,
-    budget: { queries: 2, read: 3, reads: 0, writes: 0 },
+    budget: { queries: 2, read: 4, reads: 0, writes: 0 },
   },
   {
     group: BACKGROUND,

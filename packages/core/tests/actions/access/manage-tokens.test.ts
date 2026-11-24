@@ -1,9 +1,10 @@
 import { describe, expect, spyOn, test } from "bun:test";
 
 import { removeLogin } from "../../../src/actions/access/logins";
-import { countUserTokens, issueToken, listTokenStates, listTokens, nameTokens, revokeToken } from "../../../src/actions/access/manage-tokens";
+import { changeTokenExpiry, countUserTokens, issueToken, listTokenStates, listTokens, nameTokens, revokeToken } from "../../../src/actions/access/manage-tokens";
 import type { Login } from "../../../src/auth/logins";
-import type { TokenId } from "../../../src/auth/tokens";
+import type { Actor } from "../../../src/auth/scopes";
+import type { TokenId, TokenRecord } from "../../../src/auth/tokens";
 import { verifyToken } from "../../../src/auth/tokens";
 import { ADMIN, DAY, makeWorld, NOW, OWNER } from "../support/actions-fixture";
 
@@ -103,5 +104,52 @@ describe("the tokens that work and the ones that ended", () => {
         { ...gone, id: laptop, note: "laptop", scope: "admin" },
       ],
     ]);
+  });
+});
+
+describe("changeTokenExpiry", () => {
+  // Drift: an expiry is the token's own, whatever its role, and only a person moves it. A token that moved one would outlive its own day, and a moment that has passed would end a token with no entry of a removal.
+  test("a person sets a working token to expire later, sooner, or never, whatever its role; a token, a publisher, a passed moment, and a token that ended are refused", async () => {
+    const world = await makeWorld();
+    const issue = async (scope: "admin" | "publisher", note: string): Promise<{ readonly id: string; readonly token: string }> => {
+      const issued = await issueToken(world.install, ADMIN, { scope, note });
+      if (!issued.ok) throw new Error("the token was not issued");
+
+      return { id: issued.record.id, token: issued.token };
+    };
+    const [laptop, ci, gone] = [await issue("admin", "laptop"), await issue("publisher", "ci"), await issue("publisher", "gone")];
+    await revokeToken(world.install, ADMIN, gone.id);
+    const asToken: Actor = { scope: "admin", holder: laptop.id as TokenId };
+    world.clock.now = NOW + 1;
+
+    const answers = [
+      await changeTokenExpiry(world.install, ADMIN, laptop.id, { expires: "never" }),
+      await changeTokenExpiry(world.install, ADMIN, ci.id, { expires: new Date(NOW + 90 * DAY).toISOString() }),
+      await changeTokenExpiry(world.install, ADMIN, ci.id, { expires: "7d" }),
+      await changeTokenExpiry(world.install, asToken, ci.id, { expires: "never" }),
+      await changeTokenExpiry(world.install, OWNER, ci.id, { expires: "never" }),
+      await changeTokenExpiry(world.install, ADMIN, ci.id, { expires: new Date(NOW).toISOString() }),
+      await changeTokenExpiry(world.install, ADMIN, ci.id, { expires: "soon" }),
+      await changeTokenExpiry(world.install, ADMIN, "no-token", { expires: "never" }),
+      await changeTokenExpiry(world.install, ADMIN, gone.id, { expires: "never" }),
+    ];
+    const record = async (id: string): Promise<TokenRecord | undefined> => world.install.database.getToken(id as TokenId);
+    const [endless, dated] = [await record(laptop.id), await record(ci.id)];
+    const works = async (token: string, of: TokenRecord | undefined, at: number): Promise<boolean> => of !== undefined && (await verifyToken(token, of, at)).ok;
+
+    expect<unknown>(answers).toEqual([
+      { ok: true, token: { id: laptop.id, scope: "admin", note: "laptop", created: NOW, expires: "never" } },
+      { ok: true, token: { id: ci.id, scope: "publisher", note: "ci", created: NOW, expires: NOW + 90 * DAY } },
+      { ok: true, token: { id: ci.id, scope: "publisher", note: "ci", created: NOW, expires: NOW + 1 + 7 * DAY } },
+      { ok: false, code: "not_allowed" },
+      { ok: false, code: "not_allowed" },
+      { ok: false, code: "bad_argument", about: "expires" },
+      { ok: false, code: "bad_argument", about: "expires" },
+      { ok: false, code: "bad_argument", about: "token" },
+      { ok: false, code: "not_found" },
+    ]);
+    // The admin token outlives its 30 days, and the publisher token ends on its day and not a millisecond later.
+    expect([await works(laptop.token, endless, NOW + 400 * DAY), await works(ci.token, dated, NOW + 7 * DAY), await works(ci.token, dated, NOW + 1 + 7 * DAY)]).toEqual([true, true, false]);
+    expect((await world.audit()).filter((action) => action === "token_expiry_changed").length).toBe(3);
   });
 });

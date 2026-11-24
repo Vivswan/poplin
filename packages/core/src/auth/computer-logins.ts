@@ -6,6 +6,7 @@
 import { RANDOM_SHAPES, randomText } from "../records/random-text";
 import type { Login } from "./logins";
 import type { Scope } from "./scopes";
+import type { TokenExpiry } from "./tokens";
 import { randomHex, sameText, sha256Hex } from "./util";
 
 const SECRET_PREFIX = "poplin_login_";
@@ -53,8 +54,11 @@ interface LoginFacts {
 /** A login nobody decided yet: the only kind that is made, and the only kind that is stored as new. */
 export type PendingLogin = LoginFacts & { readonly state: "pending" };
 
-/** What is stored of a computer's login: pending, or decided by an admin. */
-export type ComputerLogin = PendingLogin | (LoginFacts & { readonly state: "allowed" | "denied"; readonly decidedBy: Login });
+/** What is stored of a computer's login: pending, or decided by an admin. Only an allowed one holds when its token runs out, which whoever allowed it chose. */
+export type ComputerLogin =
+  | PendingLogin
+  | (LoginFacts & { readonly state: "denied"; readonly decidedBy: Login })
+  | (LoginFacts & { readonly state: "allowed"; readonly decidedBy: Login; readonly tokenExpires: TokenExpiry });
 
 /** What a new login asks for. `computer` is the name the terminal gave itself, stored as given; `visitor` is the key of whoever asks. */
 type LoginRequest = { readonly scope: Scope; readonly computer: string; readonly visitor: string; readonly now: number };

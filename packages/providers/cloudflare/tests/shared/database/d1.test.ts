@@ -185,6 +185,7 @@ const ROWS: Readonly<Record<string, readonly [read: number, written: number]>> =
   "listTokens": [2, 0],
   "getTokenNames, 1 of 2": [1, 0],
   "getTokenNames, 1 of 2 among 250 ids": [251, 0],
+  "changeTokenExpiry": [5, 4],
   "revokeToken": [3, 3],
   "listTokenStates": [3, 0],
   "countUserTokens, 1 token": [1, 0],
@@ -258,6 +259,7 @@ const ROWS: Readonly<Record<string, readonly [read: number, written: number]>> =
   "measureUpload, an upload that fits": [5, 0],
   "refused: addToken, the id is taken": [2, 0],
   "refused: revokeToken, none": [3, 0],
+  "refused: changeTokenExpiry, none works": [4, 0],
   "refused: decideComputerLogin, none waits": [0, 0],
   "refused: redeemComputerLogin, none allowed": [1, 0],
   "readStorageWrites": [2, 0],
@@ -694,7 +696,7 @@ describe("D1: the rows a scheduled sweep costs of a day's allowance", () => {
 
 describe("D1: the rows a database costs to open", () => {
   // Drift: every instance opens the database when it starts, hundreds of times a day. A check that walked the schema to see whether the ledger is there read a row for every table, index, and trigger at each start.
-  test("a database that is up to date is opened for the one row of its step; only one no step ran on is asked about its schema", async () => {
+  test("a database that is up to date is opened for the one row of each of its two steps; only one no step ran on is asked about its schema", async () => {
     const { driver, rows } = await meteredDatabase();
     const first = await openDatabase(driver, NOW);
     const made = { ...rows };
@@ -703,7 +705,7 @@ describe("D1: the rows a database costs to open", () => {
 
     const again = await openDatabase(driver, NOW);
 
-    expect([first.kind, again.kind, again.kind === "open" ? again.applied : undefined, rows]).toEqual(["open", "open", [], { read: 1, written: 0 }]);
+    expect([first.kind, again.kind, again.kind === "open" ? again.applied : undefined, rows]).toEqual(["open", "open", [], { read: 2, written: 0 }]);
     expect(made.read).toBeGreaterThan(rows.read);
   });
 });
@@ -835,7 +837,7 @@ describe("D1: the rows every operation of the database costs of a day's allowanc
     await cost("getComputerLogin", () => database.getComputerLogin(login.id));
     await cost("findComputerLogin", () => database.findComputerLogin(login.code));
     await cost("listWaitingComputerLogins", () => database.listWaitingComputerLogins(NOW + 2));
-    await cost("decideComputerLogin", () => database.decideComputerLogin(login.code, { state: "allowed", by: ADMIN, at: NOW + 2 }));
+    await cost("decideComputerLogin", () => database.decideComputerLogin(login.code, { state: "allowed", tokenExpires: "never", by: ADMIN, at: NOW + 2 }));
     const redeemed = (await mintToken({ scope: "publisher", note: "laptop", now: NOW + 3 })).record;
     await cost("redeemComputerLogin", () => database.redeemComputerLogin(login.id, redeemed));
     await cost("sweepRunOut", () => database.sweepRunOut(NOW + 86_400_000));
@@ -990,6 +992,9 @@ describe("D1: the rows every operation of the database costs of a day's allowanc
     // The walk's last entries of the log: every reading of it is metered above.
     await cost("changeSettings, automatic updates on", () => database.changeSettings({ auto_update: true }, BY_ADA));
     await cost("changeSettings, the check off beside them", () => database.changeSettings({ update_check: false }, BY_ADA));
+    // After every reading of the log, since a change of expiry writes an entry: a token that works gets a day, and one that was revoked is left as it ended.
+    await cost("changeTokenExpiry", () => database.changeTokenExpiry(publisher.id, NOW + 86_400_000, { as: "person", by: ADMIN, at: NOW }));
+    await cost("refused: changeTokenExpiry, none works", () => database.changeTokenExpiry(admin.id, "never", { as: "person", by: ADMIN, at: NOW }));
 
     expect(costs).toEqual(ROWS);
   });

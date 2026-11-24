@@ -33,8 +33,8 @@ const NASTY_INPUTS: readonly string[] = [
   "x".repeat(1_000_000),
   `poplin_${"0".repeat(1_000_000)}`,
 ];
-const ADMIN: TokenRecord = { id: "0000000000000000" as TokenId, hash: "", note: "", createdAt: NOW, scope: "admin", expiresAt: NOW };
-const PUBLISHER: TokenRecord = { id: "0000000000000000" as TokenId, hash: "", note: "", createdAt: NOW, scope: "publisher" };
+const ADMIN: TokenRecord = { id: "0000000000000000" as TokenId, hash: "", note: "", createdAt: NOW, scope: "admin", expires: NOW };
+const PUBLISHER: TokenRecord = { id: "0000000000000000" as TokenId, hash: "", note: "", createdAt: NOW, scope: "publisher", expires: "never" };
 
 describe("mintToken", () => {
   test("drift: the record is all that is stored, so it must hold the hash and the facts and no part of the token's secret", async () => {
@@ -45,10 +45,23 @@ describe("mintToken", () => {
 
     expect([admin.token, publisher.token].map((token) => TOKEN_SHAPE.test(token))).toEqual([true, true]);
     expect<unknown>([admin.record, publisher.record]).toEqual([
-      { id: adminId, hash: createHash("sha256").update(admin.token).digest("hex"), note: "laptop", createdAt: NOW, scope: "admin", expiresAt: NOW + THIRTY_DAYS_MS },
-      { id: publisherId, hash: createHash("sha256").update(publisher.token).digest("hex"), note: "workspace one", createdAt: NOW, scope: "publisher" },
+      { id: adminId, hash: createHash("sha256").update(admin.token).digest("hex"), note: "laptop", createdAt: NOW, scope: "admin", expires: NOW + THIRTY_DAYS_MS },
+      { id: publisherId, hash: createHash("sha256").update(publisher.token).digest("hex"), note: "workspace one", createdAt: NOW, scope: "publisher", expires: "never" },
     ]);
     expect(JSON.stringify(admin.record)).not.toContain(adminSecret);
+  });
+
+  // Drift: an expiry tied to the scope again would give a publisher token with a date no end, and end an admin token that was set to never.
+  test("a chosen expiry is the record's, whatever the scope: a publisher token with a date, an admin token that never runs out", async () => {
+    const dated = await mintToken({ scope: "publisher", note: "ci", now: NOW, expires: NOW + 1 });
+    const endless = await mintToken({ scope: "admin", note: "laptop", now: NOW, expires: "never" });
+
+    expect([dated.record.expires, endless.record.expires]).toEqual([NOW + 1, "never"]);
+    expect<unknown>([
+      await verifyToken(dated.token, dated.record, NOW),
+      await verifyToken(dated.token, dated.record, NOW + 1),
+      await verifyToken(endless.token, endless.record, NOW + 400 * THIRTY_DAYS_MS),
+    ]).toEqual([{ ok: true, value: dated.record }, { ok: false, refusal: "expired" }, { ok: true, value: endless.record }]);
   });
 });
 
@@ -115,7 +128,7 @@ describe("parseToken", () => {
 });
 
 describe("isExpired", () => {
-  // Drift: publisher tokens live until revoked and admin tokens do not; mixing the two either strands agents or leaves admin rights open for good.
+  // Drift: a token runs out at its expiry and one without lives until revoked, whatever the scope; an expiry read from the scope either strands agents or leaves a token open past its day.
   test.each([
     [ADMIN, NOW - 1, false],
     [ADMIN, NOW, true],
