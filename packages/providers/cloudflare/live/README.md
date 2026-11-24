@@ -507,7 +507,7 @@ with a bucket of 2,000 files     3 in place of the 301: 305 a run, 12,921 a day,
 a run with the many-files check  2 + 2,300 + 150 + 301 = 2,753, started by hand alone
 a usual run                      about 97 (checks) + 0 (a reset that keeps every sample and the demo) + 2 (the account's buckets listed, and the install's listed once)
 the midnight run                 about 218 (checks): the copy's 113 files published, and the asks after its job
-a reset that keeps nothing       about 131
+a reset that keeps nothing       about 136
 either install                   the same sums, each against the 1,000,000 of its own account
 the files no record names        the bucket found, and 1 list for every thousand files it holds; a delete is free, and counted against the 300 all the same
 ```
