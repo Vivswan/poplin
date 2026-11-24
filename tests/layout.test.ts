@@ -58,6 +58,7 @@ const CEILINGS: readonly (readonly [folder: string, ceiling: number, holds: stri
   ["packages/app/tests/console", 12, "the tests of src/console/, file for file"],
   ["packages/cli/src", 10, "the CLI's entries and one folder for each concept"],
   ["packages/cli/src/commands", 9, "running a command, the table of every command, and one folder for each concept"],
+  ["packages/cli/tests", 9, "the tests of src/ and of scripts/, file for file"],
   ["packages/core/src", 12, "the package's entry and one folder for each concept"],
   ["packages/core/src/actions", 9, "what every action shares, the start of an update, and one folder for each concept"],
   ["packages/core/src/actions/sites", 11, "the site actions but publish, and what they share"],
