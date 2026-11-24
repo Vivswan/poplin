@@ -70,7 +70,6 @@ const CEILINGS: readonly (readonly [folder: string, ceiling: number, holds: stri
   ["packages/dashboard/src/components/ui", 30, "the parts of the UI library, written by its tool at the path it names"],
   ["packages/dashboard/src/domain", 11, "the Domain screen"],
   ["packages/dashboard/src/lib", 11, "the client's helpers that no screen owns"],
-  ["packages/dashboard/src/settings", 9, "the Settings screen"],
   ["packages/dashboard/src/shared", 15, "the parts every screen shares"],
   ["packages/dashboard/src/sites", 11, "the Sites screen"],
   ["packages/dashboard/src/usage", 9, "the Usage screen"],

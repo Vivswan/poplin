@@ -5,8 +5,8 @@ import { type ReactNode, useEffect, useRef } from "react";
 
 import { FieldDescription, FieldError } from "@/components/ui/field";
 import { settingAnchor } from "@/settings/setting-address";
-import { SettingControl } from "@/settings/setting-control";
-import { SettingFrame } from "@/settings/setting-frame";
+import { SettingControl } from "@/settings/row/setting-control";
+import { SettingFrame } from "@/settings/row/setting-frame";
 import { isSwitch, partsOf, readOf } from "@/settings/setting-values";
 import type { Row } from "@/settings/settings-queries";
 import { wordsOf } from "@/settings/settings-words";
