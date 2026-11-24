@@ -89,7 +89,7 @@ const TOKENS_PAGE = "https://dash.cloudflare.com/profile/api-tokens";
 /** What a line says, where no object's own name says it. */
 const WORDS = {
   lacks: "the account token lacks",
-  optional: "The account token lacks",
+  optional: "needs",
   workerStands: "the Worker must be removed first",
   applicationsStand: "an Access application must be removed first",
   notOwn: "not this install's: the Worker binds another",

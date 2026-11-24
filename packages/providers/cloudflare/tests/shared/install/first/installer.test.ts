@@ -28,14 +28,16 @@ const KINDS = {
 /** A dry run, and a run. */
 const [DRY, APPLY]: readonly [Run, Run] = ["dry-run", "apply"];
 
-/** What the row of a piece left out for an optional permission says before the permission, and after it. */
-const [LACKS, ADD_IT] = ["The account token lacks", ". Fix: add it, then run npx poplin doctor --repair"] as const;
+/** The optional rules of an install under a domain, each as its row says and carries it: the permission it needs, that permission, and what it is for, in the few words the token's form has for it. */
+const LACKING = [
+  ["Redirect rule", "Single Redirect: Edit", "http redirect"],
+  ["WAF rule", "Zone WAF: Edit", "edge rules"],
+  ["Rate rule", "Zone WAF: Edit", "edge rules"],
+  ["Bot settings", "Bot Management: Edit", "bot blocking"],
+].map(([object, right, extra]) => `${object} | needs ${right} | ${right} | ${extra}`);
 
-/** The optional pieces of an install under a domain that are made with a permission of their own, each with that permission. */
-const LACKING = ["Redirect rule | Single Redirect: Edit", "WAF rule | Zone WAF: Edit", "Rate rule | Zone WAF: Edit", "Bot settings | Bot Management: Edit"] as const;
-
-/** What the row of an alert that is left out says: the cause first, as every other optional piece's, then that the install makes its alerts by itself too. */
-const ITSELF = `${LACKS} Notifications: Edit${ADD_IT}, or wait a day for the install to create it`;
+/** What the row of an alert that is left out says and carries after a run: the permission as every other optional piece's, then that the install makes its alerts by itself too. */
+const ITSELF = "needs Notifications: Edit, or wait a day: the install creates it | Notifications: Edit | alerts";
 
 /** The Worker's own pieces of a new install, which both kinds start with. */
 const OWN = ["R2 bucket | make | poplin-sites", "D1 database | make | poplin", `Worker | make | poplin, runs ${RELEASE}`, "Cron trigger | make | */15 * * * *"];
@@ -538,20 +540,21 @@ describe("what stops a run before it changes anything", () => {
   });
 
   // Drift: an optional piece the token has no permission for is no failure: the install works without it, and the run is whole.
-  // Its row names the permission and the repair, in one statement: the words the dashboard has for it tell a person to press a button no terminal has.
+  // Its row says the permission it needs and no more. It named the repair as its fix, which stops at an account with no install: what makes the piece is the command's to say, which knows the run.
+  // The row carries the permission, and what the piece is, for the command's one line. A permission carried on such a row once counted as a block, and the run was not ready.
   test.each([
-    ["domain", [...LACKING.map((row) => row.replace(" | ", ` | ${LACKS} `) + ADD_IT), `Budget alert | ${ITSELF}`, `Certificate alert | ${ITSELF}`]],
+    ["domain", [...LACKING, `Budget alert | ${ITSELF}`, `Certificate alert | ${ITSELF}`]],
     ["no-domain", [`Budget alert | ${ITSELF}`]],
-  ] as const)("a token without the optional permissions leaves those pieces out of a new install, %s, in the dry run as in the run, and the run is ready", async (kind, optional) => {
+  ] as const)("a token without the optional permissions leaves those pieces out of a new install, %s, in the dry run as in the run, each row with its permission, and the run is ready", async (kind, optional) => {
     const refuse = ["GET /zones/zone-1/rulesets*", `GET /accounts/${ACCOUNT}/alerting*`, "GET /zones/zone-1/bot_management"];
     const account = fresh({ refuse });
     const dry = await installed(account, kind, DRY);
     const run = await installed(account, kind, APPLY);
-    const left = shown(run.done).filter((row) => row.includes(" | leave-out | ")).map((row) => row.replace(" | leave-out", ""));
+    const left = run.done.ok ? run.done.rows.filter((row) => row.state === "leave-out").map((row) => `${row.object} | ${row.detail} | ${row.right} | ${row.extra}`) : [];
 
     const states = (done: Installed): string[][] => shown(done).map((row) => row.split(" | ").slice(0, 2));
 
-    expect([left, states(run.done), run.done.ok && run.done.ready]).toEqual([[...optional], states(dry.done), true]);
+    expect([left, states(run.done), run.done.ok && [run.done.ready, run.done.blocked]]).toEqual([[...optional], states(dry.done), [true, []]]);
   });
 });
 

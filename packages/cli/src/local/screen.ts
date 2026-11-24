@@ -12,8 +12,8 @@ import { Help } from "commander";
 import { type ConsolaInstance, createConsola, LogLevels } from "consola";
 import stringWidth from "string-width";
 
-/** The widest a line is shown, in the cells of a terminal: a narrower terminal's own width counts where it is known. */
-const MAX_WIDTH = 80;
+/** How wide a stream that names no width is taken to be, in the cells of a terminal: a pipe, a file, and a terminal that does not say. */
+const ASSUMED_WIDTH = 80;
 
 /** How many cells the mark of a line takes, with the space after it. */
 const MARK_WIDTH = 2;
@@ -39,8 +39,8 @@ const STOP_KEYS: ReadonlySet<string> = new Set(["\u0003", "\u001b", END_OF_INPUT
 /** The library's folding of a text at its spaces, measured in the cells of a terminal. It breaks no word: one wider than the line stands alone on a row. */
 const FOLDER = Object.assign(new Help(), { minWidthToWrap: MIN_FOLD, displayWidth: (shown: string): number => stringWidth(shown) });
 
-/** The look where nobody watches: plain lines of at most the widest width of the screen. */
-export const PLAIN_LOOK: Look = { width: MAX_WIDTH, colour: false };
+/** The look where nobody watches: plain lines of at most the assumed width. */
+export const PLAIN_LOOK: Look = { width: ASSUMED_WIDTH, colour: false };
 
 /** What a line is, which on a terminal chooses its mark and its colour. A `laid` one is a text already laid out for the stream, written as it is where it fits. */
 export type Tone = "done" | "note" | "warning" | "error" | "plain" | "laid";
@@ -158,10 +158,10 @@ function folded(line: string, width: number, hang: number | undefined): string[]
 /**
  * Fold a text of many lines as a terminal shows it: each line at its spaces, its later rows under its own indent. A colour sequence takes no room.
  *
- * @param width - the widest a line may be; the widest width of the screen when left out
+ * @param width - the widest a line may be; the assumed width when left out
  * @returns the text, in which only a word wider than the line, such as an address, is wider than it
  */
-export function foldedText(text: string, width: number = MAX_WIDTH): string {
+export function foldedText(text: string, width: number = ASSUMED_WIDTH): string {
   return text
     .split("\n")
     .flatMap((line) => folded(line, width, undefined))
@@ -182,7 +182,7 @@ export function showsColour(terminal: boolean | undefined, env: Readonly<Record<
 /**
  * How a text laid out in columns is shown on a stream.
  *
- * @returns painted and as wide as the terminal where the stream shows colour, and plain at the widest width of the screen everywhere else
+ * @returns painted and as wide as the terminal where the stream shows colour, and plain at the assumed width everywhere else
  */
 export function lookOf(stream: { readonly isTTY?: boolean; readonly columns?: number }, env: Readonly<Record<string, string | undefined>>): Look {
   const colour = showsColour(stream.isTTY, env);
@@ -191,17 +191,17 @@ export function lookOf(stream: { readonly isTTY?: boolean; readonly columns?: nu
 }
 
 /**
- * A way to write lines to one stream: folded to the terminal where the stream is one, with a mark where colour shows, and as they are everywhere else.
+ * A way to write lines to one stream: folded to the terminal's own width where the stream is one, with a mark where colour shows, and as they are everywhere else.
  */
 function writer(stream: NodeJS.WriteStream, colour: boolean): (tone: Tone, line: string, hang?: number) => void {
-  const width = (): number => Math.min(stream.columns ?? MAX_WIDTH, MAX_WIDTH);
+  const width = (): number => stream.columns ?? ASSUMED_WIDTH;
   // A plain line is written by this module: the library would read a backtick in it as a mark of its own.
   const plain = (line: string, hang?: number): void => void stream.write(`${(stream.isTTY === true ? folded(line, width(), hang) : [line]).join("\n")}\n`);
   // A text laid out for the stream is as wide as its look: only a terminal narrower than that, which a plain look of 80 can be, folds it.
   const laid = (text: string): void => void stream.write(`${stream.isTTY === true && stream.columns !== undefined ? foldedText(text, stream.columns) : text}\n`);
   if (!colour) return (tone, line, hang) => (tone === "laid" ? laid(line) : plain(line, hang));
 
-  // Every level goes to the one stream, with a mark, each line as often as it is said and no wider than the widest: which stream a line is for and whether it shows are the caller's choice, whatever the environment says.
+  // Every level goes to the one stream, with a mark, each line as often as it is said and no wider than the terminal: which stream a line is for and whether it shows are the caller's choice, whatever the environment says.
   // The options stand in a constant because the types TypeScript reads are the browser build's, which name no `fancy`.
   const marked = { fancy: true, level: LogLevels.info, throttle: 0, stdout: stream, stderr: stream, formatOptions: { date: false, compact: true, columns: width() } };
   const consola = createConsola(marked);
@@ -217,11 +217,11 @@ function writer(stream: NodeJS.WriteStream, colour: boolean): (tone: Tone, line:
 }
 
 /**
- * A way to write a block to one stream, by the library: under its guide where the stream shows colour, each row folded to the terminal, and as plain lines of at most the widest width everywhere else.
+ * A way to write a block to one stream, by the library: under its guide where the stream shows colour, each row folded to the terminal, and as plain lines of at most the assumed width everywhere else.
  */
 function blockWriter(stream: NodeJS.WriteStream, colour: boolean): Screen["block"] {
   return (title, rows) => {
-    const width = colour ? (stream.columns ?? MAX_WIDTH) - GUIDE_WIDTH : Math.min(stream.columns ?? MAX_WIDTH, MAX_WIDTH);
+    const width = colour ? (stream.columns ?? ASSUMED_WIDTH) - GUIDE_WIDTH : Math.min(stream.columns ?? ASSUMED_WIDTH, ASSUMED_WIDTH);
     const lines = rows.flatMap((row) => folded(row.text, width, row.hang).map((line) => (colour && row.faint === true ? styleText("dim", line, ALWAYS) : line)));
     const block = [title, ...lines].join("\n");
 

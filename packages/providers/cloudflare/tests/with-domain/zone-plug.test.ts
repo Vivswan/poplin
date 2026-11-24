@@ -1478,19 +1478,28 @@ describe("a check the install makes with the key it holds", () => {
 });
 
 describe("an alert left out for its permission, as a command line words it", () => {
-  const FIX = "The account token lacks Notifications: Edit. Fix: add it, then run npx poplin doctor --repair";
+  const NEEDS = "needs Notifications: Edit";
   const alert: DomainRow = { object: "Budget alert", state: "optional", detail: "", part: "rest" };
   const key = (state: DomainRow["state"]): DomainRow => ({ object: "Key", state, detail: "poplin kept key", part: "rest" });
 
   // Drift: the row promised that the install makes the alert within a day. An install with no key Cloudflare takes makes none, so a repair whose token could make neither the key nor the alert promised an alert that never comes.
   test.each<[string, readonly DomainRow[], string]>([
-    ["a key that stands", [key("present"), alert], `${FIX}, or wait a day for the install to create it`],
-    ["a key the run made", [alert, key("created")], `${FIX}, or wait a day for the install to create it`],
-    ["a key that could not be made", [key("failed"), alert], FIX],
-    ["a key Cloudflare refuses", [key("differs"), alert], FIX],
-    ["no row of the key", [alert], FIX],
+    ["a key that stands", [key("present"), alert], `${NEEDS}, or wait a day: the install creates it`],
+    ["a key the run made", [alert, key("created")], `${NEEDS}, or wait a day: the install creates it`],
+    ["a key that could not be made", [key("failed"), alert], NEEDS],
+    ["a key Cloudflare refuses", [key("differs"), alert], NEEDS],
+    ["no row of the key", [alert], NEEDS],
   ])("with %s, says that the install makes it only where the install holds a working key", (_what, rows, said) => {
     expect(commandRows(rows).find((row) => row.object === "Budget alert")?.detail).toBe(said);
+  });
+});
+
+describe("a piece that is optional for another reason than a permission, as a command line words it", () => {
+  // Drift: a login method the account does not have is optional too, and no permission makes it. Worded as one that lacks a permission, it would be counted among the pieces a token can add.
+  test("is left as it is, with no permission", () => {
+    const row: DomainRow = { object: "Login method", state: "optional", detail: "Cloudflare: the account has none; users log in with an email code", part: "login" };
+
+    expect(commandRows([row])).toEqual([row]);
   });
 });
 

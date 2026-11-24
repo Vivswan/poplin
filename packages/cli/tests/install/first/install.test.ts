@@ -37,8 +37,14 @@ const MADE = [
   "created    Records               poplin",
   "created    Program               poplin, to run 0.1.0",
   "unchanged  Address               poplin.example.com",
-  "skipped    Guard rule            the token lacks Rules: Edit (optional)",
+  "skipped    Guard rule            needs Rules: Edit",
 ];
+
+/** What a run says once of the piece it left out for an optional permission, before what makes the piece. */
+const OPTIONAL = "1 optional row skipped: a guard rule. It needs a permission the account token lacks: add it";
+
+/** That line of a run that made the install, which only the repair changes from then on: the repair at its place stands alone under it. */
+const BY_REPAIR = [`${OPTIONAL}, then run:`, `  ${REPAIR.command}`];
 
 function accountWith(...scenes: Found<Where, Place>[]): Account {
   return { ...emptyAccount(), scenes };
@@ -53,6 +59,7 @@ describe("a fresh install", () => {
     expect(ran.out).toEqual([
       "This account has no install",
       ...MADE,
+      ...BY_REPAIR,
       `Waiting for ${ADDRESS} to respond`,
       "poplin 0.1.0 is installed",
       `Dashboard: ${ADDRESS}`,
@@ -107,7 +114,8 @@ describe("a fresh install", () => {
       "would create  Records               poplin",
       "would create  Program               poplin, to run 0.1.0",
       "unchanged     Address               poplin.example.com",
-      "would skip    Guard rule            the token lacks Rules: Edit (optional)",
+      "would skip    Guard rule            needs Rules: Edit",
+      "1 optional row would be skipped: a guard rule. It needs a permission the account token lacks: add it before the run",
       "A dry run does not test the account token's write permissions",
       "A run would create 3 resources and skip 1",
     ]);
@@ -133,7 +141,7 @@ describe("--json", () => {
         { object: "Records", did: "make", detail: "poplin" },
         { object: "Program", did: "make", detail: "poplin, to run 0.1.0" },
         { object: "Address", did: "leave", detail: "poplin.example.com" },
-        { object: "Guard rule", did: "leave-out", detail: "the token lacks Rules: Edit (optional)", right: "Rules: Edit" },
+        { object: "Guard rule", did: "leave-out", detail: "needs Rules: Edit", right: "Rules: Edit" },
       ],
       blocked: [],
       steps: [],
@@ -336,6 +344,7 @@ describe("what a run comes to", () => {
       "blocked    Login                 the login product is not switched on",
       "failed     Keys                  status 500",
       "skipped    Jobs                  needs the keys",
+      `${OPTIONAL} before the next step`,
       "The login product is not switched on for this account",
       "  https://host.example.com/login",
       "Do these steps in a browser, then rerun this command:",
@@ -373,6 +382,7 @@ describe("what a run comes to", () => {
     expect(plain.code).toBe(1);
     expect(ran.fetched).toEqual([]);
     expect(plain.out.slice(MADE.length + 1)).toEqual([
+      ...BY_REPAIR,
       `Waiting for ${ADDRESS} to respond`,
       `${ADDRESS} has not responded yet. This can take a few more minutes.`,
       "poplin 0.1.0 is installed, but its URL does not respond yet",
