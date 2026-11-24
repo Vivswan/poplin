@@ -25,11 +25,16 @@ repository:
   private: false
 
 # This repository's own labels (the fleet layers already carry the
-# dependabot, release, and tracking labels its modules need):
-# labels:
-#   - name: my-label
-#     color: "0e8a16"
-#     description: What it marks
+# dependabot, release, and tracking labels its modules need).
+# The nightly live checks find their open issue by its label, so each label is declared here to outlive the apply.
+# The name, colour, and description are the ones live-checks.yml and live-checks-account-address.yml pass.
+labels:
+  - name: live-nightly-domain
+    color: "D93F0B"
+    description: The nightly live checks of the test install (domain) ended red
+  - name: live-nightly-account-address
+    color: "D93F0B"
+    description: The nightly live checks of the test install (account address) ended red
 
 # This repository's own rulesets, or additions to a fleet one (an entry
 # named like a fleet ruleset merges into it and adds its rules):

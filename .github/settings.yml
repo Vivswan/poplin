@@ -69,6 +69,12 @@ labels:
     - name: javascript
       color: "168700"
       description: Pull requests that update javascript code
+    - name: live-nightly-account-address
+      color: D93F0B
+      description: The nightly live checks of the test install (account address) ended red
+    - name: live-nightly-domain
+      color: D93F0B
+      description: The nightly live checks of the test install (domain) ended red
     - name: merge-when-green
       color: 0e8a16
       description: "Owner approved: merge once every gate is green"
