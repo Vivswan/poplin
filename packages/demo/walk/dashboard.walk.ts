@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 
 import { expect, type Locator, type Page } from "@playwright/test";
 
-import { arrive, isUnanswered, onPage, openPanel, ownClipboard, reset, SECTIONS_BUTTON, said, screenHeading, siteName, TRASH, test, toSection } from "./visit";
+import { arrive, isUnanswered, onPage, openFold, openPanel, ownClipboard, reset, SECTIONS_BUTTON, said, screenHeading, siteName, TRASH, test, toSection } from "./visit";
 
 /** The screens the walk is taken on. A wide one shows tables and the side navigation; a narrow one shows lists, and the sections behind a button. */
 const VIEWPORTS = [
@@ -184,7 +184,7 @@ const STOPS: readonly Stop[] = [
     open: (page) => openPanel(page, SAMPLE.site),
     shows: (page) => [
       panel(page).getByRole("heading", { name: SAMPLE.site, exact: true }),
-      panel(page).getByRole("heading", { name: "Versions", exact: true }),
+      panel(page).getByRole("heading", { name: /^Versions ?\d+$/ }),
     ],
   },
   {
@@ -797,6 +797,7 @@ test.describe("on a screen 1440 px wide, under a site's panel", () => {
     await expect(row(SAMPLE.site)).toBeFocused();
 
     await openPanel(page, SAMPLE.site);
+    await openFold(panel(page), "Details");
     await panel(page).getByRole("switch", { name: "Allow embedding", exact: true }).click();
     await lines(page).getByRole("button", { name: "Undo", exact: true }).click();
     await expect(lines(page).filter({ hasText: "Put back." })).toBeVisible();
@@ -918,6 +919,7 @@ test.describe("on a phone, while a line says a result", () => {
   test("the last control of a site's panel is pressed after one move of the panel while a result is said, a newer result takes the older one's place, and a result with no button leaves at a press", async ({ page }) => {
     await arrive(page);
     await openPanel(page, SAMPLE.site);
+    await openFold(panel(page), "Details");
     await panel(page).getByRole("switch", { name: "Allow embedding", exact: true }).click();
     await expect(lines(page).filter({ hasText: "Saved." })).toBeVisible();
 
@@ -925,6 +927,7 @@ test.describe("on a phone, while a line says a result", () => {
     await panel(page).getByRole("button", { name: "New link", exact: true }).click({ timeout: 2000 });
     await leaveBy("Cancel")(page);
 
+    await openFold(panel(page), "Versions");
     await panel(page).getByRole("button", { name: /^Make live: version \d+$/u }).first().click();
     await expect(lines(page).filter({ hasText: /is live now/ })).toBeVisible();
     await expect(lines(page)).toHaveCount(1);
@@ -981,6 +984,7 @@ for (const size of [PHONE, FITS_FROM]) {
 test("a result's Undo is reached with the keys the result names, and Close comes after it", async ({ page }) => {
   await arrive(page);
   await openPanel(page, SAMPLE.site);
+  await openFold(panel(page), "Details");
   await panel(page).getByRole("switch", { name: "Allow embedding", exact: true }).click();
   const saved = lines(page).filter({ hasText: "Saved." });
   await expect(saved).toContainText("Press Alt+T to reach Undo.");
@@ -999,6 +1003,7 @@ test("a result's Undo is reached with the keys the result names, and Close comes
 test("a result with a button lies inside the header, at 1440 and at 1024 px", async ({ page }) => {
   await arrive(page);
   await openPanel(page, SAMPLE.site);
+  await openFold(panel(page), "Details");
   await panel(page).getByRole("switch", { name: "Allow embedding", exact: true }).click();
   const saved = lines(page).filter({ hasText: "Press Alt+T to reach Undo." });
   const header = page.locator("header").filter({ has: screenHeading(page, "Sites") });
@@ -1219,6 +1224,7 @@ test("a public site is asked about before its public link ends, Cancel leaves it
 test("after a change the focus is where the next key is of use: the panel's heading, also after Undo, the refused field, the button that adds a user, another page's first row, the button of one site's mark, a reset setting's field", async ({ page }) => {
   await arrive(page);
   await openPanel(page, SAMPLE.site);
+  await openFold(panel(page), "Versions");
   await panel(page).getByRole("button", { name: /^Make live: version \d+$/u }).first().click();
   await expect(page.getByText(/is live now/)).toBeVisible();
   await expect(panel(page).getByRole("heading", { name: SAMPLE.site, exact: true })).toBeFocused();
@@ -1442,6 +1448,7 @@ test("in a site's panel, a span is shown as the moment it ends before it is save
   const change = panel(page).getByRole("button", { name: "Change when it expires", exact: true });
   await arrive(page);
   await openPanel(page, SAMPLE.site);
+  await openFold(panel(page), "Details");
   await expect(fact).toHaveText("NeverChange");
 
   await change.click();

@@ -91,12 +91,14 @@ export function siteKey(label: string): readonly unknown[] {
 }
 
 /**
- * Read one site.
+ * Read one site, anew each time its panel is drawn: what is kept of it from before is shown until the server answers.
+ *
+ * A reading that still stands is no word on the site as it is now: another tab may have made another version live since, and the panel lists files by the version that is live.
  *
  * @param label - the site's label, from the address
  */
 export function useSite(label: string): UseQueryResult<Shown> {
-  return useQuery({ queryKey: siteKey(label), queryFn: () => answerOf(api.sites[":site"].$get({ param: { site: label } })) });
+  return useQuery({ queryKey: siteKey(label), queryFn: () => answerOf(api.sites[":site"].$get({ param: { site: label } })), refetchOnMount: "always" });
 }
 
 /**
