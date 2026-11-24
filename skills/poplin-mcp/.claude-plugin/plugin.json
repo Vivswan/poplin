@@ -1,6 +1,6 @@
 {
   "name": "poplin-mcp",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Starts poplin's MCP server in Claude Code, for the poplin skill to publish with.",
   "author": {
     "name": "Vivswan",

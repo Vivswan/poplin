@@ -1,6 +1,6 @@
 {
   "name": "poplin",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Agents publish static sites to your own Cloudflare account: private by default, shareable by secret link, or public.",
   "keywords": [
     "static-site",
