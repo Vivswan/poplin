@@ -151,7 +151,10 @@ const PRESS_REPAIR = "Press Repair.";
 /** What the database's row says in a check the install makes by itself, after the database's name. */
 const OWN_DATABASE = "the install is running on it";
 
-/** Every permission the plug's calls use, in the name a row of Cloudflare's token form gives it, with the first box of that row: one an install needs, with its key as Cloudflare's page on token template links names it; or an optional one, which that page names no key for. */
+/**
+ * Every permission the plug's calls use, in the name a row of Cloudflare's token form gives it, with the first box of that row.
+ * One an install needs has its key as Cloudflare's page on token template links names it; that page names no key for an optional one.
+ */
 const RIGHT = {
   zone: { name: "Zone: Read", scope: "Zone", key: "zone", type: "read" },
   dns: { name: "DNS: Edit", scope: "Zone", key: "dns", type: "edit" },

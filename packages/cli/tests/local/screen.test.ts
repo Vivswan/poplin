@@ -167,9 +167,10 @@ describe("processScreen", () => {
 
     processScreen({ out: pipe().stream, err: wide.stream, colour: { out: false, err: false }, ...NOBODY }).block("On the form", rows);
     plainScreen({ out: () => undefined, err: (line) => kept.push(line) }).block("On the form", rows);
+    const widest = Math.max(...kept.map((line) => line.length));
 
     expect(wide.text().split("\n").slice(0, -1)).toEqual(kept);
-    expect([kept[0], kept[1]?.startsWith("1. word word"), kept[2]?.startsWith("   word"), kept.at(-1), Math.max(...kept.map((line) => line.length)) <= 80, wide.text().includes("\u001b")]).toEqual(["On the form", true, true, "   Stores: Read", true, false]);
+    expect([kept[0], kept[1]?.startsWith("1. word word"), kept[2]?.startsWith("   word"), kept.at(-1), widest <= 80, wide.text().includes("\u001b")]).toEqual(["On the form", true, true, "   Stores: Read", true, false]);
   });
 
   // Drift: an address written whole takes six rows of a terminal. A terminal that takes a link shows a few words that open it, and the caller must know where none was shown, to show the address itself.
