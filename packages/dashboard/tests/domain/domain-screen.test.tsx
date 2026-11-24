@@ -1,9 +1,10 @@
 // The Domain screen as it opens: what an install whose check needs no token shows with no press, when it checks again by itself, and where a token is still asked for.
+// And what Copy status copies in each state the screen rests in.
 
 import { clearPage, type Within } from "../lib/support/page";
 
-import { afterAll, afterEach, describe, expect, test } from "bun:test";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { afterAll, afterEach, describe, expect, spyOn, test } from "bun:test";
+import { onlineManager, QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, cleanup, fireEvent, waitFor, within } from "@testing-library/react";
 import { toast } from "sonner";
 
@@ -29,8 +30,17 @@ const ROWS = {
   found: [{ piece: "Record", state: "missing", tone: "bad", detail: "the record a check found" }],
 } as const;
 
-/** What a check made now answers. */
+/** What a check made now finds. */
 const FOUND = { ok: true, rows: ROWS.found, steps: [], summary: { line: "1 to repair", tone: "bad" }, waiting: 1, repaired: 0 };
+
+/** The moment the server says every run made now was. */
+const RAN_AT = Date.UTC(2026, 0, 2, 3, 4);
+
+/** How the server names each kind of install on the screen. */
+const KINDS = {
+  domain: { thing: "the domain", line: null, kind: "under a domain" },
+  none: { thing: "the install", line: "No domain: your sites answer at the provider's free address.", kind: "without a domain" },
+} as const;
 
 /** The sentence of the problem of the domain that asks for a repair at a place in the frame's list. */
 function asking(at: number): string {
@@ -55,24 +65,32 @@ function lastOf(minutes: number): Record<string, unknown> {
 }
 
 /**
- * Answer as the server does: what the screen opens with, and every check with what it found, or with the refusal.
+ * Answer as the server does: what the screen opens with, and every run with which run it was, when, and what it found, or with the refusal.
  *
  * @param alone - whether a check needs no token
  * @param last - the run the install remembers, or `null`
  * @param answers - whether the provider answers a check, whether a check waits until a test lets it through, and what a check finds where it is not the one missing piece
+ * @param words - how the server names the kind of the install
  */
-function serve(alone: boolean, last: Record<string, unknown> | null, answers: { now: boolean; holds?: boolean; found?: Record<string, unknown> } = { now: true }): void {
+function serve(
+  alone: boolean,
+  last: Record<string, unknown> | null,
+  answers: { now: boolean; holds?: boolean; found?: Record<string, unknown> } = { now: true },
+  words: (typeof KINDS)[keyof typeof KINDS] = KINDS.domain,
+): void {
   globalThis.fetch = (async (input: Request | string | URL, init?: RequestInit) => {
     const { pathname } = new URL(input instanceof Request ? input.url : input, window.location.href);
     const domainAsks = Array.from({ length: frame.asks }, (_, at) => asking(at));
     if (pathname === `${BOOT.base}/data/frame`) return Response.json({ ok: true, title: "poplin", update: null, starts: false, back: null, domainNote: null, recent: [], marks: { usage: null, domain: null, settings: null }, domainAsks });
 
-    if (init?.method !== "POST") return Response.json({ ok: true, form: FORM, words: { thing: "the domain", line: null }, checks_alone: alone, last });
+    if (init?.method !== "POST") return Response.json({ ok: true, form: FORM, words, checks_alone: alone, last });
 
     checks.push(JSON.parse(String(init.body)));
     if (answers.holds === true) await new Promise<void>((resolve) => held.push(resolve));
 
-    return answers.now ? Response.json(answers.found ?? FOUND) : Response.json(UNREACHED, { status: 502 });
+    const run = pathname.endsWith("/repair") ? "repair" : "check";
+
+    return answers.now ? Response.json({ run, ran_at: RAN_AT, ...(answers.found ?? FOUND) }) : Response.json(UNREACHED, { status: 502 });
   }) as typeof fetch;
 }
 
@@ -131,6 +149,7 @@ afterEach(() => {
   toast.dismiss();
   cleanup();
   globalThis.fetch = OWN_FETCH;
+  onlineManager.setOnline(true);
   checks.length = 0;
   held.length = 0;
   frame.asks = 0;
@@ -303,6 +322,178 @@ describe("on an install whose check needs a token", () => {
     await press(page, "Check");
     await waitFor(() => page.getByRole("dialog", { name: "Check the domain" }));
 
-    expect([opened, checks]).toEqual([{ line: "Not checked yetPress Check to see every piece.", details: [], dialog: false }, []]);
+    expect([opened, checks]).toEqual([{ line: "Not checked yetPress Check to see every piece.poplin 1.0.0", details: [], dialog: false }, []]);
+  });
+});
+
+describe("Copy status", () => {
+  /** A run the install remembers from a set minute. An install whose check needs a token shows it however old it is. */
+  const kept = (): Record<string, unknown> => ({ ...lastOf(0), ran_at: Date.UTC(2026, 0, 1) });
+
+  /** What is copied of that run on an install under a domain. */
+  const KEPT_TEXT = ["poplin 1.0.0, under a domain. Checked 2026-01-01T00:00Z. Nothing to repair.", "unchanged  Record  the remembered record"];
+
+  /** A step only a person can do, at an address of the provider that names the account. */
+  const STEP = { text: "An older key may still be at the provider. Delete it there:", address: "https://provider.example/0123456789abcdef0123456789abcdef/api-tokens" };
+
+  /** What a repair that made the one piece finds, with that step. */
+  const MADE = { ok: true, rows: [{ piece: "Record", state: "created", tone: "good", detail: "the record a repair made" }], steps: [STEP], summary: { line: "1 repaired", tone: "good" }, waiting: 0, repaired: 1 };
+
+  /** The button. */
+  const button = (page: Within): HTMLButtonElement => page.getByRole("button", { name: "Copy status" }) as HTMLButtonElement;
+
+  /** Take what the page copies in the browser's place: the text is what matters. */
+  const copies = () => spyOn(navigator.clipboard, "writeText").mockImplementation(async () => undefined);
+
+  /** The ways the screen comes to rest, each with what it then copies. */
+  const STATES: readonly (readonly [name: string, rests: () => Promise<Within>, lines: readonly string[]])[] = [
+    [
+      "every piece in place, under a domain",
+      () => {
+        serve(false, kept());
+
+        return drawn();
+      },
+      KEPT_TEXT,
+    ],
+    [
+      "every piece in place, without a domain",
+      () => {
+        serve(false, kept(), undefined, KINDS.none);
+
+        return drawn();
+      },
+      ["poplin 1.0.0, without a domain. Checked 2026-01-01T00:00Z. Nothing to repair.", "unchanged  Record  the remembered record"],
+    ],
+    [
+      "no run yet",
+      () => {
+        serve(false, null);
+
+        return drawn();
+      },
+      ["poplin 1.0.0, under a domain. Not checked yet."],
+    ],
+    [
+      "a check the provider did not answer",
+      async () => {
+        serve(true, null, { now: false });
+        const page = await drawn();
+        await waitFor(() => expect(shown(page).line.includes(UNREACHED.sentence)).toBe(true));
+
+        return page;
+      },
+      ["poplin 1.0.0, under a domain. Not checked. No answer from the provider. Try again."],
+    ],
+    [
+      "a pressed check that found a piece to repair beside a problem that asks for a repair, with its own moment before the screen reads what the install remembers of it",
+      async () => {
+        serve(true, lastOf(1));
+        const page = await asked();
+        await press(page, "Check");
+        await waitFor(() => expect(shown(page).details).toEqual([ROWS.found[0].detail]));
+
+        return page;
+      },
+      ["poplin 1.0.0, under a domain. Checked 2026-01-02T03:04Z. 2 to repair.", `To repair: ${asking(0)}`, "missing  Record  the record a check found"],
+    ],
+    [
+      "a repair that ended a problem and left a step only a person can do, under a line that names who ran it: the problem as repaired, and neither the step's address, which names the account, nor that user",
+      async () => {
+        const last = kept();
+        serve(false, last, { now: true, found: MADE });
+        const page = await asked();
+        await press(page, "Repair");
+        const asks = within(await waitFor(() => page.getByRole("dialog", { name: "Repair the domain" })));
+        fireEvent.change(asks.getByLabelText("Account token"), { target: { value: "a-token" } });
+        // The repair ends the problem, and the install remembers the repair once it is done: the screen reads it again, and names who ran it.
+        frame.asks = 0;
+        Object.assign(last, { run: "repair", ran_at: RAN_AT });
+        await press(asks, "Repair");
+        const onScreen = (): unknown[] => [
+          shown(page).line.includes("Repaired"),
+          shown(page).line.includes("mira@example.com"),
+          page.queryAllByRole("link", { name: STEP.address }).length,
+          page.queryAllByRole("list", { name: "Repaired" }).map((list) => list.textContent),
+        ];
+        await waitFor(() => expect(onScreen()).toEqual([true, true, 1, [`Repaired: ${asking(0)}`]]));
+
+        return page;
+      },
+      ["poplin 1.0.0, under a domain. Repaired 2026-01-02T03:04Z. 2 repaired.", `Repaired: ${asking(0)}`, "created  Record  the record a repair made"],
+    ],
+    [
+      "a repair the provider refused, which changed nothing",
+      async () => {
+        serve(false, kept(), { now: false });
+        const page = await drawn();
+        await press(page, "Repair");
+        const asks = within(await waitFor(() => page.getByRole("dialog", { name: "Repair the domain" })));
+        fireEvent.change(asks.getByLabelText("Account token"), { target: { value: "a-token" } });
+        await press(asks, "Repair");
+        await waitFor(() => asks.getByText(UNREACHED.sentence));
+        await press(asks, "Cancel");
+        await waitFor(() => expect(shown(page).dialog).toBe(false));
+
+        return page;
+      },
+      KEPT_TEXT,
+    ],
+  ];
+
+  // Drift: a status could only be retyped into a report; or the copy would hold the rows to repair alone, the pieces of another state than the one on the screen, or no moment for a run made just now.
+  // Or it would hold what the screen shows beside the status: who ran the check, and the provider's address of a step.
+  test.each(STATES)("copies the line and every piece as the screen shows them, and says so: %s", async (_name, rests, lines) => {
+    using copied = copies();
+    const page = await rests();
+    await press(page, "Copy status");
+    await waitFor(() => page.getByText("Status copied."));
+
+    expect(copied.mock.calls.map(([text]) => text.split("\n"))).toEqual([[...lines]]);
+  });
+
+  // Drift: a copy made while a check is on its way would be of the pieces that check is about to replace, right after a person pressed Check to have new ones.
+  test("is disabled while a check is on its way and copies nothing then; once the check has ended it can be pressed again", async () => {
+    using copied = copies();
+    serve(true, lastOf(CHECK_FRESH_MS / 60_000 + 1), { now: true, holds: true });
+    const page = await drawn();
+    await waitFor(() => expect(checks).toEqual([{ unasked: true }]));
+    await press(page, "Copy status");
+    const meanwhile = { disabled: button(page).disabled, copied: copied.mock.calls.length };
+    await act(async () => {
+      for (const release of held) release();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    await waitFor(() => expect(shown(page).details).toEqual([ROWS.found[0].detail]));
+
+    expect([meanwhile, button(page).disabled]).toEqual([{ disabled: true, copied: 0 }, false]);
+  });
+
+  // Drift: a press on Check that waits for the network is no check on its way yet, and the pieces on show are the ones it will replace: a copy that looked at the check alone would write them.
+  test("is disabled, as Check is, while a pressed check waits for the network, and copies nothing then", async () => {
+    using copied = copies();
+    serve(true, lastOf(1));
+    const page = await drawn();
+    onlineManager.setOnline(false);
+    await press(page, "Check");
+    await press(page, "Copy status");
+    const waiting = { disabled: button(page).disabled, copied: copied.mock.calls.length, sent: [...checks] };
+    await act(async () => {
+      onlineManager.setOnline(true);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    await waitFor(() => expect(shown(page).details).toEqual([ROWS.found[0].detail]));
+
+    expect([waiting, button(page).disabled]).toEqual([{ disabled: true, copied: 0, sent: [] }, false]);
+  });
+
+  // Drift: a browser that copies nothing would leave a person with a paste of whatever they copied last, and no word of it.
+  test("says that nothing was copied where the browser refuses the copy", async () => {
+    using _refused = spyOn(navigator.clipboard, "writeText").mockRejectedValue(new Error("refused"));
+    serve(false, kept());
+    const page = await drawn();
+    await press(page, "Copy status");
+
+    await waitFor(() => page.getByText("Not copied. The browser did not allow it."));
   });
 });

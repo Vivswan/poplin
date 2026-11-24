@@ -194,6 +194,8 @@ test("every text of a reading has the token taken out before anything is shown o
     ok: true,
     rows: [{ object: "a[token]b", state: "failed", detail: "[token][token]", part: "rest" }],
     steps: [{ text: "open [token]", address: "https://dash.example.com/[token]" }],
+    run: "repair",
+    ran_at: opened.install.now(),
   });
   expect((await opened.audit())[0]?.detail).toEqual({ run: "repair", from: "dashboard", failed: ["a[token]b: [token][token]"] });
   expect(await runDomain(plug, opened.install, { ...asked, token: "" })).toMatchObject({ rows: [{ object: "ab", detail: "" }] });

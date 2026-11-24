@@ -160,7 +160,7 @@ export function createPathPlug(parts: PathParts): DomainPlug {
 
   return {
     ...tokenFacts("noDomain"),
-    words: { thing: "the install", line: NO_DOMAIN },
+    words: { thing: "the install", line: NO_DOMAIN, kind: "without a domain" },
     carriedSettings: ["alert_users"],
     idleSettings: { block_bots: NEEDS_DOMAIN },
     check: (token, settings) => read(parts, "plan", token, settings),

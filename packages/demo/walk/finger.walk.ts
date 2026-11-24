@@ -35,7 +35,10 @@ const SCREENS: readonly { readonly section: string; readonly controls: (page: Pa
     section: "Access",
     controls: (page) => [page.getByRole("tab", { name: "Users", exact: true }), page.getByRole("tab", { name: "Tokens", exact: true }), page.getByRole("button", { name: /^More for / })],
   },
-  { section: "Domain", controls: (page) => [page.getByRole("button", { name: "Check", exact: true }), page.getByRole("button", { name: "Repair", exact: true })] },
+  {
+    section: "Domain",
+    controls: (page) => [page.getByRole("button", { name: "Copy status", exact: true }), page.getByRole("button", { name: "Check", exact: true }), page.getByRole("button", { name: "Repair", exact: true })],
+  },
   { section: "Settings", controls: (page) => [page.getByRole("textbox", { name: "Requests per day", exact: true })] },
 ];
 

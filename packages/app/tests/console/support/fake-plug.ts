@@ -23,7 +23,7 @@ const TOKEN_FORM = {
 
 /** What the fake says of how it is named and of the settings: the ones of a provider that carries three of them to its rules. */
 const PLUG_WORDS = {
-  words: { thing: "the domain", line: null },
+  words: { thing: "the domain", line: null, kind: "under a domain" },
   carriedSettings: ["outside_pages", "search_engines_allowed", "block_bots"],
   idleSettings: {},
 } as const satisfies Pick<DomainPlug, "words" | "carriedSettings" | "idleSettings">;

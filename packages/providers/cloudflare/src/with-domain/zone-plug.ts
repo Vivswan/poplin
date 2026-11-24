@@ -1228,7 +1228,7 @@ export function createDomainPlug(parts: PlugParts): DomainPlug {
 
   return {
     ...tokenFacts("domain"),
-    words: { thing: "the domain", line: null },
+    words: { thing: "the domain", line: null, kind: "under a domain" },
     carriedSettings: ["alert_users", "outside_pages", "search_engines_allowed", "block_bots"],
     idleSettings: {},
     check: (token, settings) => read(parts, "plan", token, settings),

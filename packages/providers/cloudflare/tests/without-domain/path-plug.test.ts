@@ -3,7 +3,7 @@
 
 import { expect, test } from "bun:test";
 import type { DomainReading, DomainSettings } from "@poplin/app/src/console/domain/records";
-import { runDone } from "../../../../app/src/console/domain/domain-answers";
+import { summaryOf } from "../../../../app/src/console/domain/domain-answers";
 import type { Login } from "@poplin/core/src/auth/logins";
 import { createPathPlug, givePathKey } from "../../src/without-domain/path-plug";
 import { withFake } from "../shared/install/support/fake-cloudflare";
@@ -140,7 +140,7 @@ test.each(["check", "repair"] as const)("a %s of an install whose open sites' na
       "Forwarder | failed | poplin-sites: a Worker of this name is not poplin's: rename or delete it",
       ...table({}).slice(2),
     ]);
-    expect(reading.ok ? runDone(run, reading, false).summary : undefined).toEqual({ line: "1 not done", tone: "bad" });
+    expect(reading.ok ? summaryOf(run, reading.rows, false).summary : undefined).toEqual({ line: "1 not done", tone: "bad" });
     expect([writes(asked.slice(sent)), account.workers[0]]).toEqual([[], theirs]);
   });
 });
@@ -257,7 +257,7 @@ test("a repair with a token without Notifications: Edit fails nothing: every oth
     const reading = await plug.repair(TOKEN, SETTINGS);
 
     expect(shown(reading)).toEqual(rest({ all: "created" }));
-    expect([asked.length, account.alerts, reading.ok ? runDone("repair", reading, false).summary : undefined]).toEqual([33, [], { line: "13 repaired", tone: "good" }]);
+    expect([asked.length, account.alerts, reading.ok ? summaryOf("repair", reading.rows, false).summary : undefined]).toEqual([33, [], { line: "13 repaired", tone: "good" }]);
 
     const sent = asked.length;
 

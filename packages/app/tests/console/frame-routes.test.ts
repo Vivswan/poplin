@@ -90,7 +90,7 @@ describe("the frame", () => {
 
   // Drift: an install without a domain would be told of "the domain" it has not, or of a record where its own piece is another.
   test("words the note by what the plug calls its side, and names the piece sites answer through", async () => {
-    const opened = await openConsole("", { ...usualPlug(), words: { thing: "the install", line: null } });
+    const opened = await openConsole("", { ...usualPlug(), words: { thing: "the install", line: null, kind: "without a domain" } });
     const { install, owner } = opened.base;
     const sentence = async (): Promise<unknown> => ((await (await opened.get("/data/frame")).json()) as { readonly domainNote: { readonly sentence: string } }).domainNote.sentence;
     const kept = async (days: number, part: "reach" | "rest"): Promise<unknown> => {

@@ -16,8 +16,8 @@ import { agoWords } from "@/lib/timezone";
 /** How often the words that say how old the read is are written again, in milliseconds. */
 const TICK_MS = 10_000;
 
-/** What an icon button is drawn from. With `link` it is a link that looks like the button. */
-interface IconButtonProps {
+/** What every icon button is drawn from. */
+interface Drawn {
   /** What the button does, in a few words. */
   readonly label: string;
 
@@ -27,18 +27,42 @@ interface IconButtonProps {
   /** The icon. */
   readonly children: ReactNode;
 
+  /** Classes laid over the button's own. */
+  readonly className?: string;
+}
+
+/** An icon button that is a button: it may take a press, or only show its hint. */
+interface AsButton extends Drawn {
+  /** Never given: with a link the button is a link. */
+  readonly link?: undefined;
+
   /** What a press does. */
   readonly onClick?: ComponentProps<"button">["onClick"];
 
-  /** The link the button is drawn as, which says where it leads: the router's for a place of the console. */
-  readonly link?: ReactElement;
-
-  /** Classes laid over the button's own. */
-  readonly className?: string;
-
   /** `true` for a button that takes a focus its screen lost. */
   readonly home?: boolean;
+
+  /** `true` while a press would do nothing, such as while what the button acts on is read. */
+  readonly disabled?: boolean;
 }
+
+/** An icon button that is a link, drawn like the button: it leads somewhere, so it takes no press of its own and is never disabled. */
+interface AsLink extends Drawn {
+  /** The link the button is drawn as, which says where it leads: the router's for a place of the console. */
+  readonly link: ReactElement;
+
+  /** Never given: a link takes no press of its own. */
+  readonly onClick?: never;
+
+  /** Never given: a link takes no focus its screen lost. */
+  readonly home?: never;
+
+  /** Never given: a link is never disabled. */
+  readonly disabled?: never;
+}
+
+/** What an icon button is drawn from: a button, or with `link` a link that looks like one. */
+type IconButtonProps = AsButton | AsLink;
 
 /** What a refresh button is drawn from. */
 interface RefreshButtonProps {
@@ -50,7 +74,8 @@ interface RefreshButtonProps {
 }
 
 /** Draw an icon button, or a link that looks like one. */
-export function IconButton({ label, name = label, children, onClick, link, className, home = false }: IconButtonProps): ReactNode {
+export function IconButton(props: IconButtonProps): ReactNode {
+  const { label, name = label, children, className } = props;
   const hint = useRef<TooltipPrimitive.Root.Actions>(null);
   // An open hint takes an Escape for itself, and the dialog or menu around the button would need a second one. The hint is closed by its own action before the press goes on, so one Escape closes what is around it.
   const onKeyDownCapture = (event: KeyboardEvent): void => {
@@ -58,7 +83,11 @@ export function IconButton({ label, name = label, children, onClick, link, class
   };
   const shared = { variant: "ghost", size: "icon-sm", "aria-label": name, className: cn("pointer-coarse:size-10", className), onKeyDownCapture } as const;
   const button =
-    link === undefined ? <Button {...shared} onClick={onClick} {...(home ? FOCUS_HOME : {})} /> : <Button {...shared} nativeButton={false} render={link} />;
+    props.link === undefined ? (
+      <Button {...shared} onClick={props.onClick} disabled={props.disabled === true} {...(props.home === true ? FOCUS_HOME : {})} />
+    ) : (
+      <Button {...shared} nativeButton={false} render={props.link} />
+    );
 
   return (
     <Tooltip actionsRef={hint}>

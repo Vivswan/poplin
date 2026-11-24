@@ -72,7 +72,7 @@ describe("a page of the log", () => {
 
   // Drift: the screen and the file would word an entry apart, or an install without a domain would read of a check of "the domain".
   test("says of each entry what was done, and of a run at the provider by what the plug calls its side", async () => {
-    const opened = await openConsole("", { ...usualPlug(), words: { thing: "the install", line: null } });
+    const opened = await openConsole("", { ...usualPlug(), words: { thing: "the install", line: null, kind: "without a domain" } });
     await opened.change("/data/domain/check", { token: TOKEN });
     const page = await pageOf(opened);
     const [line] = (await (await opened.get("/data/activity/download?format=jsonl")).text()).split("\n");

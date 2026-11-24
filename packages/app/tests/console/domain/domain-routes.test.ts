@@ -6,8 +6,8 @@ import type { Login } from "@poplin/core/src/auth/logins";
 import { AllowanceSpent } from "@poplin/core/src/database/driver";
 import type { DomainCheck } from "@poplin/core/src/records/domain-check";
 
-import { keptAnswer, runDone } from "../../../src/console/domain/domain-answers";
-import type { DomainReading, DomainRow, DomainState } from "../../../src/console/domain/records";
+import { keptAnswer, runDone, summaryOf } from "../../../src/console/domain/domain-answers";
+import type { DomainRow, DomainState } from "../../../src/console/domain/records";
 import { fakePlug, selfCheckingPlug, TOKEN, usualPlug } from "../support/fake-plug";
 import { openConsole } from "../support/console";
 import { readShell } from "../support/shell";
@@ -15,6 +15,8 @@ import { readShell } from "../support/shell";
 /** What a run that read its pieces answers. */
 interface Ran {
   readonly ok: true;
+  readonly run: string;
+  readonly ran_at: number;
   readonly rows: readonly { readonly piece: string; readonly state: string; readonly tone: string; readonly detail: string }[];
   readonly summary: { readonly line: string; readonly tone: string };
 }
@@ -58,7 +60,7 @@ describe("what the screen opens with", () => {
         tokenOptional: [{ right: "Rules: Edit", adds: "The provider stops floods first." }],
         tokenNote: "Choose what the account token is for.",
       },
-      words: { thing: "the domain", line: null },
+      words: { thing: "the domain", line: null, kind: "under a domain" },
       checks_alone: false,
       last: null,
     });
@@ -74,13 +76,24 @@ describe("what the screen opens with", () => {
   });
 
   // Drift: the screen would open as never checked after a run, so a person who comes back cannot see what the last run found, when, or who ran it.
-  test("is, after a run, that run as the install keeps it: when, by whom, each piece, and the count", async () => {
+  // And a run would be answered with no moment of its own, or another than the one it is remembered under: the status copied right after it would name no time, or a time the screen never shows.
+  test("is, after a run, that run as the install keeps it: when, by whom, each piece, and the count; the run's own answer names the same run and moment", async () => {
     const opened = await openConsole("", usualPlug());
-    await opened.change("/data/domain/check", { token: TOKEN });
+    // The clock moves on at every reading: a moment read anew for the answer would be another than the one the run is kept under.
+    let moment = opened.base.clock.now;
+    Object.defineProperty(opened.base.clock, "now", {
+      get: (): number => {
+        moment += 1000;
+
+        return moment;
+      },
+    });
+    const ran = (await (await opened.change("/data/domain/check", { token: TOKEN })).json()) as Ran;
     const { last } = (await (await opened.get("/data/domain")).json()) as { readonly last: unknown };
 
+    expect(ran.run).toBe("check");
     expect(last).toEqual({
-      ran_at: opened.base.clock.now,
+      ran_at: ran.ran_at,
       by: opened.base.owner,
       run: "check",
       stale: false,
@@ -265,9 +278,7 @@ describe("the line that counts a run's rows", () => {
     ["repair", rowsIn("created", "optional", "optional"), "1 repaired", "good", 0, 1],
     ["check", rowsIn("present", "optional"), "Nothing to repair", "good", 0, 0],
   ] as const)("after a %s of %p says %s", (run, rows, line, tone, waiting, repaired) => {
-    const reading: Extract<DomainReading, { ok: true }> = { ok: true, rows: [...rows], steps: [] };
-
-    expect(runDone(run, reading, false)).toMatchObject({ summary: { line, tone }, waiting, repaired });
+    expect(summaryOf(run, rows, false)).toEqual({ summary: { line, tone }, waiting, repaired });
   });
 
   // Drift: a user added in Access cannot log in until a repair, and a green "Nothing to repair" would say there is nothing to do. Said over a count of work, it would hide the pieces a repair must also mend.
@@ -277,12 +288,12 @@ describe("the line that counts a run's rows", () => {
     ["check", rowsIn("present", "missing"), "1 to repair", "bad", 1],
     ["repair", rowsIn("created", "failed"), "1 not done", "bad", 0],
   ] as const)("after a %s of %p while changed users wait for a repair says %s", (run, rows, line, tone, waiting) => {
-    expect(runDone(run, { ok: true, rows: [...rows], steps: [] }, true)).toMatchObject({ summary: { line, tone }, waiting });
+    expect(summaryOf(run, rows, true)).toMatchObject({ summary: { line, tone }, waiting });
   });
 
   // Drift: an optional piece that is not set up would read as a failure.
   test("draws an optional piece as idle, in the word a command says of a row it left as it is", () => {
-    expect(runDone("check", { ok: true, rows: rowsIn("optional"), steps: [] }, false).rows).toEqual([
+    expect(runDone({ ok: true, run: "check", ran_at: 0, rows: rowsIn("optional"), steps: [] }, false).rows).toEqual([
       { piece: "Piece 0", state: "skipped", tone: "idle", detail: "detail 0" },
     ]);
   });

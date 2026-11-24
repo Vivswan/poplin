@@ -51,6 +51,9 @@ interface Pieces {
   /** Why the last such check read nothing, in the server's sentence. */
   readonly failure: string | undefined;
 
+  /** The problems drawn under the line that ask for a repair now, each by its sentence. */
+  readonly asking: Frame["domainAsks"];
+
   /** The problems that asked for a repair and that the repair on show ended, each by its sentence: the line counts them as repaired. None for any other run. */
   readonly mended: Frame["domainAsks"];
 
@@ -58,7 +61,7 @@ interface Pieces {
   readonly check: () => Promise<Ran | undefined>;
 
   /** Take a run made from the dialog as the pieces on show. It answers the run as it is then shown. */
-  readonly take: (run: DomainRun, ran: Ran) => Promise<Ran>;
+  readonly take: (ran: Ran) => Promise<Ran>;
 }
 
 /** What is known of the newest run made here: when the remembered run was as it ended, and for a repair the problems that asked for one before it. */
@@ -81,7 +84,7 @@ function shownOf(ran: Ran, asks: Frame["domainAsks"], mended: Frame["domainAsks"
 
 /** The remembered run as a run made here is held: it names no step for a person. */
 function rememberedOf(last: NonNullable<Domain["last"]>): Ran {
-  return { ok: true, rows: last.rows, steps: [], summary: last.summary, waiting: last.waiting, repaired: last.repaired };
+  return { ok: true, run: last.run, ran_at: last.ran_at, rows: last.rows, steps: [], summary: last.summary, waiting: last.waiting, repaired: last.repaired };
 }
 
 /** The problems that asked for a repair and ask no more. */
@@ -142,6 +145,7 @@ export function useDomainPieces(domain: Domain): Pieces {
     last: last !== null && (before === undefined || last.ran_at !== before.at) ? last : undefined,
     checking: pieces.isFetching,
     failure: pieces.error?.message,
+    asking: domainAsks,
     mended,
     check: async () => {
       pressed.current = true;
@@ -149,9 +153,9 @@ export function useDomainPieces(domain: Domain): Pieces {
 
       return again.status === "success" ? shownOf(again.data, asksNow(), NONE) : undefined;
     },
-    take: async (run, taken) => {
+    take: async (taken) => {
       await framed();
-      const [asked, left] = [run === "repair" ? domainAsks : NONE, asksNow()];
+      const [asked, left] = [taken.run === "repair" ? domainAsks : NONE, asksNow()];
       client.setQueryData(PIECES_KEY, taken);
       ended(asked);
 
