@@ -7,6 +7,7 @@ import { type Line, type Look, PLAIN_LOOK } from "../../local/screen";
 import { permissionsPart } from "../ask";
 import type { Careful, Next, Provider, Stop } from "../records";
 import { carefulOf, carried, changesIn, dryRunLines, type FollowUp, followed, heldStop, NEXT, optionalLines, optionRows, REFUSED_AS, refusedWords, repairAfter, rowValues, runLines, runningWords, UNCHANGED, updateWords } from "../report";
+import { optionsOf } from "../words";
 import { REPAIR_COMMAND, REPAIR_OPTIONS } from "./parse";
 
 /** How far a line of a list stands in. */
@@ -163,7 +164,7 @@ export function repairHelp(providers: readonly Provider[], provider?: Provider, 
     about: "Repair the install at its provider. It needs no login.",
     parts: [
       { title: "Providers:", rows: shown === undefined ? providers.map((one) => [one.id, one.about]) : [] },
-      { title: "Options:", rows: optionRows([...(shown?.options ?? []), ...REPAIR_OPTIONS]) },
+      { title: "Options:", rows: optionRows([...(shown === undefined ? [] : optionsOf(shown, "repair")), ...REPAIR_OPTIONS]) },
       permissionsPart("repair", shown),
       { title: "Related:", commands: ["poplin doctor", "poplin update"] },
     ],

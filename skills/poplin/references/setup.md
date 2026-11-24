@@ -107,13 +107,14 @@ Then ask for the email of the first user: one whose inbox the user can read. It 
 
 Ask the user to open <https://dash.cloudflare.com> and log in.
 
-| Open                                        | Do                                                | Kind             |
-| ------------------------------------------- | ------------------------------------------------- | ---------------- |
-| Zero Trust, in the left menu                | pick a team name and the Free plan                | both             |
-| Storage & databases, then R2, then Overview | finish the checkout it shows                      | both             |
-| Workers & Pages                             | set the account's subdomain, if it shows none yet | without a domain |
+| Open                                        | Do                                 |
+| ------------------------------------------- | ---------------------------------- |
+| Zero Trust, in the left menu                | pick a team name and the Free plan |
+| Storage & databases, then R2, then Overview | finish the checkout it shows       |
 
 The team name can be any word. Zero Trust and R2 each ask for the payment method. Each is done when Cloudflare shows its overview instead of the sign-up. The dry run of part d tells you when one is still off.
+
+The account's subdomain at `workers.dev` is no step of the user's: a new account has none, and the install makes it. The dry run of part d tells you when it needs a name.
 
 ### c. The account token
 
@@ -183,10 +184,12 @@ A repair named next also holds `--update`, where your line had it or the stop ne
 | `command` names | It runs as written, with the token in your environment | Add                                   |
 | --------------- | ------------------------------------------------------ | ------------------------------------- |
 | the repair      | yes                                                    | `--json`, to read its value           |
-| the install     | once it has the login                                  | `--user`, `--yes`, `--json`           |
+| the install     | once it has the login                                  | `--user`, `--yes`, `--json`, and `--subdomain` with its name where your dry run had it |
 | the removal     | never by you: the user runs it                         | nothing                               |
 
-Some stops name the command with no place. One that comes while the line is read does, as `usage` and a `missing_answer` do, and `stopped` and `crashed` may. `other_place` does too: the install is at another place than your line named, and its sentence names the option to give.
+Some stops name the command with no place. One that comes while the line is read does, as `usage` and a `missing_answer` of the line's own do, and `stopped` and `crashed` may. `other_place` names none either: the install is at another place than your line named, and its sentence names the option to give.
+
+A `missing_answer` for the subdomain comes after the account was read, and keeps the place.
 
 Where `next.step` is the command you just ran, its `command` keeps `--keep-data` of a removal, and `--dry-run` of a dry run that stopped or is not ready: leave both on the line.
 
@@ -203,12 +206,22 @@ A consent is never in `command`. Where a repair found kept data and no install, 
 | The value says                                         | Exit code | Means                                          | Next                                                  |
 | ------------------------------------------------------ | --------- | ---------------------------------------------- | ----------------------------------------------------- |
 | `missing_answer`, and its list holds the word token    | 2         | your environment holds no token                | the user runs parts d and e: see below                |
+| `missing_answer`, and its list holds the word subdomain | 2        | the account has no `workers.dev` subdomain yet: the install makes it, and needs its name | ask the user for a name, as below; then add `--subdomain` and the name to this line, and to the line of part e |
 | `ready` is true                                        | 0         | no read found anything that blocks a run       | part e                                                |
 | `ready` is false, and `blocked` has entries            | 1         | the user must act first                        | the table of blocks below, then this part again       |
 | `ready` is false, `blocked` is empty, and no `problem` | 1         | a read failed, and its row says why            | run it again in a minute                              |
 | `already_installed`                                    | 1         | the account holds an install; nothing changed  | keep the address under `found`. `next.step` is `login` for an install that is as it should be: step 4. It is `repair` for the rest: part f, as `next.command` writes it |
 | `leftover`                                             | 1         | an earlier install left a bucket or a database | ask the user whether to use it; if yes, add `--adopt`. Where its database holds users, they log in: a row `First user` that was left out says `--user` was not used |
 | any other `problem`                                    | 1, 2, 5   | a stop                                         | [`refusals.md`](refusals.md)                          |
+
+**The name of the subdomain** is the user's to choose: letters, digits, and hyphens, with no hyphen first or last, and 36 characters at most. Say what it is for before you ask:
+
+| The install      | The name is                                                                                     |
+| ---------------- | ----------------------------------------------------------------------------------------------- |
+| under a domain   | in no address of the install. Cloudflare runs no Worker on a timer in an account without one    |
+| without a domain | the `your-name` of every address: `https://poplin.your-name.workers.dev`                        |
+
+An account that has a subdomain keeps it: its lines need no `--subdomain`. Where the name is taken, nothing is made: the user's own run asks for another, and a run with `--yes` stops with [`answer_refused`](refusals.md).
 
 Each entry of `blocked` has the address to open, and says what blocks:
 
@@ -217,7 +230,7 @@ Each entry of `blocked` has the address to open, and says what blocks:
 | `storage_off`   | finish the R2 row of part b, and check the token's row Workers R2 Storage     |
 | `login_off`     | finish the Zero Trust row of part b                                           |
 | `right_lacking` | add the permission it names to the token: Edit in the token's menu, then save |
-| `no_address`    | finish the Workers & Pages row of part b: a subdomain of 36 characters at most |
+| `no_address`    | choose: without a domain, the account's own subdomain has more than 36 characters. Install under a domain, or change the subdomain under Workers & Pages, which changes the `workers.dev` address of every other Worker of the account |
 | `no_release`    | wait: poplin's website names no version to install yet                        |
 | `newer_release` | nothing: run the line again as `npx poplin@latest install cloudflare`         |
 | `bad_release`   | nothing: run the line again, and tell the user if it comes back               |
@@ -239,6 +252,8 @@ Linux:    open a new window of the program named Terminal
 It asks `Open the form in your browser?`, where Enter hands the token form to the browser, and then `Account token (hidden):`. Where no browser starts, it prints the form's address.
 
 The user pastes the token at the second question and presses Enter: a row of small marks shows, never the letters. Ask them to copy you everything it printed: the token is in no line.
+
+On an account that has no subdomain yet, it then asks `workers.dev subdomain`, and says in brackets what the name is for. The user types the name they chose, in this dry run and in the run of part e.
 
 **The token is asked for twice**, by this dry run and by the run of part e, and Cloudflare shows it once. What the user copies for you takes its place on their clipboard. Say so before the dry run:
 
@@ -266,7 +281,7 @@ npx poplin install cloudflare --domain example.com --user you@example.com --yes 
 | a `problem`                             | 1, 2, 5   | a stop, with no rows: the table of part d, then [`refusals.md`](refusals.md) |
 | `ok` is true                            | 0         | the install is made: keep `address`, the dashboard's, and go to step 4 |
 | `ready` is true, and `answers` is false | 1         | the install is made, and its new address does not answer yet: wait a few minutes, then step 4. If it still does not answer: the repair of part f |
-| `ready` is false, and no `problem`      | 1         | not all was made: tell the user each entry of `blocked`, each row that did not come to make, change, or leave, and each entry of `steps`. There may be no rows. Then part f |
+| `ready` is false, and no `problem`      | 1         | not all was made: tell the user each entry of `blocked`, each row that did not come to make, change, or leave, and each entry of `steps`. There may be no rows. Then part f, by the run's `next.step` |
 
 Where `next.step` is `repair` and its `command` holds `--add-user`, the install kept the users its database holds, and the email of `--user` is none of them. Tell the user who logs in, as the row `First user` names them.
 
@@ -297,7 +312,7 @@ The user first does what `blocked` and `steps` name, such as switching Zero Trus
 
 | `next.step` of that run                     | The install is                          | Run next                                    |
 | ------------------------------------------- | --------------------------------------- | ------------------------------------------- |
-| `install`                                   | started, and not set yet                | the line of part e again                    |
+| `install`                                   | not set yet: started, or not begun      | the line of part e again                    |
 | `repair`                                    | set, with pieces missing: often the login, made with Zero Trust off | the repair below    |
 
 A run without `--json`, as the user's is, names the same in a line led by `Next:`: `rerun this command`, after `add the permission, then` where the token lacks one, or the repair.

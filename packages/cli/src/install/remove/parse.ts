@@ -5,7 +5,7 @@ import type { OptionRow } from "../../../../core/src/install/installer";
 import { FLAG_WORDS } from "../../commands/command-table";
 import { EVERY_RIGHT, rightsOf, TOKEN_VARIABLE } from "../ask";
 import type { GivenToken, Missing, Parsed, Provider, Stop } from "../records";
-import { type CommandWords, heldToken, lacking, MISSING_TOKEN, missingOf, type Named, parseWords, type Typed, usage, type Variables } from "../words";
+import { type CommandWords, givenTo, heldToken, lacking, MISSING_TOKEN, missingOf, type Named, parseWords, type Typed, usage, type Variables } from "../words";
 import type { RemovalMode, UninstallPlan } from "./records";
 
 /** The options of the command itself, which every provider takes. The parser reads these rows and the help prints them. */
@@ -30,7 +30,7 @@ const ELSEWHERE: Readonly<Record<string, string>> = {
 const RUN_ALONE = "--confirm";
 
 /** The command, as its words are read. */
-const COMMAND: CommandWords = { name: "uninstall", options: UNINSTALL_OPTIONS, elsewhere: ELSEWHERE };
+const COMMAND: CommandWords = { name: "uninstall", work: "remove", options: UNINSTALL_OPTIONS, elsewhere: ELSEWHERE };
 
 /** The proof a run that asks nothing lacks, as a missing answer. */
 const MISSING_PROOF: Missing = { key: "confirm", name: "confirmation", give: "pass --confirm <text>, which a run with --dry-run prints" };
@@ -70,7 +70,7 @@ function fixedPlan(read: Named, env: Variables, json: boolean): UninstallPlan | 
   const mode = fixedMode(switches);
   if (mode === undefined && read.shared.has("yes")) return usage("--yes does not confirm an uninstall", "Fix: pass --confirm <text>, which a run with --dry-run prints");
 
-  const where = read.provider.read({ flags: read.own, env });
+  const where = read.provider.read(givenTo(read, env));
   if (!where.ok && where.why === "refused") return usage(where.refused);
 
   const held = heldToken(read, env);
@@ -93,7 +93,7 @@ function askingPlan(read: Named, env: Variables, json: boolean): UninstallPlan |
   const switches = switchesOf(read.shared);
   if ("problem" in switches) return switches;
 
-  const place = read.provider.read({ flags: read.own, env });
+  const place = read.provider.read(givenTo(read, env));
   if (!place.ok && place.why === "refused") return usage(place.refused);
 
   const token = heldToken(read, env);

@@ -53,6 +53,8 @@ Options:
                            Or set POPLIN_PLACE=none.
   --account <id>           Account id, if the token can access several accounts
                            Or set POPLIN_ACCOUNT.
+  --alias <name>           Name to give the account, if it has none
+                           Or set POPLIN_ALIAS.
   --user <email>           First user
                            Or set POPLIN_USER.
   --dry-run                Show what would change. Change nothing.

@@ -496,6 +496,29 @@ test("Cloudflare refusing the token after the upload keeps the upload's row and 
 
   expect([shown(done).map((row) => row.split(": ")[0]), done.ok && done.ready]).toEqual([["Worker | change | poplin", rest], false]);
 });
+
+// Drift: an install makes the account's subdomain where it has none, and a repair makes none: the subdomain is the account's. A repair that read it under a domain, or made it without one, would act on an account it only mended before.
+test("an account that lost its subdomain is mended as before: under a domain no call names the subdomain, and without one the read of it is the token's proof, which fails and ends the repair", async () => {
+  const under = await wholeInstall("domain");
+  Object.assign(under, { subdomain: undefined, workflows: [] });
+  const mended = await repaired(under, "domain");
+  const made = shown(mended.done).filter((row) => !row.includes(" | leave | "));
+
+  expect([made, mended.done.ok && mended.done.ready, mended.calls.filter((call) => call.path.includes("/workers/subdomain")), under.subdomain]).toEqual([["Workflow | make | poplin-jobs"], true, [], undefined]);
+
+  const without = await wholeInstall("no-domain");
+  without.subdomain = undefined;
+  const refused = await repaired(without, "no-domain");
+  const last = refused.calls.at(-1);
+
+  expect([shown(refused.done), `${last?.method} ${last?.path}`, refused.changes, without.subdomain]).toEqual([
+    ["not mended: token: Cloudflare refused the account token for this install. It must cover the install's account, and its zone if the install has a domain."],
+    `GET /accounts/${ACCOUNT}/workers/subdomain`,
+    [],
+    undefined,
+  ]);
+});
+
 describe.each(BOTH)("a repair that was not asked to update, %s", (kind) => {
   // Drift: a repair mends, and an update is a person's own choice. One that took a release unasked would change the code of an install whose owner switched updates off.
   test("an install that is behind is mended and takes no release: one row says what is out and how to take it, in a dry run and a run, with the calls of a repair that changes nothing", async () => {

@@ -8,7 +8,7 @@ order: 10
 Each line `npx poplin install cloudflare` can stop at, and what to do next; the steps themselves are in [Install](../start/install.md). An install [without a domain](../start/without-a-domain.md) stops the same way, but for the lines about a domain.
 
 ```text
-stopped before any change    the line ends in "Nothing changed": fix the cause, run the same command again
+stopped before any change    a line says "Nothing changed", or "Missing" and an answer: fix the cause, run the same command again
 stopped part way             rows say blocked, failed, or skipped: what is made stays, and every piece reads before it writes
 ```
 
@@ -25,7 +25,9 @@ stopped part way             rows say blocked, failed, or skipped: what is made 
 | `The account token can access several accounts`, and a list            | the token reaches several accounts                              | type the number of the one the install goes to                        |
 | `R2 is not enabled for this account, or the account token cannot use it.` | R2 is off, or the token lacks Workers R2 Storage: Edit          | finish the R2 row of [step 1](../start/install.md#1-switch-on-what-no-command-can); check the token's row Workers R2 Storage |
 | `Access is not enabled for this account.`                              | Zero Trust is off: nobody could log in                          | answer no at `Continue anyway?`, pick the Free plan at the address it prints, then run again |
-| `This account has no workers.dev subdomain, or one too long for the login hostname.` | without a domain: the account has no `workers.dev` subdomain, or one of more than 36 characters | open Workers & Pages at the address it prints, and set a subdomain of 36 characters at most |
+| a name, then `is not a workers.dev subdomain`; or `A workers.dev subdomain needs a name` | the name for the account's subdomain breaks its rule, or is empty | give a name by [its rule](../start/install.md#2-run-the-command) |
+| a name, then `is taken. Choose another name.`                          | Cloudflare gives that subdomain to no account: another has it, or Cloudflare keeps it back | type another name. In a run that asks nothing, give another with `--subdomain` |
+| `This account's workers.dev subdomain is too long for the login hostname` | without a domain: the account has a subdomain of more than 36 characters | install under a domain. Or change the subdomain at the address it prints: the `workers.dev` address of every other Worker of the account changes with it |
 | a line that says `The account token lacks` and a name                  | the token lacks the permission of that name                  | add it to the token: [the table below](#add-a-permission-to-the-token) |
 | `This account has a D1 database named poplin but no poplin Worker.` | an earlier install left its database, its bucket, or both      | answer yes at `Reuse these resources and their data?` to keep its sites; or delete it at the address it prints |
 | `This account has a Worker named poplin that is not marked as poplin's` | the name the install needs is taken, or poplin's own Worker was uploaded a moment ago and Cloudflare does not show its marks yet | right after an install or an update: wait a minute, and run the line again. Else rename that Worker at the address it prints |
@@ -47,6 +49,7 @@ A row says what happened to one piece. [Step 4 of Install](../start/install.md#4
 | `blocked`, saying `The account token lacks` and a name            | the token lacks the permission of that name             | add it to the token: [the table below](#add-a-permission-to-the-token) |
 | `blocked`, saying `Access is off for the account`                  | Zero Trust is off, and the run went on without the login | pick the Free plan at the address under the rows, then [finish with the repair](#the-second-run) |
 | `failed`, saying `refused with status` and a number                | Cloudflare refused that one call                        | run the command again                                             |
+| `failed`, saying `this account has no workers.dev subdomain` | Cloudflare refused that call because the account has no subdomain. poplin 0.1.2 printed `refused with status 403 and codes 10063` for it, at `Cron trigger` | the install: run its line again as `npx poplin@latest install cloudflare`, with the same `--domain` or `--no-domain`. It resumes, and makes the subdomain first, under the name you type or give with `--subdomain`. Another command: set a subdomain under Workers & Pages at Cloudflare, then run that command again |
 | `failed`, with other words                                         | the row says why, such as a Worker of the name that is not poplin's | do what the row asks                                  |
 | `failed`, ending `Cloudflare asked to wait` or `no answer from Cloudflare` | Cloudflare was still busy after the command waited 5 minutes, or gave no answer | run the command again in a minute                                 |
 | `skipped`, saying `not attempted`                                 | the run did not reach this piece                        | fix each `blocked` and `failed` row, then run the command again   |
@@ -58,7 +61,7 @@ The last line of a run that left something undone names the command that goes on
 
 | The last line says                               | The install is                                        | Run, after the fix                                         |
 | ------------------------------------------------ | ----------------------------------------------------- | ---------------------------------------------------------- |
-| `Next: rerun this command`, after `add the permission, then` where the token lacks one | started, and not set yet | the same `npx poplin install cloudflare` line, with the same `--domain` or `--no-domain`: it says `This account has an incomplete install. A run resumes it.`, and goes on. The other place is refused |
+| `Next: rerun this command`, after `add the permission, then` where the token lacks one | not set yet: started, or not begun | the same `npx poplin install cloudflare` line, with the same `--domain` or `--no-domain`: it goes on, and says `This account has an incomplete install. A run resumes it.` where one was started. The other place is refused |
 | `Next: run npx poplin doctor --repair` and    your `--domain` or `--no-domain` | set: its address is written, and pieces are missing   | that line as it is written, with the same token. Where the line has `--add-user` and an email, keep both: [the install kept its users](../upkeep/remove.md#keep-the-data) |
 | `Nothing changed. Fix the above, then rerun this command.` | as it was before the run: the run printed no row, and changed nothing | the same line, once the line above it no longer holds: [Before any change](#before-any-change) has each |
 

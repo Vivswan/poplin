@@ -42,6 +42,7 @@ import { isAccessOff } from "../../pieces/access/access";
 import { BUDGET_ALERT } from "../../pieces/alerts/budget-alert";
 import { listBuckets, planBucket } from "../../pieces/bucket/bucket";
 import { type DatabaseHolder, holderWords, readHolder, syncDatabase } from "../../pieces/database/database";
+import { SUBDOMAIN_ROW } from "../../pieces/free-address/free-address";
 import { type ListedBinding, readWorker } from "../../pieces/variables/variables";
 import { applySteps, type Mode, type Synced } from "../../sync";
 import { OUTLASTED } from "../../first/waits";
@@ -98,6 +99,7 @@ const WORDS = {
   othersRules: "it has rules that are not poplin's and is left in place",
   bots: "AI crawler blocking and Bot Fight Mode are zone settings and keep their values",
   methods: `${INSTALL_OBJECTS.cloudflareMethod}, ${INSTALL_OBJECTS.codeMethod}, and ${INSTALL_OBJECTS.passkeyMethod} are login methods of the account, which its other applications may use, and are left in place`,
+  subdomain: "left in place where the account has one: it is the account's own, and its other Workers may answer under it",
   token: `delete it at Cloudflare: ${TOKENS_PAGE}`,
   unreachable: "Cloudflare gave no valid response. Nothing changed.",
   notConfirmed: "The confirmation does not match",
@@ -599,6 +601,7 @@ export async function removeInstall(found: Removable<Place>, where: Where, remov
   if (where.kind === "domain") note(work, { object: "Bot settings", state: "stay", detail: WORDS.bots });
 
   note(work, { object: "Login method", state: "stay", detail: WORDS.methods });
+  note(work, { object: SUBDOMAIN_ROW, state: "stay", detail: WORDS.subdomain });
   note(work, { object: "Account token", state: "stay", detail: WORDS.token });
 
   return done(work, confirm);

@@ -7,7 +7,7 @@
 
 import { Command, CommanderError, Option } from "commander";
 
-import type { OptionRow, Question, Token } from "../../../core/src/install/installer";
+import type { Given, OptionRow, Question, Token } from "../../../core/src/install/installer";
 import { HELP_FLAG, VERSION_FLAG } from "../commands/command-table";
 import { nearest } from "../commands/line/util";
 import { TOKEN_VARIABLE } from "./ask";
@@ -33,6 +33,9 @@ export interface CommandWords {
   /** The command as it is typed after `poplin`, such as `install`. */
   readonly name: string;
 
+  /** The work the command does at a provider: a provider's options of another work alone are none of the line's. */
+  readonly work: NonNullable<OptionRow["work"]>;
+
   /** The options of the command itself, which every provider takes. */
   readonly options: readonly OptionRow[];
 
@@ -56,8 +59,8 @@ interface Read {
   readonly provider: Provider | undefined;
 }
 
-/** A line that names its provider. */
-export type Named = Read & { readonly provider: Provider };
+/** A line that names its provider, with the work of its command: the one its options were read by. */
+export type Named = Read & { readonly provider: Provider; readonly work: CommandWords["work"] };
 
 /** What ends the reading of a line before commander is through with it: the refusal is known. */
 class Refused extends Error {
@@ -72,6 +75,27 @@ class Refused extends Error {
 /** The stop of a line written wrong: its first line says what is wrong, and a second, where there is one, what to do. */
 export function usage(...lines: string[]): Stop {
   return { problem: "usage", exit: 2, lines };
+}
+
+/**
+ * The options of a provider that the command of one work takes.
+ *
+ * @returns the provider's options of every work, and the ones of that work alone, in the provider's order
+ */
+export function optionsOf(provider: Provider, work: CommandWords["work"]): readonly OptionRow[] {
+  return provider.options.filter((row) => row.work === undefined || row.work === work);
+}
+
+/**
+ * What a line gives its provider to read: its own options as typed, and the environment.
+ *
+ * @returns the environment without the variable of each option that is of another work alone: such a variable answers nothing on this line, as its option is none of the line's
+ */
+export function givenTo(read: Named, env: Variables): Given {
+  const taken = optionsOf(read.provider, read.work);
+  const others = read.provider.options.flatMap((row) => (taken.includes(row) || row.variable === null ? [] : [row.variable]));
+
+  return { flags: read.own, env: Object.fromEntries(Object.entries(env).filter(([name]) => !others.includes(name))) };
 }
 
 /** Whether a flag stands as a word of its own before `--`. */
@@ -111,12 +135,12 @@ function unknownOption(typed: string, command: CommandWords, provider: Provider 
   const elsewhere = Object.hasOwn(command.elsewhere, flag) ? command.elsewhere[flag] : undefined;
   if (elsewhere !== undefined) return new Refused(`Unknown option ${flag}`, elsewhere);
 
-  const owner = providers.find((other) => other !== provider && other.options.some((row) => row.flag === flag));
+  const owner = providers.find((other) => other !== provider && optionsOf(other, command.work).some((row) => row.flag === flag));
   if (owner !== undefined && provider !== undefined) return new Refused(`${flag} is an option of ${owner.id}, not of ${provider.id}`);
 
   if (owner !== undefined) return new Refused(`${flag} is an option of ${owner.id}`, `Usage: poplin ${command.name} ${owner.id} ${flag}`);
 
-  const known = [...command.options, ...(provider?.options ?? [])].map((row) => row.flag);
+  const known = [...command.options, ...(provider === undefined ? [] : optionsOf(provider, command.work))].map((row) => row.flag);
   const meant = nearest(flag, known);
   const helpOf = provider === undefined ? `poplin ${command.name} --help` : `poplin ${command.name} ${provider.id} --help`;
 
@@ -158,14 +182,14 @@ function readWords(words: readonly string[], command: CommandWords, providers: r
   let provider: Provider | undefined;
   const root = quiet(new Command(command.name)).action(() => undefined);
   addOptions(root, command.options, shared);
-  addOptions(root, lone?.options ?? [], own);
+  addOptions(root, lone === undefined ? [] : optionsOf(lone, command.work), own);
 
   // The provider is known once commander goes into its subcommand: a refusal before that names none.
   root.hook("preSubcommand", (_root, subcommand) => {
     provider = providers.find((one) => one.id === subcommand.name());
   });
 
-  for (const one of providers) addOptions(quiet(root.command(one.id)).action(() => undefined), one.options, own);
+  for (const one of providers) addOptions(quiet(root.command(one.id)).action(() => undefined), optionsOf(one, command.work), own);
 
   try {
     root.parse([...words], { from: "user" });
@@ -250,7 +274,7 @@ export function parseWords<Plan extends object>(
   if ("refused" in read) return { kind: "stop", stop: read.refused, json, provider: read.provider ?? sole };
 
   const named = (provider: Provider): Parsed<Plan> => {
-    const line = { ...read, provider };
+    const line = { ...read, provider, work: command.work };
     const plan = planned(line, canAsk && !ASK_NOTHING.some((name) => line.shared.has(name)), json);
 
     return "problem" in plan ? { kind: "stop", stop: plan, json, provider } : { kind: "plan", plan };

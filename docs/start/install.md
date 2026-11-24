@@ -50,13 +50,14 @@ The choice is made once: poplin has no command and no screen that changes it on 
 
 Open `https://dash.cloudflare.com` in your browser and log in. No command switches these on.
 
-| Open                                        | Do                                                | It is                                | Kind of install   |
-| ------------------------------------------- | ------------------------------------------------- | ------------------------------------ | ----------------- |
-| Zero Trust, in the left menu                | pick a team name and the Free plan                | the login in front of your dashboard | both              |
-| Storage & databases, then R2, then Overview | finish the checkout it shows                      | the storage for your sites' files    | both              |
-| Workers & Pages                             | set the account's subdomain, if it shows none yet: any word of 36 characters at most | the `your-name` of your addresses | without a domain |
+| Open                                        | Do                                 | It is                                |
+| ------------------------------------------- | ---------------------------------- | ------------------------------------ |
+| Zero Trust, in the left menu                | pick a team name and the Free plan | the login in front of your dashboard |
+| Storage & databases, then R2, then Overview | finish the checkout it shows       | the storage for your sites' files    |
 
 The team name can be any word: it only names your login page. Zero Trust and R2 each ask for the payment method. Each is done when Cloudflare shows its overview instead of the sign-up.
+
+**The account's subdomain at `workers.dev` is no step of yours.** A new account has none, and the command makes it: [step 2](#2-run-the-command) asks for its name.
 
 ## 2. Run the command
 
@@ -82,7 +83,7 @@ Then type the install's line. The first time, it asks whether it may download po
 npx poplin install cloudflare
 ```
 
-It asks four things, then works, and at the end asks once more: whether to log this machine in.
+It asks four things, and on a new account a fifth. Then it works, and at the end asks once more: whether to log this machine in.
 
 The sample leaves out the marks a terminal draws beside the lines, and cuts the form's address short, where the dots are:
 
@@ -122,12 +123,23 @@ Account token (hidden):
 | `First user's email:`                    | an email whose inbox you can read                                  |
 | `Open the form in your browser?`         | press Enter, to open Cloudflare's token form. Or answer `n`        |
 | `Account token (hidden):`                | leave the terminal at this question, and make the token: step 3    |
+| `workers.dev subdomain`, on a new account | a name of your own: the lines under this table say which          |
 
 **A terminal that makes links** shows a short link above the third question, `Open the token form`. Where it shows that link and your browser started, the command leaves the address out.
 
 An **account token** is a long password that lets a program change your Cloudflare account. Cloudflare lists it under My Profile, then API Tokens. You give it at this question. Later, [three things ask for one again](#4-read-what-it-made), and one of them is the Domain screen of your own dashboard. Nothing else takes it: no chat, and no other page. What you paste is not shown, and nothing keeps it.
 
 After the token, where Zero Trust is still off, the command says `Until then nobody can log in` and asks one thing more, `Continue anyway?`. Answer no, and finish step 1.
+
+**On an account that has no `workers.dev` subdomain yet**, as a new account has none, the command then asks for its name:
+
+```text
+workers.dev subdomain (this account has none; Cloudflare requires one, and no address of the install uses it):
+```
+
+Type a name of your own: letters, digits, and hyphens, with no hyphen first or last, and 36 characters at most. Where the name is taken, the command says so, makes nothing, and asks again.
+
+The command makes the subdomain before anything else: Cloudflare runs no Worker on a timer in an account without one. Under a domain no address of yours holds the name. [Without a domain](without-a-domain.md) it is the `your-name` of every address.
 
 An option answers a question before it is asked: with `--domain example.com` on the line, the first is not asked. To see what a run would make before it makes anything, read [the dry run](#check-first-the-dry-run) first.
 
@@ -176,6 +188,7 @@ The command looks for an install first, then prints one row for each thing it ma
 
 ```text
 This account has no install
+created    Account subdomain     your-name.workers.dev
 created    R2 bucket             poplin-sites
 created    D1 database           poplin
 created    Worker                poplin, runs 0.1.0
@@ -207,6 +220,7 @@ Log this machine in now?
 
 | Piece              | It is                                                           |
 | ------------------ | --------------------------------------------------------------- |
+| Account subdomain  | your account's name at `workers.dev`: [step 2](#2-run-the-command) says what it is for. `unchanged` on an account that had one |
 | R2 bucket          | the storage for your sites' files                               |
 | D1 database        | the list of your sites, the users, and the settings             |
 | Worker             | the program Cloudflare runs for you: it serves every site       |
@@ -365,11 +379,12 @@ Windows:  npx poplin "C:\Users\user\Desktop\my report" --name my-report
 The run after it asks for the token again. Leave Cloudflare's page with the token open until the install is made, and copy the token from it a second time.
 
 ```sh
-npx poplin install cloudflare --domain example.com --user you@example.com --dry-run
+npx poplin install cloudflare --domain example.com --subdomain your-name --user you@example.com --dry-run
 ```
 
 ```text
 This account has no install
+would create  Account subdomain     your-name.workers.dev
 would create  R2 bucket             poplin-sites
 would create  D1 database           poplin
 would create  Worker                poplin, runs 0.1.0
@@ -377,29 +392,33 @@ would create  DNS record            poplin.example.com
 would create  Login method          One-time PIN
 would create  Access application    poplin: poplin.example.com, *-p-poplin.example.com
 A dry run does not test the account token's write permissions
-A run would create 29 resources and update 1
+A run would create 29 resources and update 2
 ```
 
-The sample is of a token that holds the four optional permissions. With a token that lacks them, each of their rows says `would skip` and the permission it needs, and the last lines count them:
+The sample is of a new account, and of a token that holds the four optional permissions. With a token that lacks them, each of their rows says `would skip` and the permission it needs, and the last lines count them:
 
 ```text
 would skip    WAF rule              needs Zone WAF: Edit
 would skip    Budget alert          needs Notifications: Edit
 6 optional rows would be skipped: http redirect, edge rules, bot blocking, and alerts. They need 4 permissions the account token lacks: add them before the run
 A dry run does not test the account token's write permissions
-A run would create 22 resources, update 1, and skip 6
+A run would create 23 resources, update 1, and skip 6
 ```
 
 Nothing is wrong: [the install works without them](#4-read-what-it-made).
+
+On an account that has its subdomain, the first row says `unchanged`, and the line needs no `--subdomain`. On a new account, a line without it asks for the name, as the run does.
 
 | The last line starts with   | Means                                                                              | Exit code |
 | --------------------------- | ---------------------------------------------------------------------------------- | --------- |
 | `A run would`, and a count  | nothing that a read can see blocks a run. A write is proven only by the run itself | 0         |
 | `A run would be incomplete` | you must act first, and the lines above it say where to click; or a row `failed`, and says why | 1 |
 
-A dry run exits as the run after it would: 0 when a run would go through, and 1 when something stops it first. The same holds for the dry run of `poplin doctor --repair` and of `poplin uninstall`.
+A dry run that came to its last line exits as the run after it would, as far as a read can see: 0 when a run would go through, and 1 when something stops it first. The same holds for the dry run of `poplin doctor --repair` and of `poplin uninstall`.
 
 The rows are the ones the run then prints, in the same order: `would create` becomes `created`.
+
+**One thing no read shows: whether the name of a new subdomain is free.** Where it is taken, the run makes nothing and prints no row. It asks for another name, or exits with 1 where it asks nothing.
 
 ## Every answer as an option
 
@@ -414,6 +433,7 @@ The question about the browser has neither: a run that is given the token does n
 | the first user           | `--user you@example.com`               | `POPLIN_USER`                        |
 | the account token, for a script alone | `--token-stdin` reads it from standard input | `POPLIN_INSTALL_TOKEN` |
 | the account, when the token shows more than one | `--account` and the account's id | `POPLIN_ACCOUNT`    |
+| the name of the account's subdomain, on an account that has none | `--subdomain your-name` | `POPLIN_SUBDOMAIN` |
 
 No option carries the token itself.
 
@@ -429,6 +449,14 @@ A script's line names every answer but the token, and adds `--yes`:
 ```sh
 npx poplin install cloudflare --no-domain --user you@example.com --yes
 ```
+
+On an account that has no `workers.dev` subdomain yet, the line needs its name too. Without it the run stops before any change, and names the option:
+
+```sh
+npx poplin install cloudflare --no-domain --subdomain your-name --user you@example.com --yes
+```
+
+An account that has a subdomain keeps it: leave the option out there.
 
 | Option        | Does                                                                                     |
 | ------------- | ---------------------------------------------------------------------------------------- |
@@ -448,7 +476,7 @@ With `--json`, the value of a run, and of a run that stopped, names what to run 
 | `--dry-run`, and a removal's `--keep-data`             | `next` names the same command again, after a stop or a run not ready  |
 | `--add-user` and an email                              | an install kept its users and did not use `--user`; or a repair given it has something to mend yet |
 | a repair's `--update`                                  | the repair's own line had it; or a repair stopped at an install that is behind, with records only an update brings to this poplin |
-| no token, no login, no account, no proof, no `--adopt` | always: these are yours to add                                        |
+| no token, no login, no account, no subdomain, no proof, no `--adopt` | always: these are yours to add                          |
 
 So a repair it names runs as written where nothing can be asked, with the token in `POPLIN_INSTALL_TOKEN`.
 

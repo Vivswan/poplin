@@ -130,10 +130,10 @@ const SHARED_LEFT = [
 /** What a run tells of an account it made the install on from nothing. */
 const FROM_NONE = "Install: none found, so poplin install ran";
 
-/** The Worker's own pieces of a new install. */
-const OWN_MADE = [FROM_NONE, "R2 bucket: made", "D1 database: made", "Worker: made", "Cron trigger: made", "workers.dev route: changed"];
+/** The first pieces of a new install: the account's subdomain, which a test account has, then the Worker's own. */
+const OWN_MADE = [FROM_NONE, "Account subdomain: left", "R2 bucket: made", "D1 database: made", "Worker: made", "Cron trigger: made", "workers.dev route: changed"];
 
-/** What each kind tells of its account, of an install it made, of one it mended, and of one it removed. `bots` is what a new install does to the zone's bot switches. A removal leaves them as set, and the account's login methods too. */
+/** What each kind tells of its account, of an install it made, of one it mended, and of one it removed. `bots` is what a new install does to the zone's bot switches. A removal leaves them as set, and the account's login methods and its subdomain too. */
 const TOLD = {
   domain: {
     found: "Zone: found",
@@ -192,14 +192,14 @@ const TOLD = {
       "Workflow: removed",
       "Worker: removed",
     ],
-    stays: ["Bot settings: stays", "Login method: stays", "Account token: stays"],
+    stays: ["Bot settings: stays", "Login method: stays", "Account subdomain: stays", "Account token: stays"],
   },
   "account address": {
     found: "Free address: found",
     made: (bots: string) => [...OWN_MADE, "Forwarder: made", "Forwarder: made", ...sharedMade(bots === "changed" ? "made" : "left"), "Budget alert: made", "Workflow: made"],
     mended: ["Worker: left", "Forwarder: left", "Forwarder: left", ...SHARED_LEFT, "D1 database: left", "Budget alert: left", "Workflow: left"],
     removed: ["Forwarder: removed", "Access application: removed", "Access policy: removed", "Budget alert: removed", "Key: removed", "Upload key: removed", "Workflow: removed", "Worker: removed"],
-    stays: ["Login method: stays", "Account token: stays"],
+    stays: ["Login method: stays", "Account subdomain: stays", "Account token: stays"],
   },
 } as const;
 
@@ -704,7 +704,7 @@ describe.each(["domain", "account address"] as const)("the test install of an ac
 
     expect(ran).toEqual({
       code: 1,
-      lines: [told.found, PLANS, FROM_NONE, "R2 bucket: made", "D1 database: stopped: needs the token permission D1: Edit", "::error::The test install could not be made ready: it needs the token permission D1: Edit."],
+      lines: [told.found, PLANS, FROM_NONE, "Account subdomain: left", "R2 bucket: made", "D1 database: stopped: needs the token permission D1: Edit", "::error::The test install could not be made ready: it needs the token permission D1: Edit."],
       missing: {},
       uploads: [],
     });

@@ -6,7 +6,7 @@ import type { OptionRow, Question, Run, Token } from "../../../../core/src/insta
 import { FLAG_WORDS } from "../../commands/command-table";
 import { EVERY_RIGHT, rightsOf, TOKEN_VARIABLE } from "../ask";
 import type { GivenToken, Parsed, Provider, Rights, Stop } from "../records";
-import { type CommandWords, heldToken, lacking, MISSING_TOKEN, missingOf, type Named, parseWords, usage, type Variables } from "../words";
+import { type CommandWords, givenTo, heldToken, lacking, MISSING_TOKEN, missingOf, type Named, parseWords, usage, type Variables } from "../words";
 
 /** The command as it is typed after `poplin`, which its refusals and its hints name. */
 export const REPAIR_COMMAND = "doctor --repair";
@@ -32,7 +32,7 @@ const ELSEWHERE: Readonly<Record<string, string>> = {
 };
 
 /** The command, as its words are read. */
-const COMMAND: CommandWords = { name: REPAIR_COMMAND, options: REPAIR_OPTIONS, elsewhere: ELSEWHERE, loneProvider: true };
+const COMMAND: CommandWords = { name: REPAIR_COMMAND, work: "repair", options: REPAIR_OPTIONS, elsewhere: ELSEWHERE, loneProvider: true };
 
 /**
  * A repair as the command line asks for it. A run that asks nothing holds every answer; one on a terminal holds each answer given, and asks for the rest.
@@ -63,7 +63,7 @@ function readUser(read: Named): Login | undefined | Stop {
 
 /** Read every answer the options and the variables gave, each checked once: the provider's own, the email of the person to let in, and the token of the variable. */
 function readAnswers(read: Named, env: Variables): Answers | Stop {
-  const where = read.provider.read({ flags: read.own, env });
+  const where = read.provider.read(givenTo(read, env));
   if (!where.ok && where.why === "refused") return usage(where.refused);
 
   const addUser = readUser(read);

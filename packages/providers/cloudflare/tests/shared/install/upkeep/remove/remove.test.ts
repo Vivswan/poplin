@@ -21,7 +21,10 @@ const KINDS = {
 /** A dry run, and a run that removes everything once the install's address was typed. */
 const DRY: Removal = { run: "dry-run", data: "remove" };
 
-/** What both kinds end with: the login, the alert, the keys, the Workflow, the Worker, and the data, then the login methods and the token, which stay. */
+/** The row of the account's subdomain, which a removal of either kind leaves. */
+const SUBDOMAIN_STAYS = "Account subdomain | stay | left in place where the account has one: it is the account's own, and its other Workers may answer under it";
+
+/** What both kinds end with: the login, the alert, the keys, the Workflow, the Worker, and the data, then the login methods, the account's subdomain, and the token, which stay. */
 const SHARED = [
   "Access application | remove | poplin open paths, poplin",
   "Access policy | remove | poplin open paths policy, poplin logins",
@@ -33,6 +36,7 @@ const SHARED = [
   "R2 bucket | remove | poplin-sites (files: 2, 15 B) | 2 | 15",
   "D1 database | remove | poplin (sites: 3) | 3",
   "Login method | stay | Cloudflare, One-time PIN, and Passkeys are login methods of the account, which its other applications may use, and are left in place",
+  SUBDOMAIN_STAYS,
   "Account token | stay | delete it at Cloudflare: https://dash.cloudflare.com/profile/api-tokens",
 ];
 
@@ -49,9 +53,9 @@ const ROWS: Readonly<Record<Kind, readonly string[]>> = {
     "Rate ruleset | remove | poplin rate rule",
     ...SHARED.slice(0, 3),
     "Certificate alert | remove | poplin: certificates of every domain of the account",
-    ...SHARED.slice(3, -2),
+    ...SHARED.slice(3, -3),
     "Bot settings | stay | AI crawler blocking and Bot Fight Mode are zone settings and keep their values",
-    ...SHARED.slice(-2),
+    ...SHARED.slice(-3),
   ],
   "no-domain": ["Forwarder | remove | poplin-sites, poplin-private", ...SHARED],
 };
@@ -95,15 +99,20 @@ function applyOf(confirmed: string, data: "remove" | "keep" = "remove"): Removal
   return { run: "apply", confirmed, data };
 }
 
-/** An account an install of the kind was made in, whose bucket holds two files and whose database three sites. */
-async function installedAccount(kind: Kind, changes: Partial<Account> = {}): Promise<Account> {
-  const account: Account = { ...emptyAccount(), bindings: [], noWorker: true };
+/**
+ * An account an install of the kind was made in, whose bucket holds two files and whose database three sites.
+ *
+ * @param named - the name the install made the account's subdomain under, on an account that had none; left out, the account had its subdomain
+ */
+async function installedAccount(kind: Kind, changes: Partial<Account> = {}, named?: string): Promise<Account> {
+  const account: Account = { ...emptyAccount(), bindings: [], noWorker: true, ...(named === undefined ? {} : { subdomain: undefined }) };
+  const where: Where = { ...KINDS[kind].where, subdomain: named };
   const world = await worldOf(account);
   const login = parseLogin("owner@example.com");
-  const found = await installer.find(KEY, KINDS[kind].where, world.reach, "install");
+  const found = await installer.find(KEY, where, world.reach, "install");
   if (!login.ok || found.state !== "none") throw new Error(`the test's install could not start: ${found.state}`);
 
-  const made = await installer.install(found, KINDS[kind].where, login.value, "apply", world.reach, () => undefined);
+  const made = await installer.install(found, where, login.value, "apply", world.reach, () => undefined);
   if (!made.ok || !made.ready) throw new Error(`the test's install was not made: ${JSON.stringify(made)}`);
 
   return Object.assign(account, { objects: [{ key: "a/index.html", size: 10 }, { key: "b.css", size: 5 }], sites: 3 }, changes);
@@ -391,6 +400,15 @@ describe.each(Object.keys(KINDS) as Kind[])("an install is removed, %s", (kind) 
   });
 });
 
+// Drift: an install makes the account's subdomain where it had none, and the name is the account's from then on: its other Workers may answer under it. A removal that took it back would take their addresses with it.
+test("a subdomain the install made stays: the removal lists it as left, and sends no call that changes it", async () => {
+  const account = await installedAccount("domain", {}, "your-name");
+  const run = await removed(account, "domain", applyOf(KINDS.domain.confirm));
+  const told = shown(run.done).filter((row) => row.startsWith("Account subdomain"));
+
+  expect([told, run.writes.filter((call) => call.includes("/workers/subdomain")), account.subdomain, run.done.ok && run.done.ready]).toEqual([[SUBDOMAIN_STAYS], [], "your-name", true]);
+});
+
 describe("an account that changed between the look and the removal", () => {
   // Drift: a person reads the list and types the address, and that takes time. What the look found is then no proof of what stands.
   test.each<[string, Kind, (account: Account) => void]>([
@@ -469,7 +487,7 @@ describe("what one kind alone has", () => {
 
   // Drift: the forwarders' names hold nothing of the account, and the install says where it answers. An account whose free address was renamed or taken away must still lose its install, forwarders and all.
   test("without a domain, an install whose account no longer has the free address it was made under is removed whole", async () => {
-    const account = await installedAccount("no-domain", { noFreeAddress: true });
+    const account = await installedAccount("no-domain", { subdomain: undefined });
     const run = await removed(account, "no-domain", applyOf(KINDS["no-domain"].confirm));
 
     expect([shown(run.done)[0], run.done.ok && run.done.ready, left(account)]).toEqual(["Forwarder | remove | poplin-sites, poplin-private", true, NOTHING]);
