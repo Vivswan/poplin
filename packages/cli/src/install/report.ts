@@ -107,7 +107,10 @@ export interface Unsettled {
   readonly place: readonly string[];
 }
 
-/** What follows once the token has the optional permissions a run's rows need: the run a dry run speaks of, the step the run's later lines name, this command run again, or another command, as a step names it. It reads those pieces anew, and promises none of them. */
+/**
+ * What follows once the token has the optional permissions a run's rows need: the run a dry run speaks of, the step the run's later lines name, this command run again, or another command, as a step names it.
+ * It reads those pieces anew, and promises none of them.
+ */
 export type FollowUp = "run" | "next" | "again" | { readonly other: Next };
 
 function plain(text: string): Line {
