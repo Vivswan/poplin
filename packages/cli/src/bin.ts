@@ -4,6 +4,8 @@
 import { hostname } from "node:os";
 import { setTimeout as wait } from "node:timers/promises";
 
+import terminalLink from "terminal-link";
+
 import { exitCode } from "./commands/exit-codes";
 import { problem, problemLines } from "./commands/problems";
 import type { Io } from "./commands/records";
@@ -54,17 +56,18 @@ function thisProcess(): Io {
   const machine = thisMachine();
   const looks = { out: lookOf(process.stdout, machine.env), err: lookOf(process.stderr, machine.env) };
   const colour = { out: looks.out.colour, err: looks.err.colour };
+  const link = (text: string, address: string): string | undefined => (terminalLink.stderr.isSupported ? terminalLink.stderr(text, address) : undefined);
 
   return {
     out: (line) => console.log(line),
     // Every question and the line of what is worked on go to stderr, so stdout holds the result alone.
-    screen: pastedScreen(processScreen({ out: process.stdout, err: process.stderr, colour, input: process.stdin, stop }), runnerOf(machine.env)),
+    screen: pastedScreen(processScreen({ out: process.stdout, err: process.stderr, colour, link, input: process.stdin, stop }), runnerOf(machine.env)),
     fetch: (input, init) => fetch(input, init),
     machine,
     terminal: { asks: process.stderr.isTTY === true && process.stdin.isTTY === true, progress: colour.err },
     looks,
     computer: hostname(),
-    open: (address) => void openBrowser(address, machine),
+    open: (address) => openBrowser(address, machine),
     pause,
     stopped: STOP.signal,
   };

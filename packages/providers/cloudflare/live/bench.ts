@@ -181,7 +181,7 @@ export function openBench(parts: BenchParts): OpenBench {
     },
     terminal: { asks: false, progress: false },
     computer: "live-checks",
-    open: () => undefined,
+    open: async () => false,
     // A command that waits between two asks waits as long here: an install that copies by itself would else be asked without a rest.
     pause: async (ms) => {
       await parts.pause(ms);

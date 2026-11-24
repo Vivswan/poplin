@@ -82,27 +82,37 @@ Then type the install's line. The first time, it asks whether it may download po
 npx poplin install cloudflare
 ```
 
-It asks three things, then works, and at the end asks once more: whether to log this machine in. The sample cuts the link short, where the dots are:
+It asks four things, then works, and at the end asks once more: whether to log this machine in.
+
+The sample leaves out the marks a terminal draws beside the lines, and cuts the form's address short, where the dots are:
 
 ```text
 Custom domain (Enter for workers.dev): example.com
 First user's email: you@example.com
-The account token needs 10 permissions on this account and this domain:
-  Zone: Read
-  DNS: Edit
-  Workers Routes: Edit
-  Access: Apps and Policies: Edit
-  Workers Scripts: Edit
-  Access: Organizations, Identity Providers, and Groups: Edit
-  Zone Settings: Read
-  D1: Edit
-  Workers R2 Storage: Edit
-  Account API Tokens: Edit
-See: npx poplin install cloudflare --help for 4 optional permissions
-Create the account token here:
-  https://dash.cloudflare.com/profile/api-tokens?permissionGroupKeys=...
-On the form, limit it to this account and this domain
-Add on the form: Workers R2 Storage: Edit
+Account token
+Cloudflare's token form opens with 10 of 10 permissions chosen.
+Open the form in your browser? Yes
+The form's address
+https://dash.cloudflare.com/profile/api-tokens?permissionGroupKeys=...
+On the form
+1. Account Resources: Include > your account
+2. Zone Resources: Include > Specific zone > example.com
+3. Continue to summary. It should read:
+   example.com
+     Zone: Read
+     DNS: Edit
+     Workers Routes: Edit
+     Zone Settings: Read
+   Entire <your account> account
+     Access: Apps and Policies: Edit
+     Workers Scripts: Edit
+     Access: Organizations, Identity Providers, and Groups: Edit
+     D1: Edit
+     Workers R2 Storage: Edit
+     API Tokens: Edit
+4. Create Token > copy the token
+
+--all-permissions adds http redirect, edge rules, bot blocking, and alerts
 Account token (hidden):
 ```
 
@@ -110,7 +120,10 @@ Account token (hidden):
 | ---------------------------------------- | ------------------------------------------------------------------ |
 | `Custom domain (Enter for workers.dev):` | your domain alone, with no `https://` and no `www`; or press Enter |
 | `First user's email:`                    | an email whose inbox you can read                                  |
+| `Open the form in your browser?`         | press Enter, to open Cloudflare's token form. Or answer `n`        |
 | `Account token (hidden):`                | leave the terminal at this question, and make the token: step 3    |
+
+**A terminal that makes links** shows a short link above the third question, `Open the token form`. Where it shows that link and your browser started, the command leaves the address out.
 
 An **account token** is a long password that lets a program change your Cloudflare account. Cloudflare lists it under My Profile, then API Tokens. You give it at this question. Later, [three things ask for one again](#4-read-what-it-made), and one of them is the Domain screen of your own dashboard. Nothing else takes it: no chat, and no other page. What you paste is not shown, and nothing keeps it.
 
@@ -120,20 +133,21 @@ An option answers a question before it is asked: with `--domain example.com` on 
 
 ## 3. Make the account token
 
-Copy the link the command printed into your browser, or press the same link here. It is this one for an install under a domain; [Without a domain](without-a-domain.md#the-account-token) has the other.
+Open Cloudflare's token form: in the browser the command started, or by the address it printed. It is this one for an install under a domain; [Without a domain](without-a-domain.md#the-account-token) has the other.
 
-[Open the token form with the permissions chosen](https://dash.cloudflare.com/profile/api-tokens?permissionGroupKeys=%5B%7B%22key%22%3A%22zone%22%2C%22type%22%3A%22read%22%7D%2C%7B%22key%22%3A%22dns%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22workers_routes%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22access%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22workers_scripts%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22access_acct%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22zone_settings%22%2C%22type%22%3A%22read%22%7D%2C%7B%22key%22%3A%22d1%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22account_api_tokens%22%2C%22type%22%3A%22edit%22%7D%5D&accountId=%2A&zoneId=all&name=poplin%20install)
+[Open the token form with the permissions chosen](https://dash.cloudflare.com/profile/api-tokens?permissionGroupKeys=%5B%7B%22key%22%3A%22zone%22%2C%22type%22%3A%22read%22%7D%2C%7B%22key%22%3A%22dns%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22workers_routes%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22access%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22workers_scripts%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22access_acct%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22zone_settings%22%2C%22type%22%3A%22read%22%7D%2C%7B%22key%22%3A%22d1%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22workers_r2%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22account_api_tokens%22%2C%22type%22%3A%22edit%22%7D%5D&accountId=%2A&zoneId=all&name=poplin%20install)
 
-The form opens with nine rows filled. The install needs ten permissions: the link cannot choose Workers R2 Storage, as the command's line under the link says, so add that one yourself. A zone is your domain.
+The form opens with ten rows filled: the ten permissions the install needs. The steps the command printed are these. A zone is your domain.
 
 | On the form       | Do                                                                               |
 | ----------------- | -------------------------------------------------------------------------------- |
-| the nine rows     | leave them                                                                       |
-| Add more          | press it, and choose in the new row's three boxes: Account, Workers R2 Storage, Edit |
+| the ten rows      | leave them                                                                       |
 | Account Resources | choose Include, then your account                                                |
 | Zone Resources    | choose Include, then Specific zone, then your domain                             |
 | every other field | leave it as it is                                                                |
-| the bottom        | press Continue to summary, then Create Token                                     |
+| the bottom        | press Continue to summary                                                        |
+| the summary       | hold it beside the command's list: the same permissions, in the same two groups  |
+| the bottom        | press Create Token                                                               |
 | the next page     | the token is shown once: copy it, and leave the page open                        |
 
 Then paste the token at the command's question, `Account token (hidden):`.
@@ -148,7 +162,11 @@ The terminal shows a row of small marks for what you paste, never the letters. P
 
 **Leave Cloudflare's page with the token open** until the command says `is installed`: Cloudflare shows the token once, and a run that stops asks for it again. If the page is gone, choose Roll in the token's menu, under My Profile, then API Tokens: it shows a new text.
 
-**Skip the optional permissions on a first install.** There are four, and `npx poplin install cloudflare --help` names them. A row that says `skipped` says what its permission adds. Nothing is wrong without them, and they can be added on any day: three for [rules against junk traffic](../dashboard/domain.md#optional-block-junk-traffic-and-crawlers), and one for [an email about charges](../dashboard/domain.md#optional-an-email-when-charges-reach-1-dollar) at once.
+**Skip the optional permissions on a first install.** There are four, and the command's last line before its question says what they add. Nothing is wrong without them.
+
+They can be added on any day: three for [rules against junk traffic](../dashboard/domain.md#optional-block-junk-traffic-and-crawlers), and one for [an email about charges](../dashboard/domain.md#optional-an-email-when-charges-reach-1-dollar) at once.
+
+**To take them at once**, add `--all-permissions` to the install's line. The command's link does not choose them, so the command lists each as one more step, `Add more`. Its list then holds fourteen permissions, the four marked `(optional)`.
 
 **If the form opens empty**, [When the install stops](../fix/an-install-step-fails.md#the-token-form-opens-empty) has the ten rows to add by hand.
 
@@ -230,7 +248,9 @@ An install that works needs none of them: log this machine in, as step 5 shows.
 
 **After the run, delete the token** at Cloudflare, under My Profile, then API Tokens, unless you keep it where you keep passwords. The install and every site keep working without it.
 
-Three things ask for a token again: the dashboard's [Domain](../dashboard/domain.md) screen, `npx poplin doctor --repair`, and `npx poplin uninstall cloudflare`. Each shows the link that makes a new one. The screen asks for a Repair, and for a Check on an install that holds no key. A token pasted there goes to your own install, which uses it for that one run and stores it nowhere.
+Three things ask for a token again: the dashboard's [Domain](../dashboard/domain.md) screen, `npx poplin doctor --repair`, and `npx poplin uninstall cloudflare`. Each shows the way to the form that makes a new one.
+
+The screen asks for a Repair, and for a Check on an install that holds no key. A token pasted there goes to your own install, which uses it for that one run and stores it nowhere.
 
 ## 5. Log this machine in, and check
 
@@ -321,7 +341,7 @@ Windows:  npx poplin "C:\Users\user\Desktop\my report" --name my-report
 
 ## Check first: the dry run
 
-`--dry-run` reads everything, changes nothing, and lists what a run would make. It asks for what its line does not give: here, the token alone.
+`--dry-run` reads everything, changes nothing, and lists what a run would make. It asks for what its line does not give: here, the token, after the question whether to open its form.
 
 The run after it asks for the token again. Leave Cloudflare's page with the token open until the install is made, and copy the token from it a second time.
 
@@ -354,7 +374,9 @@ The rows are the ones the run then prints, in the same order: `would create` bec
 
 ## Every answer as an option
 
-Each question has an option and a variable, so a run can ask nothing. An agent and a script run it this way.
+Each answer in the table has an option and a variable, so a run can ask nothing. An agent and a script run it this way.
+
+The question about the browser has neither: a run that is given the token does not ask it.
 
 | Answer                   | Option                                 | Variable                             |
 | ------------------------ | -------------------------------------- | ------------------------------------ |
@@ -422,7 +444,7 @@ A repair that found an install started for another place names the install with 
 | 2         | the line is written wrong, or an answer is missing in a run that asks nothing      |
 | 5         | Cloudflare or poplin's website gave no answer                                      |
 
-`npx poplin install --help` lists the options, and `npx poplin install cloudflare --help` the permissions. The link to the token form is printed by the run, above its question for the token.
+`npx poplin install --help` lists the options, and `npx poplin install cloudflare --help` the permissions. The run shows the way to the token form before its question for the token.
 
 ## Afterwards
 

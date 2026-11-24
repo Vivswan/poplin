@@ -18,7 +18,7 @@ import type { Io } from "../../../../cli/src/commands/records";
 import { plainScreen } from "../../../../cli/src/local/screen";
 import { TOKEN_VARIABLE } from "../../../../cli/src/install/ask";
 import { runInstall } from "../../../../cli/src/install/first/install";
-import type { InstallEnds, Provider } from "../../../../cli/src/install/records";
+import type { Provider } from "../../../../cli/src/install/records";
 import { runUninstall } from "../../../../cli/src/install/remove/uninstall";
 import { runRepair } from "../../../../cli/src/install/repair/repair";
 import { installer } from "../../src/shared/install/first/installer";
@@ -163,8 +163,6 @@ function answerOf(printed: readonly string[], code: number): Answer {
  */
 export async function command(run: Run, name: keyof typeof COMMANDS, words: readonly string[], ends: Ends): Promise<Answer> {
   const printed: string[] = [];
-  const nobody = async (): Promise<undefined> => undefined;
-  const say = (_tone: unknown, line: string): void => run.say(line);
   const io: Io = {
     out: (line) => void printed.push(line),
     screen: plainScreen({ out: (line) => void printed.push(line), err: run.say, status: () => undefined, ask: async () => "" }),
@@ -172,7 +170,7 @@ export async function command(run: Run, name: keyof typeof COMMANDS, words: read
     machine: { env: { [TOKEN_VARIABLE]: run.connection.key }, platform: process.platform, home: PACKAGE },
     terminal: { asks: false, progress: false },
     computer: "live-checks",
-    open: () => undefined,
+    open: async () => false,
     pause: async (milliseconds) => {
       await ends.sleep(milliseconds);
 
@@ -180,7 +178,7 @@ export async function command(run: Run, name: keyof typeof COMMANDS, words: read
     },
     stopped: new AbortController().signal,
   };
-  const screen: InstallEnds["screen"] = { line: say, aside: say, ask: nobody, confirm: nobody, choose: nobody, working: () => undefined, rest: () => undefined };
+  const screen = plainScreen({ out: run.say, err: run.say });
   const code = await COMMANDS[name](words, io, { providers: async () => [installer as Provider], screen, input: async () => "", reach: ends.reach, sleep: ends.sleep });
 
   return answerOf(printed, code);

@@ -60,6 +60,12 @@ export function pastedScreen(screen: Screen, runner: Runner): Screen {
   return {
     line: (tone, text, hang) => screen.line(tone, worded(text), hang),
     aside: (tone, text, hang) => screen.aside(tone, worded(text), hang),
+    block: (title, rows) =>
+      screen.block(
+        worded(title),
+        rows.map((row) => ({ ...row, text: worded(row.text) })),
+      ),
+    link: (text, address) => screen.link(worded(text), address),
     ask: (question, secret) => screen.ask(worded(question), secret),
     confirm: (question, initial) => screen.confirm(worded(question), initial),
     choose: (question, picks) =>

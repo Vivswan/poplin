@@ -27,6 +27,9 @@ export type InstallMode<Open> =
 /** Whether a person can be asked, tied to how the run goes: only a run that can ask holds an answer still to ask. */
 type Asking ={ readonly asking: "terminal"; readonly mode: InstallMode<"ask"> } | { readonly asking: "never"; readonly mode: InstallMode<never> };
 
+/** Which permissions a person is asked to make the account token with: the ones the work cannot go without, or the optional ones too. */
+export type Rights = Parameters<Provider["form"]>[2];
+
 /** Where a run that asks nothing takes the account token from: the variable, already checked, or standard input, still to read. */
 export type GivenToken = { readonly from: "environment"; readonly token: Token } | { readonly from: "stdin" };
 
@@ -40,7 +43,7 @@ export interface Missing {
 /**
  * The command line, read. A run that asks nothing holds every answer; one on a terminal holds each answer given, and asks for the rest.
  *
- * `where` on a terminal is the provider's own answer, or the questions it still has. `token` there is the one the variable held.
+ * `where` on a terminal is the provider's own answer, or the questions it still has. `token` there is the one the variable held, and `rights` what a person is asked to make one with.
  */
 export type Plan = { readonly provider: Provider; readonly json: boolean } & (
   | { readonly asking: "never"; readonly mode: InstallMode<never>; readonly where: unknown; readonly login: Login; readonly token: GivenToken }
@@ -50,6 +53,7 @@ export type Plan = { readonly provider: Provider; readonly json: boolean } & (
       readonly where: { readonly known: true; readonly where: unknown } | { readonly known: false; readonly open: readonly Question<unknown>[] };
       readonly login: Login | undefined;
       readonly token: Token | undefined;
+      readonly rights: Rights;
     }
 );
 

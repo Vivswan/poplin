@@ -257,7 +257,7 @@ async function work(request: InstallRequest, io: Io, ends: InstallEnds, show: Sh
 
 /** Settle a plan's open answers, then run it. The token is hidden from the moment it is read. */
 async function planned(plan: Plan, io: Io, ends: InstallEnds, show: Show, secrets: Set<string>): Promise<number> {
-  const request = await settle(plan, ends);
+  const request = await settle(plan, ends, io);
   if ("stop" in request) return stopped(request.stop, show, { command: COMMAND, careful: carefulOf(plan.mode.mode), provider: plan.provider, place: request.place, run: plan.mode.mode });
 
   secrets.add(request.token);

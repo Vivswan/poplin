@@ -27,7 +27,7 @@ import { BY_NAME, INSTALL_OBJECTS } from "../install-objects";
 import { type DomainLayout, parseDomainLayout } from "../../../with-domain/layout";
 import { createPathPlug } from "../../../without-domain/path-plug";
 import type { Mode, Synced } from "../sync";
-import { commandRows, createDomainPlug, lacksRight, rightFor, rightsByHand, TOKEN, tokenFacts } from "../../../with-domain/zone-plug";
+import { commandRows, createDomainPlug, lacksRight, rightFor, TOKEN, tokenFacts, tokenForm } from "../../../with-domain/zone-plug";
 import { findInstall, type Place, placeWords, type Where } from "./find";
 import { removeInstall } from "../upkeep/remove/remove";
 import { placeBinding } from "../kind/started-place";
@@ -74,6 +74,13 @@ const UNREACHABLE: Installed = { ok: false, why: "unreachable", words: "Cloudfla
 
 /** What an install makes that no repair does, so that its token needs the permission for it. */
 const MADE_FIRST = ["R2 bucket"] as const;
+
+/** What the token of each kind of work is for, told from a repair's: an install makes the bucket, and a removal takes it away and leaves the bot settings as they are. */
+const TOKEN_PIECES = {
+  install: { also: MADE_FIRST, without: [] },
+  repair: { also: [], without: [] },
+  remove: { also: MADE_FIRST, without: ["Bot settings"] },
+} as const;
 
 /** The row of the repair that this file settles itself, before the upload. */
 const OWN_ROWS: ReadonlySet<string> = new Set(["D1 database"]);
@@ -148,10 +155,10 @@ function read(given: Given): Read<Where> {
 /**
  * What the account token needs for one kind of work, a permission a line, each with when it holds where that is not always: under one kind of install alone, or only to do more.
  *
- * @param also - the objects the token is to make beside the ones a repair makes
+ * @param pieces - the objects the token is for, told from a repair's: the ones it makes beside those, and the ones of those it is not for
  */
-function tokenHelp(also: typeof MADE_FIRST | readonly []): string[] {
-  const [domain, none] = [tokenFacts("domain", also), tokenFacts("noDomain", also)];
+function tokenHelp(pieces: (typeof TOKEN_PIECES)[keyof typeof TOKEN_PIECES]): string[] {
+  const [domain, none] = [tokenFacts("domain", pieces.also, pieces.without), tokenFacts("noDomain", pieces.also, pieces.without)];
   const optional = { domain: domain.tokenOptional.map((one) => one.right), none: none.tokenOptional.map((one) => one.right) };
   const line = (right: string, where: { readonly domain: readonly string[]; readonly none: readonly string[] }, more: readonly string[]): string => {
     const marks = [...(where.none.includes(right) ? [] : ["--domain"]), ...(where.domain.includes(right) ? [] : ["--no-domain"]), ...more];
@@ -480,15 +487,11 @@ export const installer: Installer<Where, Place> = {
   about: "Installs on a custom domain or on workers.dev",
   options: OPTIONS,
   usage: "(--domain <name> | --no-domain)",
-  tokenHelp: { install: tokenHelp(MADE_FIRST), repair: tokenHelp([]), remove: tokenHelp(MADE_FIRST) },
+  tokenHelp: { install: tokenHelp(TOKEN_PIECES.install), repair: tokenHelp(TOKEN_PIECES.repair), remove: tokenHelp(TOKEN_PIECES.remove) },
   token: (text) => (TOKEN.test(text) ? (text as Token) : undefined),
   read,
   placeWords,
-  facts: (where, work) => {
-    const [kind, also] = [where.kind === "domain" ? "domain" : "noDomain", work === "repair" ? [] : MADE_FIRST] as const;
-
-    return { ...tokenFacts(kind, also), tokenByHand: rightsByHand(kind, also) };
-  },
+  form: (where, work, rights) => tokenForm(where.kind === "domain" ? { kind: "domain", domain: where.layout.domain } : { kind: "noDomain" }, TOKEN_PIECES[work], rights),
   find: (token, where, reach, work) => findInstall(token, where, reach, { lacks: lacksRight, nameOf: rightFor, buckets: work !== "repair" }),
   install,
   remove: (found, where, removal, _reach, say) => removeInstall(found, where, removal, tokenFacts(where.kind === "domain" ? "domain" : "noDomain", MADE_FIRST).tokenLink, say),

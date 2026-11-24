@@ -5,7 +5,9 @@
 //
 // The result goes to stdout and everything else to stderr, so a pipe takes the result alone.
 
-import { confirm, isCancel, password, select, spinner, text, updateSettings } from "@clack/prompts";
+import { styleText } from "node:util";
+
+import { confirm, isCancel, log, password, select, spinner, text, updateSettings } from "@clack/prompts";
 import { Help } from "commander";
 import { type ConsolaInstance, createConsola, LogLevels } from "consola";
 import stringWidth from "string-width";
@@ -15,6 +17,12 @@ const MAX_WIDTH = 80;
 
 /** How many cells the mark of a line takes, with the space after it. */
 const MARK_WIDTH = 2;
+
+/** How many cells the guide of a block takes, with the two spaces after it. */
+const GUIDE_WIDTH = 3;
+
+/** Paints a text whatever stdout is: a block is painted where stderr shows colour. */
+const ALWAYS = { validateStream: false } as const;
 
 /** The narrowest column that is still folded: under it a line is left to the terminal. */
 const MIN_FOLD = 20;
@@ -57,6 +65,13 @@ export interface Pick {
   readonly hint: string;
 }
 
+/** One row of a block: its text, how far its later rows stand in once it is folded, which is its own indent when left out, and whether it is fainter than the rows around it where the screen paints. */
+export interface BlockRow {
+  readonly text: string;
+  readonly hang?: number;
+  readonly faint?: boolean;
+}
+
 /** A terminal, or what stands in for one. Each question answers `undefined` when the person stopped it. */
 export interface Screen {
   /** Shows one line of the result. `hang` is how far its later rows stand in once a terminal folds it. */
@@ -64,6 +79,12 @@ export interface Screen {
 
   /** Shows one line that is no result: a note, a warning, an error. */
   readonly aside: (tone: Tone, text: string, hang?: number) => void;
+
+  /** Shows some rows under one title, which are no result: what a person reads before the question that follows. */
+  readonly block: (title: string, rows: readonly BlockRow[]) => void;
+
+  /** Shows a short text that opens an address where it is pressed. It answers `false`, and shows nothing, where the terminal takes no such link: the address is then shown whole by the caller. */
+  readonly link: (text: string, address: string) => boolean;
 
   /** Asks for a line of text; with `secret` what is typed is not shown. */
   readonly ask: (question: string, secret?: "secret") => Promise<string | undefined>;
@@ -91,6 +112,9 @@ interface Streams {
 
   /** Whether each of the two shows colour, marks, and the spinner. */
   readonly colour: { readonly out: boolean; readonly err: boolean };
+
+  /** Makes a short text that opens an address where it is pressed, for a terminal on the second stream that takes such a link; `undefined` for one that does not. */
+  readonly link: (text: string, address: string) => string | undefined;
 
   /** What a person types into, which the spinner reads its keys from. */
   readonly input: NodeJS.ReadableStream;
@@ -193,10 +217,24 @@ function writer(stream: NodeJS.WriteStream, colour: boolean): (tone: Tone, line:
 }
 
 /**
+ * A way to write a block to one stream, by the library: under its guide where the stream shows colour, each row folded to the terminal, and as plain lines of at most the widest width everywhere else.
+ */
+function blockWriter(stream: NodeJS.WriteStream, colour: boolean): Screen["block"] {
+  return (title, rows) => {
+    const width = colour ? (stream.columns ?? MAX_WIDTH) - GUIDE_WIDTH : Math.min(stream.columns ?? MAX_WIDTH, MAX_WIDTH);
+    const lines = rows.flatMap((row) => folded(row.text, width, row.hang).map((line) => (colour && row.faint === true ? styleText("dim", line, ALWAYS) : line)));
+    const block = [title, ...lines].join("\n");
+
+    if (colour) log.step(block, { output: stream });
+    else log.message(block, { output: stream, withGuide: false, spacing: 0 });
+  };
+}
+
+/**
  * A screen for where nobody watches: a script, a test, a run whose lines are kept.
  *
  * @param to - what takes each line of the result, each other line, each text of what is being worked on with an empty one at its end, and each question; a question nothing takes is answered as stopped
- * @returns a screen that writes every line as it is, whatever its tone, and that nobody chooses or confirms on
+ * @returns a screen that writes every line as it is, whatever its tone, a block as its title and its rows, and no link, and that nobody chooses or confirms on
  */
 export function plainScreen(to: {
   readonly out: (line: string) => void;
@@ -207,6 +245,10 @@ export function plainScreen(to: {
   return {
     line: (_tone, shown) => to.out(shown),
     aside: (_tone, shown) => to.err(shown),
+    block: (title, rows) => {
+      for (const line of [title, ...rows.flatMap((row) => folded(row.text, PLAIN_LOOK.width, row.hang))]) to.err(line);
+    },
+    link: () => false,
     ask: async (question) => to.ask?.(question),
     confirm: async () => undefined,
     choose: async () => undefined,
@@ -225,6 +267,7 @@ export function plainScreen(to: {
 export function processScreen(streams: Streams): Screen {
   const line = writer(streams.out, streams.colour.out);
   const aside = writer(streams.err, streams.colour.err);
+  const block = blockWriter(streams.err, streams.colour.err);
   const common = { output: streams.err };
   // The spinner stands alone between lines, so it draws no guide of a question above itself. A signal it hears stops the command, which else would go on.
   const spin = spinner({ ...common, withGuide: false, cancelMessage: "Cancelled", onCancel: streams.stop });
@@ -266,6 +309,21 @@ export function processScreen(streams: Streams): Screen {
     aside: (tone, shown, hang) => {
       rest();
       aside(tone, shown, hang);
+    },
+    block: (title, rows) => {
+      rest();
+      block(title, rows);
+    },
+    link: (shown, address) => {
+      const painted = streams.colour.err;
+      const linked = streams.link(painted ? styleText("underline", shown, ALWAYS) : shown, address);
+      if (linked === undefined) return false;
+
+      rest();
+      // A link stands under the guide of the block before it, which only a stream that shows colour draws.
+      log.message(linked, { ...common, withGuide: painted, spacing: 0 });
+
+      return true;
     },
     ask: (question, secret) =>
       asked<string>(() => (secret === undefined ? text({ ...common, message: question }) : password({ ...common, message: question }))),

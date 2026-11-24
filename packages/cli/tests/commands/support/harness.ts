@@ -173,8 +173,10 @@ export async function openBench(layout?: LayoutInput): Promise<Bench> {
         ...(options.looks === undefined ? {} : { looks: options.looks }),
         timeoutMs: 2000,
         computer: "test-computer",
-        open: (address) => {
+        open: async (address) => {
           ran.opened.push(address);
+
+          return true;
         },
         // A stop ends a wait, and a wait the test stops is the one stop the command hears of.
         pause: async (ms) => {

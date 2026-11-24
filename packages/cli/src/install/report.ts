@@ -4,10 +4,10 @@
 //   a run        created        <object>   <detail>
 
 import type { Login } from "../../../core/src/auth/logins";
-import type { Blocked, Found, Installed, OptionRow, Repaired, Row, RowState, Run, WorkTokenFacts } from "../../../core/src/install/installer";
+import type { Blocked, Found, Installed, OptionRow, Repaired, Row, RowState, Run, TokenForm } from "../../../core/src/install/installer";
 import { HELP_FLAG, VERSION_FLAG } from "../commands/command-table";
 import { columns, countText, type StateWords, wordedRow } from "../commands/text";
-import type { Line } from "../local/screen";
+import type { BlockRow, Line } from "../local/screen";
 import type { Careful, Next, Provider, Stop } from "./records";
 
 /** The word of each state in a dry run and in a run, and what kind of line it is. */
@@ -421,24 +421,32 @@ export function runLines(installed: Pick<Extract<Installed, { readonly ok: true 
 }
 
 /**
- * Word what the account token is for and where it is made, before a person is asked for it: what a person needs at that moment, and where the rest stands.
+ * Say what the provider's form for a new token opens with: how many of the permissions the token is to hold are chosen there already.
  *
- * @param help - the command line whose help lists every permission
- * @returns what the token is for, a permission a line, where the optional ones are listed, the form's address alone on a line, and each permission the link cannot choose
+ * @param provider - the provider's name, whose form it is
  */
-export function factsLines(facts: WorkTokenFacts, help: string): string[] {
-  const more = facts.tokenOptional.length;
-  const optional = more === 0 ? [] : [`See: ${help} for ${countText(more, "optional permission")}`];
+export function formWords(provider: string, form: TokenForm): string {
+  const rights = form.summary.flatMap((group) => group.rights);
 
-  return [
-    `The account token needs ${countText(facts.tokenRights.length, "permission")} on ${facts.tokenFor}:`,
-    ...facts.tokenRights.map((right) => `${INDENT}${right}`),
-    ...optional,
-    "Create the account token here:",
-    `${INDENT}${facts.tokenLink}`,
-    `On the form, limit it to ${facts.tokenFor}`,
-    ...facts.tokenByHand.map((right) => `Add on the form: ${right}`),
-  ];
+  return `${provider}'s token form opens with ${rights.filter((right) => right.chosen).length} of ${countText(rights.length, "permission")} chosen.`;
+}
+
+/**
+ * Word what a person does on the provider's form, in the order they meet it: each step under its number, and under the step that opens the form's summary every permission the summary is to show, grouped and named as it is there.
+ *
+ * @param every - the option that asks for the optional permissions too, with what they do for the work at hand: the last row says it before what they are for; no such row where the form leaves none out
+ */
+export function formRows(form: TokenForm, every: string): BlockRow[] {
+  const step = (text: string, at: number): BlockRow & { readonly hang: number } => ({ text: `${at + 1}. ${text}`, hang: `${at + 1}. `.length });
+  const compare = step(form.compare, form.before.length);
+  const under = " ".repeat(compare.hang);
+  const summary = form.summary.flatMap((group): BlockRow[] => [
+    { text: `${under}${group.heading}` },
+    ...group.rights.map((right) => ({ text: `${under}${INDENT}${right.optional ? `${right.name} (optional)` : right.name}`, faint: true })),
+  ]);
+  const more = form.leftOut.length === 0 ? [] : [{ text: "" }, { text: `${every} ${LIST.format(form.leftOut)}` }];
+
+  return [...form.before.map(step), compare, ...summary, ...form.after.map((text, at) => step(text, form.before.length + 1 + at)), ...more];
 }
 
 /** The words of a stop that is one message: its first line says what it is, and the rest stand under it. */

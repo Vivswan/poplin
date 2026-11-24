@@ -10,11 +10,32 @@
 // The provider asks nothing itself: it declares each question, and the command asks it, or names the option that answers it.
 
 import type { Login } from "../auth/logins";
-import type { TokenFacts } from "./token-facts";
 
-/** The facts of the token one kind of work needs, with the rights among `tokenRights` that the form's link cannot choose, which a person ticks on the form. */
-export interface WorkTokenFacts extends TokenFacts {
-  readonly tokenByHand: readonly string[];
+/** Some rights of a token as the summary of the provider's form groups them: the group's heading there, and each right in the summary's own name and order, with whether the form's link chose it and whether the work goes without it. */
+export interface RightGroup {
+  readonly heading: string;
+  readonly rights: readonly { readonly name: string; readonly chosen: boolean; readonly optional: boolean }[];
+}
+
+/** What a provider's form for a new token asks of the person about to make one, for one kind of work: what a command shows before it asks for the token. */
+export interface TokenForm {
+  /** The form's address, with each right chosen that a link can choose. */
+  readonly link: string;
+
+  /** What the person does on the form before its summary, in order: each one line, in the provider's own words for the control. */
+  readonly before: readonly string[];
+
+  /** The step that opens the form's summary, which is to read as `summary` does. */
+  readonly compare: string;
+
+  /** Every right the token is to end with, as the form's summary shows them, so that a person can hold the two side by side. */
+  readonly summary: readonly RightGroup[];
+
+  /** What the person does after the summary, in order. */
+  readonly after: readonly string[];
+
+  /** What the optional rights the form does not ask for are for, each in a few words; none where it asks for every one, or the work has none. */
+  readonly leftOut: readonly string[];
 }
 
 declare const tokenBrand: unique symbol;
@@ -250,8 +271,12 @@ export interface Installer<Where, Place> {
   /** The option that names the place of `where` again, word by word as a command line gives it: `--domain`, `example.com`. The account is no part of it. */
   placeWords(where: Where): readonly string[];
 
-  /** What its form for a new token is and asks for, at that place, for the work the token is made for: a repair makes less than an install, and a removal takes away all an install made. */
-  facts(where: Where, work: "install" | "repair" | "remove"): WorkTokenFacts;
+  /**
+   * What its form for a new token asks of a person, at that place, for the work the token is made for: a repair makes less than an install, and a removal leaves some of what an install made.
+   *
+   * @param rights - `needed` for a token with the rights the work cannot go without, and `every` for one with the optional rights too
+   */
+  form(where: Where, work: "install" | "repair" | "remove", rights: "needed" | "every"): TokenForm;
 
   /** Look for an install with the token, in the account that place is in, for the work the token is made for: a look reads nothing that needs a permission that work's token is not asked for. It only reads. */
   find(token: Token, where: Where, reach: Reach, work: "install" | "repair" | "remove"): Promise<Found<Where, Place>>;

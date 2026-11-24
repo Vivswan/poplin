@@ -22,6 +22,7 @@ export const FLAG_WORDS = {
   addUser: "Add one user",
   yes: "Never prompt. A missing answer stops the run.",
   tokenStdin: `Read the account token from stdin\nOr set ${TOKEN_VARIABLES.install}.`,
+  allPermissions: "Ask for a token with the optional permissions too",
   server: "Refuse to use a login for another install",
 } as const;
 
@@ -244,6 +245,7 @@ export const COMMANDS = [
       { name: "--add-user", value: "<email>", about: FLAG_WORDS.addUser, with: REPAIR_FLAG },
       { name: "--yes", about: FLAG_WORDS.yes, with: REPAIR_FLAG },
       { name: "--token-stdin", about: FLAG_WORDS.tokenStdin, with: REPAIR_FLAG },
+      { name: "--all-permissions", about: FLAG_WORDS.allPermissions, with: REPAIR_FLAG },
       ...installFlags(`${FLAG_WORDS.server}\n--repair takes no --server.`),
     ],
     examples: ["poplin doctor --repair --dry-run", "poplin doctor --repair --add-user you@example.com", "poplin doctor --repair --update"],

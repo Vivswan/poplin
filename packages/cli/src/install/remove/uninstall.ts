@@ -8,7 +8,7 @@
 import type { Found, Removable, Removal, RemovalRow, Removed, Run } from "../../../../core/src/install/installer";
 import { exitCode } from "../../commands/exit-codes";
 import type { Io } from "../../commands/records";
-import { askToken, askWhere, givenToken, lookFor } from "../ask";
+import { askToken, askWhere, type Browser, givenToken, lookFor } from "../ask";
 import { runCommand, type Show, stopped } from "../ends";
 import type { Careful, InstallEnds, Provider, Stop } from "../records";
 import { carefulOf, carried, followed, heldStop, NEXT, placeOf, REFUSED_AS, runningWords, type Unsettled } from "../report";
@@ -50,7 +50,7 @@ function choicesOf(mode: RemovalMode<unknown>): readonly Careful[] {
 }
 
 /** Bring a plan to a request: read the token that is piped, or ask for each answer the plan lacks. The proof is asked for later, once the list was shown. A stop holds the place the run knew by then. */
-async function settled(plan: UninstallPlan, ends: InstallEnds): Promise<UninstallRequest | Unsettled> {
+async function settled(plan: UninstallPlan, ends: InstallEnds, browser: Browser): Promise<UninstallRequest | Unsettled> {
   const { provider, json } = plan;
 
   if (plan.asking === "never") {
@@ -62,7 +62,7 @@ async function settled(plan: UninstallPlan, ends: InstallEnds): Promise<Uninstal
   const where = plan.where.known ? plan.where : await askWhere(plan.where.open, ends.screen);
   if (where === undefined) return { stop: ENDED, place: [] };
 
-  const token = plan.token ?? (await askToken(provider, where.where, ends.screen, "remove"));
+  const token = plan.token ?? (await askToken({ provider, where: where.where, work: "remove", rights: plan.rights }, ends.screen, browser));
 
   return token === undefined ? { stop: ENDED, place: placeOf(provider, where.where) } : { provider, json, asking: "terminal", mode: plan.mode, where: where.where, token };
 }
@@ -177,8 +177,8 @@ async function work(request: UninstallRequest, ends: InstallEnds, show: Show): P
 }
 
 /** Settle a plan's open answers, then run it. The token is hidden from the moment it is read. */
-async function planned(plan: UninstallPlan, _io: Io, ends: InstallEnds, show: Show, secrets: Set<string>): Promise<number> {
-  const request = await settled(plan, ends);
+async function planned(plan: UninstallPlan, io: Io, ends: InstallEnds, show: Show, secrets: Set<string>): Promise<number> {
+  const request = await settled(plan, ends, io);
   if ("stop" in request) return stopped(request.stop, show, { command: COMMAND, careful: choicesOf(plan.mode), provider: plan.provider, place: request.place, run: plan.mode.mode });
 
   secrets.add(request.token);

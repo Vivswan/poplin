@@ -39,8 +39,8 @@ export interface Io {
   /** The name this computer gives itself when it asks to be logged in. */
   readonly computer: string;
 
-  /** Hands an address to the person's browser, when this machine has one to open. It never throws, and a browser that did not open is not heard of. */
-  readonly open: (address: string) => void;
+  /** Hands an address to the person's browser, when this machine has one to open. It never throws, and answers whether the browser's command was started, which does not say a page came up. */
+  readonly open: (address: string) => Promise<boolean>;
 
   /** Waits so many milliseconds. It answers `interrupted`, at once, when the command is stopped during the wait or was before it. */
   readonly pause: (ms: number) => Promise<"over" | "interrupted">;

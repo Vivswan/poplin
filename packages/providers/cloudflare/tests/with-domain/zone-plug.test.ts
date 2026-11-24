@@ -10,6 +10,7 @@ import { withFake } from "../shared/install/support/fake-cloudflare";
 import type { Asked } from "../shared/install/support/replies";
 import { ACCOUNT, type Account, answer, emptyAccount, KEPT, KEY_VALUE_START, OTHER_TOKEN, TEAM, TOKEN } from "../shared/install/support/fake-install";
 import { LAYOUT, layoutOf } from "../shared/install/support/layouts";
+import { type Page, readPage } from "../../../../../tests/support/markdown-page";
 
 const STORED: DomainSettings = { users: ["owner@example.com" as Login], alert_users: [], outside_pages: "blocked", search_engines_allowed: false, block_bots: "auto", provider_logs: true };
 const SETTINGS = async (): Promise<DomainSettings> => STORED;
@@ -235,7 +236,7 @@ test("the rights the page names, needed and optional, are the rights a repair's 
   });
 });
 
-/** The key of each permission in a link to the token form, with its level, as Cloudflare's page "Create API token templates" lists them. A permission that page names no key for is not here. */
+/** The key of each permission in a link to the token form, with its level, as the permission reference of Cloudflare's page "API token template URLs" lists them. A permission that page names no key for is not here. */
 const KEY_OF: Readonly<Record<string, readonly [key: string, type: string]>> = {
   "Zone: Read": ["zone", "read"],
   "DNS: Edit": ["dns", "edit"],
@@ -245,6 +246,7 @@ const KEY_OF: Readonly<Record<string, readonly [key: string, type: string]>> = {
   "Workers Scripts: Edit": ["workers_scripts", "edit"],
   "Zone Settings: Read": ["zone_settings", "read"],
   "D1: Edit": ["d1", "edit"],
+  "Workers R2 Storage: Edit": ["workers_r2", "edit"],
   "Account API Tokens: Edit": ["account_api_tokens", "edit"],
 };
 
@@ -267,29 +269,36 @@ const SCOPE_OF: Readonly<Record<string, "Account" | "Zone">> = {
 };
 
 // Drift: the form drops a key it does not know without a word, so a needed right the link does not carry is a token that fails at a repair with nothing on the page having asked for it.
-test("every right an install needs is in the link to the token form under Cloudflare's own key for it, and the four the link cannot carry are optional, each with what it adds", () => {
+test("every right an install needs is in the link to the token form under Cloudflare's own key for it, the bucket's among them for the token that makes one, and the four the link cannot carry are optional, each with what it adds", () => {
   const plug = createDomainPlug({ accountId: ACCOUNT, script: "poplin", layout: LAYOUT });
   const link = new URL(plug.tokenLink);
-  const chosen = JSON.parse(link.searchParams.get("permissionGroupKeys") ?? "[]") as { key: string; type: string }[];
+  const chosen = (address: string): unknown => (JSON.parse(new URL(address).searchParams.get("permissionGroupKeys") ?? "[]") as { key: string; type: string }[]).map(({ key, type }) => [key, type]);
+  const keyed = (rights: readonly string[]): unknown => rights.map((right) => KEY_OF[right] ?? [`no key is documented for ${right}`]);
+  const first = tokenFacts("domain", ["R2 bucket"]);
 
-  expect<unknown>(chosen.map(({ key, type }) => [key, type])).toEqual(plug.tokenRights.map((right) => KEY_OF[right] ?? [`no key is documented for ${right}`]));
+  expect([chosen(plug.tokenLink), chosen(first.tokenLink)]).toEqual([keyed(plug.tokenRights), keyed(first.tokenRights)]);
+  expect(first.tokenRights).toEqual([...plug.tokenRights.slice(0, -1), "Workers R2 Storage: Edit", ...plug.tokenRights.slice(-1)]);
   expect(plug.tokenOptional.map((entry) => entry.right).sort()).toEqual(["Bot Management: Edit", "Notifications: Edit", "Single Redirect: Edit", "Zone WAF: Edit"]);
   expect([`${link.origin}${link.pathname}`, link.searchParams.get("accountId"), link.searchParams.get("zoneId"), plug.tokenLink.includes(ACCOUNT)]).toEqual(["https://dash.cloudflare.com/profile/api-tokens", "*", "all", false]);
 });
 
 // Drift: the form has three boxes for a permission and the page names each, so a row whose boxes are not Cloudflare's own scope, name, and level is a permission nobody finds on the form.
 // A right the plug holds optional that the steps asked for would send every reader back to the by-hand step the link spares them.
-test("the install page gives the plug's own link to the token form, and names the three boxes of every right: the needed ones in the steps' table for an empty form, and the optional ones only in the part after the steps", () => {
-  const page = (...path: string[]): string => readFileSync(join(import.meta.dir, "..", "..", "..", "..", "..", "docs", ...path), "utf8");
-  const steps = `${page("start", "install.md")}${page("fix", "an-install-step-fails.md")}`;
-  const [, optional = ""] = page("dashboard", "domain.md").split("\n## Optional: block junk traffic and crawlers\n");
-  const boxes = (text: string): string[] => [...text.matchAll(/^ *\| (Account|Zone) +\| (.+?) +\| (Edit|Read) +\|/gm)].map(([, first, second, third]) => `${first} / ${second}: ${third}`).sort();
+test("the install pages give the link to the token form of an install's own token, and name the three boxes of every right: the needed ones in the steps' table for an empty form, and the optional ones only in the part after the steps", () => {
+  const page = (...path: string[]): Page => readPage(readFileSync(join(import.meta.dir, "..", "..", "..", "..", "..", "docs", ...path), "utf8"));
+  const [install, stopped, none, domain] = [page("start", "install.md"), page("fix", "an-install-step-fails.md"), page("start", "without-a-domain.md"), page("dashboard", "domain.md")];
+  const boxes = (rows: Page["rows"]): string[] => {
+    const named = rows.map((row) => row.cells.slice(0, 3).map((cell) => cell.rest.trim()));
+
+    return named.flatMap(([first = "", second = "", third = ""]) => (/^(Account|Zone)$/.test(first) && /^(Edit|Read)$/.test(third) ? [`${first} / ${second}: ${third}`] : [])).sort();
+  };
   const plug = createDomainPlug({ accountId: ACCOUNT, script: "poplin", layout: LAYOUT });
   const boxed = (rights: readonly string[]): string[] => rights.map((right) => `${SCOPE_OF[right] ?? "no scope is known"} / ${right}`).sort();
+  const optional = domain.headings.findIndex((heading) => heading.text === "Optional: block junk traffic and crawlers");
 
-  expect(boxes(steps)).toEqual(boxed(tokenFacts("domain", ["R2 bucket"]).tokenRights));
-  expect(boxes(optional)).toEqual(boxed(plug.tokenOptional.map((entry) => entry.right)));
-  expect(steps.includes(`(${plug.tokenLink})`)).toBe(true);
+  expect(boxes([...install.rows, ...stopped.rows])).toEqual(boxed(tokenFacts("domain", ["R2 bucket"]).tokenRights));
+  expect([optional >= 0, boxes(domain.rows.filter((row) => row.below > optional))]).toEqual([true, boxed(plug.tokenOptional.map((entry) => entry.right))]);
+  expect([install.links.includes(tokenFacts("domain", ["R2 bucket"]).tokenLink), none.links.includes(tokenFacts("noDomain", ["R2 bucket"]).tokenLink)]).toEqual([true, true]);
 });
 
 test("one object taken away and one changed by hand: the check names exactly those two, and the repair changes exactly those two", async () => {
