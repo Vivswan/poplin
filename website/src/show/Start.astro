@@ -1,7 +1,7 @@
 ---
 import { Fold } from "../controls/fold.tsx";
 import { Picker } from "../controls/picker.tsx";
-import { AGENTS } from "../lib/agents.ts";
+import { AGENTS, SKILL_LINE } from "../lib/agents.ts";
 import { INSTALLS } from "../lib/installs.ts";
 import { SETUP_PROMPT } from "../lib/prompt.ts";
 import Copy from "./Copy.astro";
@@ -57,6 +57,7 @@ import Copy from "./Copy.astro";
           ))
         }
       </div>
+      <Copy label="Skill" command={SKILL_LINE} />
       <Copy label="Terminal" command="npm i -g poplin" />
     </div>
   </Fold>
