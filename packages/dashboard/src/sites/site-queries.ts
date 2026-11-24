@@ -100,9 +100,10 @@ export function useSite(label: string): UseQueryResult<Shown> {
 }
 
 /**
- * Name the files a site serves now, apart from every other set of files: by the site's id, the number of its live version, and the moment that version was published.
+ * Name the version a site serves now, apart from every other: by the site's id, the number of its live version, and the moment that version was published.
  *
- * A new name leaves the id as it is, and a new link changes it. The moment tells a version from another published under its number, as after a site was restored from a backup.
+ * A new name leaves the id as it is, and a new link changes it. The moment tells a version from a later one published under its number.
+ * An import of the site's backup keeps the three of each version it holds and stores the files anew: pages kept under the name of the version it makes live are still that version's, and the server refuses to read on from them.
  */
 export function siteFilesKey(site: FilesSite): string {
   const published = site.versions.find((kept) => kept.number === site.live_version)?.published;

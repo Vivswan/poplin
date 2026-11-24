@@ -33,6 +33,7 @@ interface Changed {
 interface Folder {
   readonly code?: string;
   readonly about?: string | null;
+  readonly sentence?: string;
   readonly files?: readonly { readonly path: string; readonly size: number }[];
   readonly next?: string | null;
 }
@@ -265,5 +266,16 @@ describe("one folder of a site's files", () => {
     const refusal = (await response.json()) as Folder;
 
     expect([response.status, refusal.code, refusal.about]).toEqual([status, code, about]);
+  });
+
+  // Drift: the panel keeps the pages it read while the dashboard stays open; a cursor that outlived its listing would be answered with rows of another, or in words that name no way on: the row that reads on sends the same cursor again.
+  test("is refused for the cursor of another folder's page, in a sentence that says to load the page again", async () => {
+    const opened = await openConsole();
+    const files = await stocked(opened);
+    const first = (await (await opened.get(`${files}?version=1&folder=many`)).json()) as Folder;
+    const response = await opened.get(`${files}?version=1&folder=docs&cursor=${encodeURIComponent(first.next ?? "")}`);
+    const refusal = (await response.json()) as Folder;
+
+    expect([typeof first.next, response.status, refusal.code, refusal.about, refusal.sentence?.includes("Load the page again")]).toEqual(["string", 400, "bad_argument", "cursor", true]);
   });
 });

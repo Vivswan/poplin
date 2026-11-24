@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 
 import { abandonPublish } from "../../../src/actions/publish/abandon-publish";
 import { beginImport, type ImportRequest } from "../../../src/actions/backup/begin-import";
@@ -6,6 +6,8 @@ import { exportFile, exportFiles, exportSite } from "../../../src/actions/backup
 import { finishPublish } from "../../../src/actions/publish/finish-publish";
 import { publishSite } from "../../../src/actions/publish/publish";
 import { signedBy } from "../../../src/actions/access/reach";
+import { deleteSite } from "../../../src/actions/sites/delete";
+import { listFolder } from "../../../src/actions/sites/files";
 import { getSite } from "../../../src/actions/sites/show";
 import { uploadFile } from "../../../src/actions/publish/upload-file";
 import type { SettingValues } from "../../../src/records/settings";
@@ -252,5 +254,21 @@ describe("an import that is finished", () => {
 
     expect([early, hidden, await world.audit()]).toEqual([{ ok: false, code: "missing_files", about: "v1/css/site.css" }, { ok: false, code: "not_found" }, []]);
     expect(await finishPublish(world.install, ADMIN, upload)).toMatchObject({ ok: true, site: { id: entry.request.site.id, live_version: 3 } });
+  });
+
+  // Drift: the dashboard keeps the pages of a folder it read under the site's id, its live version, and the moment that version was published, and an import keeps all three.
+  // The files sit under a folder made for the import, so a page read before it would be read on there: rows left out, or listed twice.
+  test("a page of a site's files read before the site was deleted for good and imported again is not read on: its cursor is refused, and the folder lists from its start", async () => {
+    const world = await makeWorld();
+    const id = await made(world, OWNER, "manual");
+    const entry = await backupOf(world, id);
+    const read = await listFolder(world.install, OWNER, { site: id, version: 1, limit: 1 });
+    await deleteSite(world.install, OWNER, { site: id, no_trash: true });
+    await finishPublish(world.install, ADMIN, await staged(world, entry));
+    const cursor = read.ok ? read.next : undefined;
+    const lists = spyOn(world.install.store, "list");
+
+    expect<unknown>([typeof cursor, await listFolder(world.install, OWNER, { site: id, version: 1, limit: 1, cursor }), lists.mock.calls.length]).toEqual(["string", { ok: false, code: "bad_argument", about: "cursor" }, 0]);
+    expect(await listFolder(world.install, OWNER, { site: id, version: 1, limit: 1 })).toMatchObject({ ok: true, folders: ["css"], files: [] });
   });
 });

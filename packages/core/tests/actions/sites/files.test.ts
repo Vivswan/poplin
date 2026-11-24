@@ -5,7 +5,7 @@ import { publishSite } from "../../../src/actions/publish/publish";
 import { checkFilePath, fileKey, listFolder, removeFiles } from "../../../src/actions/sites/files";
 import type { SiteFolder } from "../../../src/records/site";
 import { MemoryStore } from "../../../src/storage/memory";
-import type { ObjectKey } from "../../../src/storage/storage";
+import type { ListPage, ObjectKey } from "../../../src/storage/storage";
 import { ADMIN, file, makeWorld, OWNER, PAGE_SHA256, STRANGER, type World } from "../support/actions-fixture";
 
 const FOLDER = "0123456789abcdef" as SiteFolder;
@@ -139,5 +139,35 @@ describe("listFolder", () => {
     const lists = spyOn(world.install.store, "list");
 
     expect<unknown>([await listFolder(world.install, actor, { site, ...asked }), lists.mock.calls.length]).toEqual([refusal, 0]);
+  });
+
+  // Drift: the dashboard keeps a folder's pages while it stays open; the `next` of one folder's page, or of one version's, taken for another's would be read on at a place that listing never held: rows left out, or listed twice.
+  test.each([
+    ["another folder of the version", { version: 1, folder: "assets" }],
+    ["the same folder of another version", { version: 2 }],
+  ] as const)("the next of a page is no cursor of %s: it is refused, and nothing is listed", async (_what, asked) => {
+    const world = await makeWorld();
+    const site = await nested(world);
+    const page = await listFolder(world.install, OWNER, { site, version: 1, limit: 2 });
+    if (!page.ok || page.next === undefined) throw new Error("the fixture's first page names no following one");
+
+    const lists = spyOn(world.install.store, "list");
+
+    expect<unknown>([await listFolder(world.install, OWNER, { site, ...asked, limit: 2, cursor: page.next }), lists.mock.calls.length]).toEqual([{ ok: false, code: "bad_argument", about: "cursor" }, 0]);
+  });
+
+  // Drift: a cursor cut where the store's own begins would start the listing over: the same page again under the same `next`, for as long as it is asked.
+  test("the next of a page without the store's own cursor after it is refused, and nothing more is listed", async () => {
+    const world = await makeWorld();
+    const site = await nested(world);
+    const lists = spyOn(world.install.store, "list");
+    const page = await listFolder(world.install, OWNER, { site, version: 1, limit: 2 });
+    const stored = (await lists.mock.results[0]?.value) as ListPage | undefined;
+    if (!page.ok || page.next === undefined || stored?.more !== true) throw new Error("the fixture's first page names no following one");
+
+    expect<unknown>([await listFolder(world.install, OWNER, { site, version: 1, limit: 2, cursor: page.next.slice(0, -stored.cursor.length) }), lists.mock.calls.length]).toEqual([
+      { ok: false, code: "bad_argument", about: "cursor" },
+      1,
+    ]);
   });
 });

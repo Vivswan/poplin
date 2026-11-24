@@ -60,6 +60,8 @@ Files, under the versions, is folded until you press it. It shows the live versi
 
 Nothing is read while Files is folded, and what was read is kept while the dashboard stays open. A new link starts the site's files over. [What one action costs](../upkeep/cost/what-one-action-costs.md) has the numbers of a read.
 
+Where a site was deleted for good and imported again, a folder of its live version that was read before does not read on: Show more says `This list is out of date. Load the page again.`
+
 | From                | To       | The question says                                                                  | Its button       |
 | ------------------- | -------- | ---------------------------------------------------------------------------------- | ---------------- |
 | Unlisted            | Private  | `Only users who can log in here can open it.`                                      | Make it private  |
