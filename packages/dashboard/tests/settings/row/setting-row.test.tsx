@@ -1,12 +1,12 @@
 // The row of a setting: its name, one sentence with the default after it, and its control; the way back to the default while the value differs; the same words behind the "?" a narrow column shows; and the host's warnings behind the mark after the control.
 
-import { clearPage, type Within } from "../lib/support/page";
+import { clearPage, type Within } from "../../lib/support/page";
 
 import { afterAll, afterEach, describe, expect, test } from "bun:test";
 import { cleanup, fireEvent, render, within } from "@testing-library/react";
 import { type ReactNode, useState } from "react";
 
-import { SettingRow } from "@/settings/setting-row";
+import { SettingRow } from "@/settings/row/setting-row";
 import type { Row } from "@/settings/settings-queries";
 
 /** The two sentences the host warns with in these tests. */

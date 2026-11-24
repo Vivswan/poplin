@@ -1,16 +1,16 @@
 // The control of each kind of setting: every kind the server can name draws a control that a person can change, a number has its unit fixed beside it, and nothing is typed as a word.
 // The choice of who gets the install's alerts says the default with the email it stands for, offers the install's users alone, and sends the text the server takes.
 
-import { clearPage, type Within } from "../lib/support/page";
+import { clearPage, type Within } from "../../lib/support/page";
 
 import { afterAll, afterEach, describe, expect, test } from "bun:test";
 import { Field } from "@base-ui/react/field";
 import { cleanup, fireEvent, render, waitFor, within } from "@testing-library/react";
 import { type ReactNode, useState } from "react";
 
-import { CONTROL_KINDS } from "../../../app/src/console/settings/setting-controls";
+import { CONTROL_KINDS } from "../../../../app/src/console/settings/setting-controls";
 
-import { SettingControl } from "@/settings/setting-control";
+import { SettingControl } from "@/settings/row/setting-control";
 import type { Row } from "@/settings/settings-queries";
 
 /** One row of each kind of control, with the role its control has. */

@@ -13,7 +13,7 @@ import { LeaveGuard } from "@/shared/leave-guard";
 import { MiddleColumn } from "@/shared/middle-column";
 import { SaveBar } from "@/shared/save-bar";
 import { settingAnchor, settingOfAnchor } from "@/settings/setting-address";
-import { controlId, SettingRow } from "@/settings/setting-row";
+import { controlId, SettingRow } from "@/settings/row/setting-row";
 import { boundedBy, isOn } from "@/settings/setting-values";
 import { useDraft } from "@/settings/settings-draft";
 import { type Row, type Settings, useSettings } from "@/settings/settings-queries";
