@@ -291,7 +291,7 @@ On Windows, `next.add` may be `--add-user <email>` instead: the email holds a ch
 
 A run that stopped is looked up in the [install guide](https://github.com/Vivswan/poplin/blob/main/docs/fix/an-install-step-fails.md#part-way), by the words of its rows.
 
-**When the user runs it**, the line has no `--dry-run`, no `--yes`, and no `--json`. It asks for the token again: the user copies it from Cloudflare's page a second time, or rolls it, as part d has it. It prints a row for each thing it makes, and ends:
+**When the user runs it**, the line has no `--dry-run`, no `--yes`, and no `--json`. It asks for the token again: the user copies it from Cloudflare's page a second time, or rolls it, as part d has it. It prints a row for each thing it makes, then comes to its last question:
 
 ```text
 poplin 0.1.0 is installed
@@ -301,6 +301,8 @@ Log this machine in now?
 ```
 
 Tell the user to answer yes: that is the login of step 4, in their own terminal. Their browser opens Cloudflare's login, which sends a code to their email, and then the question `Approve this login?`. Tell them the two choices of Can change first, as step 4 has them. Then run the check of step 4.
+
+After the login, the last lines of their run name `npx skills add Vivswan/poplin`, under `Next: give your agent poplin`. That line installs this skill for the agents the user picks at its question, so it is theirs to run, in their own terminal. Go on with the check of step 4 either way.
 
 A run that kept a database's users and did not use the email of `--user` asks no such question. Its last line is `Add` the email `as a user:` and a repair with `--add-user`: the user runs that line.
 
@@ -364,7 +366,7 @@ As a publisher, a site another login published is refused, with `not_found` or `
 
 If you read output as JSON, add `--json`: the first line then carries the URL and the code.
 
-| The command ends with                           | Next                                           |
+| The command says                                | Next                                           |
 | ----------------------------------------------- | ---------------------------------------------- |
 | `Logged in. The token is stored on this machine.` | the check below                                |
 | a sentence that it was denied, or ran out       | tell the user; run it again only on their word |

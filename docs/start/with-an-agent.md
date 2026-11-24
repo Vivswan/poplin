@@ -74,6 +74,8 @@ Linux:    open a new window of the program named Terminal
 
 **The login of step 4** is the last question of step 3e. On the page `Approve this login?`, choose Admin under Can change, on a machine of your own: [step 5 of Install](install.md#5-log-this-machine-in-and-check) says what each choice gives. The agent uses that login.
 
+**The run's last lines** name the same line, `npx skills add Vivswan/poplin`. If you installed the skill yourself, it is done. If you pasted the first line instead, the agent of this chat has read the skill, and the line installs it for a later chat.
+
 A script or a CI job has nobody to ask, so the agent runs both lines itself there:
 
 | The agent runs                               | Steps 3d and 3e are run by | The token is given                                             |
