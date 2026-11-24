@@ -19,6 +19,9 @@ const SERVER = '"poplin": { "command": "npx", "args": ["poplin", "mcp"] }';
 /** That entry under the key most agents read. */
 const MCP_SERVERS = `{ "mcpServers": { ${SERVER} } }`;
 
+/** The line that opens the skills installer on this repository, which asks which agents get poplin's skill. */
+export const SKILL_LINE = "npx skills add Vivswan/poplin";
+
 /** Every agent whose own documentation states how it takes a local MCP server: the most used first, then by name. */
 export const AGENTS: readonly AgentSetup[] = [
   { id: "claude-code", name: "Claude Code", line: "claude mcp add poplin -- npx poplin mcp" },
