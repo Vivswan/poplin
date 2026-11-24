@@ -27,7 +27,7 @@ const SHAPE = v.object({
   token: v.function(),
   read: v.function(),
   placeWords: v.function(),
-  facts: v.function(),
+  form: v.function(),
   find: v.function(),
   install: v.function(),
   remove: v.function(),

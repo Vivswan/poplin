@@ -6,7 +6,7 @@
 // A removal is confirmed by the install's own address: typed when a person is asked, or given with the line. No run that removes is without one.
 
 import type { Question, Token } from "../../../../core/src/install/installer";
-import type { GivenToken, Provider } from "../records";
+import type { GivenToken, Provider, Rights } from "../records";
 
 /** The proof of which install is meant, given with the line. */
 interface Given {
@@ -29,7 +29,7 @@ export type RemovalMode<Asked> = { readonly mode: "dry-run"; readonly data: "rem
 /**
  * The command line, read. A run that asks nothing holds every answer; one on a terminal holds each answer given, and asks for the rest.
  *
- * `where` on a terminal is the provider's own answer, or the questions it still has. `token` there is the one the variable held.
+ * `where` on a terminal is the provider's own answer, or the questions it still has. `token` there is the one the variable held, and `rights` what a person is asked to make one with.
  */
 export type UninstallPlan = { readonly provider: Provider; readonly json: boolean } & (
   | { readonly asking: "never"; readonly mode: RemovalMode<never>; readonly where: unknown; readonly token: GivenToken }
@@ -38,6 +38,7 @@ export type UninstallPlan = { readonly provider: Provider; readonly json: boolea
       readonly mode: RemovalMode<Typing>;
       readonly where: { readonly known: true; readonly where: unknown } | { readonly known: false; readonly open: readonly Question<unknown>[] };
       readonly token: Token | undefined;
+      readonly rights: Rights;
     }
 );
 

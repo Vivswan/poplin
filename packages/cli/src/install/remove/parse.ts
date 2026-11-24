@@ -3,7 +3,7 @@
 
 import type { OptionRow } from "../../../../core/src/install/installer";
 import { FLAG_WORDS } from "../../commands/command-table";
-import { TOKEN_VARIABLE } from "../ask";
+import { EVERY_RIGHT, rightsOf, TOKEN_VARIABLE } from "../ask";
 import type { GivenToken, Missing, Parsed, Provider, Stop } from "../records";
 import { type CommandWords, heldToken, lacking, MISSING_TOKEN, missingOf, type Named, parseWords, type Typed, usage, type Variables } from "../words";
 import type { RemovalMode, UninstallPlan } from "./records";
@@ -15,6 +15,7 @@ export const UNINSTALL_OPTIONS: readonly OptionRow[] = [
   { flag: "--keep-data", value: null, about: "Keep the site files and the database", variable: null },
   { flag: "--yes", value: null, about: FLAG_WORDS.yes, variable: null },
   { flag: "--token-stdin", value: null, about: FLAG_WORDS.tokenStdin, variable: null },
+  EVERY_RIGHT,
   { flag: "--json", value: null, about: "", variable: null },
 ];
 
@@ -101,7 +102,7 @@ function askingPlan(read: Named, env: Variables, json: boolean): UninstallPlan |
   const mode = switches.mode === "dry-run" ? switches : ({ mode: "apply", confirm: switches.given ?? { by: "typing" }, data: switches.data } as const);
   const where = place.ok ? ({ known: true, where: place.where } as const) : ({ known: false, open: place.open } as const);
 
-  return { provider: read.provider, json, asking: "terminal", mode, where, token };
+  return { provider: read.provider, json, asking: "terminal", mode, where, token, rights: rightsOf(read.shared) };
 }
 
 /**

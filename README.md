@@ -74,7 +74,9 @@ Dashboard: https://poplin.example.com
 
 The sample is cut short where the dots are.
 
-Have ready a Cloudflare account with a payment method on it, and Node.js 24. An option answers a question before it is asked. The command prints a link to the form that makes the account token, and `--dry-run` lists what a run would make and changes nothing. [Install](docs/start/install.md) has every step for both kinds.
+Have ready a Cloudflare account with a payment method on it, and Node.js 24. An option answers a question before it is asked.
+
+The command shows the way to the form that makes the account token, and `--dry-run` lists what a run would make and changes nothing. [Install](docs/start/install.md) has every step for both kinds.
 
 ## Who can open a site
 

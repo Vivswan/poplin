@@ -4,8 +4,8 @@
 import { type Login, parseLogin } from "../../../../core/src/auth/logins";
 import type { OptionRow, Question, Run, Token } from "../../../../core/src/install/installer";
 import { FLAG_WORDS } from "../../commands/command-table";
-import { TOKEN_VARIABLE } from "../ask";
-import type { GivenToken, Parsed, Provider, Stop } from "../records";
+import { EVERY_RIGHT, rightsOf, TOKEN_VARIABLE } from "../ask";
+import type { GivenToken, Parsed, Provider, Rights, Stop } from "../records";
 import { type CommandWords, heldToken, lacking, MISSING_TOKEN, missingOf, type Named, parseWords, usage, type Variables } from "../words";
 
 /** The command as it is typed after `poplin`, which its refusals and its hints name. */
@@ -19,6 +19,7 @@ export const REPAIR_OPTIONS: readonly OptionRow[] = [
   { flag: "--add-user", value: "<email>", about: FLAG_WORDS.addUser, variable: null },
   { flag: "--yes", value: null, about: FLAG_WORDS.yes, variable: null },
   { flag: "--token-stdin", value: null, about: FLAG_WORDS.tokenStdin, variable: null },
+  EVERY_RIGHT,
   { flag: "--json", value: null, about: "", variable: null },
 ];
 
@@ -36,11 +37,11 @@ const COMMAND: CommandWords = { name: REPAIR_COMMAND, options: REPAIR_OPTIONS, e
 /**
  * A repair as the command line asks for it. A run that asks nothing holds every answer; one on a terminal holds each answer given, and asks for the rest.
  *
- * `where` on a terminal is the provider's own answer, or the questions it still has. `token` there is the one the variable held.
+ * `where` on a terminal is the provider's own answer, or the questions it still has. `token` there is the one the variable held, and `rights` what a person is asked to make one with.
  */
 export type RepairPlan = { readonly provider: Provider; readonly json: boolean; readonly run: Run; readonly update: boolean; readonly addUser: Login | undefined } & (
   | { readonly asking: "never"; readonly where: unknown; readonly token: GivenToken }
-  | { readonly asking: "terminal"; readonly where: { readonly known: true; readonly where: unknown } | { readonly known: false; readonly open: readonly Question<unknown>[] }; readonly token: Token | undefined }
+  | { readonly asking: "terminal"; readonly where: { readonly known: true; readonly where: unknown } | { readonly known: false; readonly open: readonly Question<unknown>[] }; readonly token: Token | undefined; readonly rights: Rights }
 );
 
 /** The answers the options and the variables gave: where the install is or the questions still open, the email of the person to let in, and the token of the variable. */
@@ -81,7 +82,7 @@ function planned(read: Named, env: Variables, asking: boolean, json: boolean): R
 
   const { where, addUser } = answers;
   const said = { provider: read.provider, json, run: read.shared.has("dry-run") ? "dry-run" : "apply", update: read.shared.has("update"), addUser } as const;
-  if (asking) return { ...said, asking: "terminal", where: where.ok ? { known: true, where: where.where } : { known: false, open: where.open }, token: answers.token };
+  if (asking) return { ...said, asking: "terminal", where: where.ok ? { known: true, where: where.where } : { known: false, open: where.open }, token: answers.token, rights: rightsOf(read.shared) };
 
   const piped: GivenToken | undefined = read.shared.has("token-stdin") ? { from: "stdin" } : undefined;
   const token = answers.token === undefined ? piped : ({ from: "environment", token: answers.token } as const);

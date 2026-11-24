@@ -3,7 +3,7 @@
 // The provider is no real one: its options, its words, and its token's form are its own, so the command is proven to work through the interface alone.
 
 import type { Login } from "../../../../core/src/auth/logins";
-import type { Found, Given, Installed, Installer, Mend, Question, Read, Removable, Removal, RemovalRow, Removed, Repaired, Row, Run, Startable, Token, Whole, WorkTokenFacts } from "../../../../core/src/install/installer";
+import type { Found, Given, Installed, Installer, Mend, Question, Read, Removable, Removal, RemovalRow, Removed, Repaired, Row, Run, Startable, Token, TokenForm, Whole } from "../../../../core/src/install/installer";
 import type { Io } from "../../../src/commands/records";
 import { run } from "../../../src/commands/run";
 import type { InstallEnds } from "../../../src/install/records";
@@ -12,6 +12,9 @@ import { words } from "../../commands/support/command-line";
 
 /** A token of the made-up provider's form. */
 export const TOKEN = "tok_k3f9x2ab";
+
+/** The address of the made-up provider's form for a new token. */
+export const FORM = "https://host.example.com/tokens/new?rights=chosen";
 
 /** The address the made-up install's dashboard is at. */
 export const ADDRESS = "https://poplin.example.com";
@@ -59,7 +62,7 @@ export interface Account {
   /** The work each look was for, in order. */
   readonly looks: string[];
 
-  /** What each token a person was asked for was to be made for, in order. */
+  /** What each token a person was asked for was to be made for, in order: the work, and with which rights. */
   readonly tokensFor: string[];
 
   /** What each call of `install` was handed. */
@@ -115,24 +118,36 @@ interface Options {
 
   /** Whether the person stops the command during its first wait; they do not unless said. */
   readonly stops?: boolean;
+
+  /** Whether the terminal makes a short text that opens an address; it makes none unless said. */
+  readonly links?: boolean;
+
+  /** Whether a browser starts where the command hands it an address; it does unless said. */
+  readonly opens?: boolean;
+
+  /** Whether the person stops the command while the browser starts; they do not unless said. */
+  readonly stopsAtBrowser?: boolean;
 }
 
-/** What the stand-in's form for a new token asks for at a place. */
-function factsAt(where: Where): WorkTokenFacts {
+/** What the stand-in's form for a new token asks of a person at a place. Its link chooses the one right of the account: a place's right and the optional one are each a row to tick. */
+function formAt(where: Where, rights: "needed" | "every"): TokenForm {
+  const optional = rights === "every" ? [{ name: "Rules: Edit", chosen: false, optional: true }] : [];
+  const place = where.kind === "place" ? [{ heading: where.name, rights: [{ name: "Places: Read", chosen: false, optional: false }, ...optional] }] : [];
+
   return {
-    tokenRights: where.kind === "place" ? ["Places: Read", "Programs: Edit"] : ["Programs: Edit"],
-    tokenLink: "https://host.example.com/tokens/new?rights=chosen",
-    tokenOptional: [{ right: "Rules: Edit", adds: "a guard rule" }],
-    tokenNote: "The form asks which account the token is for.",
-    tokenFor: where.kind === "place" ? "this account and this place" : "this account",
-    tokenByHand: where.kind === "place" ? ["Places: Read"] : [],
+    link: FORM,
+    before: [...(where.kind === "place" ? ["Tick: Places > Read", ...optional.map(() => "Tick: Rules > Edit"), `Place: ${where.name}`] : []), "Account: yours"],
+    compare: "Press Review. It should read:",
+    summary: [...place, { heading: "Whole account", rights: [{ name: "Programs: Edit", chosen: true, optional: false }] }],
+    after: ["Press Make > copy the token"],
+    leftOut: rights === "every" || where.kind !== "place" ? [] : ["a guard rule"],
   };
 }
 
 /**
  * What one command printed and asked, and how it exited. `shown` holds every line and every question in the order shown, each line with where it went and its tone.
  *
- * `fetched` lists what the login offer asked for, `reached` what the wait asked for, `slept` how long each rest of the wait was, and `worked` what the progress line was told to show.
+ * `fetched` lists what the login offer asked for, `reached` what the wait asked for, `slept` how long each rest of the wait was, `worked` what the progress line was told to show, and `opened` each address handed to the browser.
  */
 export interface Ran {
   readonly code: number;
@@ -144,6 +159,7 @@ export interface Ran {
   readonly reached: string[];
   readonly slept: number[];
   readonly worked: string[];
+  readonly opened: string[];
 }
 
 function placeQuestion(account: string | undefined): Question<Where> {
@@ -248,10 +264,10 @@ export function standIn(account: Account, id = "stand-in"): Installer<Where, Pla
     token: (text) => (/^tok_[a-z0-9]{8}$/.test(text) ? (text as Token) : undefined),
     read: readGiven,
     placeWords: (where) => (where.kind === "place" ? ["--place", where.name] : ["--no-place"]),
-    facts: (where, work) => {
-      account.tokensFor.push(work);
+    form: (where, work, rights) => {
+      account.tokensFor.push(rights === "every" ? `${work}, every right` : work);
 
-      return factsAt(where);
+      return formAt(where, rights);
     },
     find: async (_token, where, _reach, work) => {
       account.finds.push(where);
@@ -303,8 +319,12 @@ export function standIn(account: Account, id = "stand-in"): Installer<Where, Pla
   };
 }
 
-/** A screen that keeps what it is shown and answers from a list. A question with no answer left fails the test. */
-function screenOf(ran: Ran, typed: (string | boolean | undefined)[]): Screen {
+/**
+ * A screen that keeps what it is shown and answers from a list. A question with no answer left fails the test.
+ *
+ * @param links - whether it makes a short text that opens an address: one that does keeps the text with its address, and one that does not shows nothing
+ */
+function screenOf(ran: Ran, typed: (string | boolean | undefined)[], links: boolean): Screen {
   const answer = <Answer extends string | boolean>(question: string, kind: "string" | "boolean"): Answer | undefined => {
     ran.asked.push(question);
     ran.shown.push(`ask: ${question}`);
@@ -325,6 +345,18 @@ function screenOf(ran: Ran, typed: (string | boolean | undefined)[]): Screen {
       ran.err.push(text);
       ran.shown.push(`err ${tone}: ${text}`);
     },
+    block: (title, rows) => {
+      ran.err.push(title, ...rows.map((row) => row.text));
+      ran.shown.push(`block: ${title}`, ...rows.map((row) => `  ${row.faint === true ? "faint" : "row"}: ${row.text}`));
+    },
+    link: (text, address) => {
+      if (!links) return false;
+
+      ran.err.push(text, address);
+      ran.shown.push(`link: ${text} -> ${address}`);
+
+      return true;
+    },
     ask: async (question, secret) => answer<string>(secret === undefined ? question : `${question} [secret]`, "string"),
     confirm: async (question, initial) => answer<boolean>(`${question} [${initial ? "Y/n" : "y/N"}]`, "boolean"),
     choose: async (question, picks: readonly Choice[]) => answer<string>(`${question} ${picks.map((pick) => pick.value).join("|")}`, "string"),
@@ -341,7 +373,7 @@ function screenOf(ran: Ran, typed: (string | boolean | undefined)[]): Screen {
  * @param line - the words after `poplin`, such as `install stand-in --no-place`
  */
 export async function runLine(line: string, account: Account, options: Options = {}): Promise<Ran> {
-  const ran: Ran = { code: -1, out: [], err: [], asked: [], shown: [], fetched: [], reached: [], slept: [], worked: [] };
+  const ran: Ran = { code: -1, out: [], err: [], asked: [], shown: [], fetched: [], reached: [], slept: [], worked: [], opened: [] };
   const typed = [...(options.typed ?? [])];
   const statuses = [...(options.statuses ?? [401])];
   const stop = new AbortController();
@@ -357,7 +389,7 @@ export async function runLine(line: string, account: Account, options: Options =
   };
   const ends: InstallEnds = {
     providers: async () => options.providers ?? [standIn(account) as Installer<unknown, unknown>],
-    screen: screenOf(ran, typed),
+    screen: screenOf(ran, typed, options.links ?? false),
     input: async () => options.stdin ?? "",
     reach: {
       fetch: async (input) => {
@@ -386,7 +418,13 @@ export async function runLine(line: string, account: Account, options: Options =
     terminal: { asks: options.asks ?? false, progress: options.progress ?? false },
     timeoutMs: 2000,
     computer: "test-computer",
-    open: () => undefined,
+    open: async (address) => {
+      ran.opened.push(address);
+      // The stop comes while the command waits for the browser, not before.
+      if (options.stopsAtBrowser === true) await Promise.resolve().then(() => stop.abort());
+
+      return options.opens ?? true;
+    },
     pause: async () => "over",
     stopped: stop.signal,
   };

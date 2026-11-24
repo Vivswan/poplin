@@ -21,6 +21,7 @@ import type { DomainPlug, DomainReading, DomainRow, DomainState, DomainStep, Rea
 import type { KeyRefusal } from "@poplin/app/src/console/key/records";
 import { type Login, type Logins, parseLogins } from "@poplin/core/src/auth/logins";
 import type { Hostname } from "@poplin/core/src/names/hostname";
+import type { RightGroup, TokenForm } from "@poplin/core/src/install/installer";
 import type { TokenFacts } from "@poplin/core/src/install/token-facts";
 import { alertAddresses } from "@poplin/core/src/records/settings";
 import { type KeptKey, keyed } from "../shared/install/key/kept-key";
@@ -150,31 +151,38 @@ const PRESS_REPAIR = "Press Repair.";
 /** What the database's row says in a check the install makes by itself, after the database's name. */
 const OWN_DATABASE = "the install is running on it";
 
-/** Every permission the plug's calls use, in Cloudflare's own name: one an install needs, with its key as Cloudflare's page on token template links names it, or chosen by hand where that page names none; or an optional one. */
+/**
+ * Every permission the plug's calls use, in the name a row of Cloudflare's token form gives it, with the first box of that row.
+ * One an install needs has its key as Cloudflare's page on token template links names it; that page names no key for an optional one.
+ */
 const RIGHT = {
-  zone: { name: "Zone: Read", key: "zone", type: "read" },
-  dns: { name: "DNS: Edit", key: "dns", type: "edit" },
-  routes: { name: "Workers Routes: Edit", key: "workers_routes", type: "edit" },
-  access: { name: "Access: Apps and Policies: Edit", key: "access", type: "edit" },
-  team: { name: "Access: Organizations, Identity Providers, and Groups: Edit", key: "access_acct", type: "edit" },
-  scripts: { name: "Workers Scripts: Edit", key: "workers_scripts", type: "edit" },
-  redirect: { name: "Single Redirect: Edit", adds: "Cloudflare sends http to https before poplin runs. Without it poplin sends the same redirect itself." },
-  zoneSettings: { name: "Zone Settings: Read", key: "zone_settings", type: "read" },
-  waf: { name: "Zone WAF: Edit", adds: "Cloudflare stops verified bots, scanner paths, pages of other domains, and floods before they reach poplin." },
-  bots: { name: "Bot Management: Edit", adds: "Cloudflare blocks AI crawlers on the whole domain, as the block_bots setting says." },
-  database: { name: "D1: Edit", key: "d1", type: "edit" },
-  bucket: { name: "Workers R2 Storage: Edit", chosen: "by hand" },
+  zone: { name: "Zone: Read", scope: "Zone", key: "zone", type: "read" },
+  dns: { name: "DNS: Edit", scope: "Zone", key: "dns", type: "edit" },
+  routes: { name: "Workers Routes: Edit", scope: "Zone", key: "workers_routes", type: "edit" },
+  access: { name: "Access: Apps and Policies: Edit", scope: "Account", key: "access", type: "edit" },
+  team: { name: "Access: Organizations, Identity Providers, and Groups: Edit", scope: "Account", key: "access_acct", type: "edit" },
+  scripts: { name: "Workers Scripts: Edit", scope: "Account", key: "workers_scripts", type: "edit" },
+  redirect: { name: "Single Redirect: Edit", scope: "Zone", adds: "Cloudflare sends http to https before poplin runs. Without it poplin sends the same redirect itself.", few: "http redirect" },
+  zoneSettings: { name: "Zone Settings: Read", scope: "Zone", key: "zone_settings", type: "read" },
+  waf: { name: "Zone WAF: Edit", scope: "Zone", adds: "Cloudflare stops verified bots, scanner paths, pages of other domains, and floods before they reach poplin.", few: "edge rules" },
+  bots: { name: "Bot Management: Edit", scope: "Zone", adds: "Cloudflare blocks AI crawlers on the whole domain, as the block_bots setting says.", few: "bot blocking" },
+  database: { name: "D1: Edit", scope: "Account", key: "d1", type: "edit" },
+  bucket: { name: "Workers R2 Storage: Edit", scope: "Account", key: "workers_r2", type: "edit" },
   notifications: {
     name: "Notifications: Edit",
+    scope: "Account",
     adds: "Cloudflare emails the users the alert_users setting chooses when the account's usage charges for the billing period reach 1 US dollar.",
+    few: "alerts",
     how: BY_ITSELF,
   },
   certificates: {
     name: "Notifications: Edit",
+    scope: "Account",
     adds: "Cloudflare emails the users the alert_users setting chooses when a certificate it issues for a domain fails, is renewed, or runs out: for every domain of the account, not this one alone.",
+    few: "alerts",
     how: BY_ITSELF,
   },
-  tokens: { name: "Account API Tokens: Edit", key: "account_api_tokens", type: "edit" },
+  tokens: { name: "Account API Tokens: Edit", scope: "Account", key: "account_api_tokens", type: "edit", summary: "API Tokens: Edit" },
 } as const satisfies Readonly<Record<string, Right>>;
 
 /** The permissions the calls of each object use, the one its changes use first. The bucket is no piece of a repair: an install makes it. */
@@ -298,8 +306,15 @@ const TOKEN_FORMS = {
 /** The name the form suggests for the token. */
 const TOKEN_NAME = "poplin install";
 
-/** What the form's note says before each permission the link cannot choose. */
-const BY_HAND = "The link does not choose this permission, so choose it on the form yourself";
+/** What a step on the form says, and the heading its summary gives the account's permissions, in the form's own words. */
+const FORM_WORDS = {
+  add: "Add more",
+  account: "Account Resources: Include > your account",
+  zone: "Zone Resources: Include > Specific zone",
+  summary: "Continue to summary. It should read:",
+  wholeAccount: "Entire <your account> account",
+  create: "Create Token > copy the token",
+} as const;
 
 /** What each state of a step is called in a check and in a repair. */
 const STATES: Readonly<Record<Mode, Readonly<Record<"created" | "changed" | "removed", DomainState>>>> = {
@@ -343,11 +358,16 @@ type PlugParts = Known & {
   readonly now?: (() => number) | undefined;
 };
 
-/** One permission of a token: one an install needs, with its key and level in a link to the form, or one the link cannot choose, which the person chooses on the form; or an optional one, with what it adds. */
+/** The first box of a permission's row on the form, which is also the group its line stands in on the form's summary: given on the account, or on a zone. */
+type Scope = "Account" | "Zone";
+
+/**
+ * One permission of a token: one an install needs, with its key and level in a link to the form; or an optional one, with what it adds, at length and in a few words. A link carries no optional one, so a person adds its row on the form.
+ * `summary` is its name on the form's summary, where that is another than its row's.
+ */
 type Right =
-  | { readonly name: string; readonly key: string; readonly type: "read" | "edit" }
-  | { readonly name: string; readonly chosen: "by hand" }
-  | { readonly name: string; readonly adds: string; readonly how?: string };
+  | { readonly name: string; readonly scope: Scope; readonly key: string; readonly type: "read" | "edit"; readonly summary?: string }
+  | { readonly name: string; readonly scope: Scope; readonly adds: string; readonly few: string; readonly how?: string };
 
 /** An optional permission. `how` is what its piece's row says in place of the usual words, where the piece is made without the permission too. */
 type Optional = Extract<Right, { readonly adds: string }>;
@@ -1105,22 +1125,20 @@ function tokenLink(rights: readonly Extract<Right, { readonly key: string }>[], 
   return `${TOKEN_FORM}?permissionGroupKeys=${encodeURIComponent(JSON.stringify(chosen))}&accountId=%2A${zones}&name=${encodeURIComponent(TOKEN_NAME)}`;
 }
 
-/** Every permission the objects of a kind's token form use, and those of the objects named beside them, each once, in the order of the table of rights. */
-function usedRights(kind: keyof typeof TOKEN_FORMS, also: readonly Piece[]): Right[] {
+/** Every entry of the table of rights that the objects of a kind's token form use, with those of the objects named beside them and without those of the objects left out, each once, in the table's order. */
+function usedRights(kind: keyof typeof TOKEN_FORMS, also: readonly Piece[], without: readonly Piece[]): Right[] {
   const asked: readonly Piece[] = TOKEN_FORMS[kind].pieces;
-  const pieces = (Object.keys(RIGHTS) as Piece[]).filter((object) => asked.includes(object) || also.includes(object));
+  const pieces = (Object.keys(RIGHTS) as Piece[]).filter((object) => (asked.includes(object) || also.includes(object)) && !without.includes(object));
 
   return [...new Set(pieces.flatMap((object): readonly Right[] => RIGHTS[object]))];
 }
 
-/**
- * Name the permissions a token needs that no link to the form can choose, so a person chooses each on the form.
- *
- * @param kind - the kind of install the token is for
- * @param also - the objects the token is to make beside the ones a repair of that kind makes
- */
-export function rightsByHand(kind: keyof typeof TOKEN_FORMS, also: readonly Piece[] = []): string[] {
-  return usedRights(kind, also).flatMap((right) => ("chosen" in right ? [right.name] : []));
+/** The optional permissions among some rights as the form has them: two pieces may need one permission, which is one row there, with what each piece adds. */
+function offeredRights(used: readonly Right[]): { readonly name: string; readonly scope: Scope; readonly few: string; readonly adds: readonly string[] }[] {
+  const extra = used.flatMap((right): Optional[] => ("adds" in right ? [right] : []));
+  const first = extra.filter((right, at) => extra.findIndex((other) => other.name === right.name) === at);
+
+  return first.map(({ name, scope, few }) => ({ name, scope, few, adds: extra.flatMap((other) => (other.name === name ? [other.adds] : [])) }));
 }
 
 /**
@@ -1128,23 +1146,57 @@ export function rightsByHand(kind: keyof typeof TOKEN_FORMS, also: readonly Piec
  *
  * @param kind - the kind of install the token is for: one with a domain, or one without
  * @param also - the objects the token is to make beside the ones a repair of that kind makes, such as the bucket of a new install
- * @returns every permission such an install needs, the link that opens the form with each one chosen that a link can choose, and the optional ones with what each adds
+ * @param without - the objects of such a repair the token is not for, such as the bot settings a removal leaves as they are
+ * @returns every permission such an install needs, the link that opens the form with each one chosen, and the optional ones with what each adds
  */
-export function tokenFacts(kind: keyof typeof TOKEN_FORMS, also: readonly Piece[] = []): TokenFacts {
+export function tokenFacts(kind: keyof typeof TOKEN_FORMS, also: readonly Piece[] = [], without: readonly Piece[] = []): TokenFacts {
   const form = TOKEN_FORMS[kind];
-  const used = usedRights(kind, also);
-  const needed = used.filter((right) => !("adds" in right));
-  const extra = used.flatMap((right): Optional[] => ("adds" in right ? [right] : []));
-  // Two pieces may need one optional permission: the form names it once, with what each adds.
-  const optional = [...new Set(extra.map((right) => right.name))].map((name) => ({ right: name, adds: extra.flatMap((right) => (right.name === name ? [right.adds] : [])).join(" ") }));
-  const byHand = rightsByHand(kind, also);
+  const used = usedRights(kind, also, without);
+  const needed = used.flatMap((right) => ("key" in right ? [right] : []));
 
   return {
     tokenRights: needed.map((right) => right.name),
-    tokenLink: tokenLink(needed.flatMap((right) => ("key" in right ? [right] : [])), form.zones),
-    tokenOptional: optional,
-    tokenNote: byHand.length === 0 ? form.note : `${form.note} ${BY_HAND}: ${byHand.join(", ")}.`,
+    tokenLink: tokenLink(needed, form.zones),
+    tokenOptional: offeredRights(used).map(({ name, adds }) => ({ right: name, adds: adds.join(" ") })),
+    tokenNote: form.note,
     tokenFor: form.for,
+  };
+}
+
+/**
+ * Say what Cloudflare's form for a new token asks of the person about to make one.
+ *
+ * @param place - the kind of install the token is for, with its domain where it has one: the zone's step and the zone's group of the summary name it
+ * @param pieces - the objects the token is for, told from a repair's of that kind: the ones it makes beside those, and the ones of those it is not for
+ * @param rights - `every` for a token that holds the optional permissions too: a link carries none of them, so each is one more row to add
+ * @returns the link that opens the form, the steps on the form in order, and the permissions as the form's summary lists them: under the zone, then under the account, the rows the link chose before the rows a person added
+ */
+export function tokenForm(
+  place: { readonly kind: "domain"; readonly domain: string } | { readonly kind: "noDomain" },
+  pieces: { readonly also: readonly Piece[]; readonly without: readonly Piece[] },
+  rights: "needed" | "every",
+): TokenForm {
+  const used = usedRights(place.kind, pieces.also, pieces.without);
+  const linked = used.flatMap((right) => ("key" in right ? [right] : []));
+  const offered = offeredRights(used);
+  const added = rights === "every" ? offered : [];
+  const listed = [
+    ...linked.map((right) => ({ scope: right.scope, name: right.summary ?? right.name, chosen: true, optional: false })),
+    ...added.map((right) => ({ scope: right.scope, name: right.name, chosen: false, optional: true })),
+  ];
+  const group = (scope: Scope, heading: string): RightGroup[] => {
+    const held = listed.filter((right) => right.scope === scope).map(({ name, chosen, optional }) => ({ name, chosen, optional }));
+
+    return held.length === 0 ? [] : [{ heading, rights: held }];
+  };
+
+  return {
+    link: tokenLink(linked, TOKEN_FORMS[place.kind].zones),
+    before: [...added.map((right) => `${FORM_WORDS.add}: ${right.scope} > ${right.name}`), FORM_WORDS.account, ...(place.kind === "domain" ? [`${FORM_WORDS.zone} > ${place.domain}`] : [])],
+    compare: FORM_WORDS.summary,
+    summary: [...(place.kind === "domain" ? group("Zone", place.domain) : []), ...group("Account", FORM_WORDS.wholeAccount)],
+    after: [FORM_WORDS.create],
+    leftOut: rights === "every" ? [] : offered.map((right) => right.few),
   };
 }
 

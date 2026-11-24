@@ -5,7 +5,7 @@ import type { Blocked, Found, Installer, Row, Token } from "../../../../core/src
 import { TOKEN_VARIABLE } from "../../../src/install/ask";
 import { pasted } from "../../../src/local/invoked";
 import { jsonOf } from "../../commands/support/harness";
-import { ADDRESS, type Account, accountQuestion, emptyAccount, FRESH, installedOf, type Place, type Ran, repairedOf, runLine, standIn, TOKEN, type Where } from "../support/stand-in";
+import { ADDRESS, type Account, accountQuestion, emptyAccount, FORM, FRESH, installedOf, type Place, type Ran, repairedOf, runLine, standIn, TOKEN, type Where } from "../support/stand-in";
 
 /** The environment of a run whose token is in its variable. */
 const HELD = { [TOKEN_VARIABLE]: TOKEN };
@@ -642,35 +642,121 @@ describe("the token", () => {
 });
 
 describe("on a terminal", () => {
-  test("with nothing typed but the command it takes the one provider, asks each answer in order, shows what the token needs, and offers the login: without this a person must know the options", async () => {
+  /** The rows of what to do on the made-up provider's form at a place, as the token step shows them. */
+  const STEPS = [
+    "block: On the form",
+    "  row: 1. Tick: Places > Read",
+    "  row: 2. Place: example.com",
+    "  row: 3. Account: yours",
+    "  row: 4. Press Review. It should read:",
+    "  row:    example.com",
+    "  faint:      Places: Read",
+    "  row:    Whole account",
+    "  faint:      Programs: Edit",
+    "  row: 5. Press Make > copy the token",
+    "  row: ",
+    "  row: --all-permissions adds a guard rule",
+  ];
+
+  /** What a run at a place shows between the question of the first user and the hidden one, with what the person answers the offer of the browser. */
+  async function tokenStep(line: string, answer: boolean | undefined, options: { readonly links?: boolean; readonly opens?: boolean } = {}): Promise<{ readonly step: string[]; readonly ran: Ran; readonly account: Account }> {
     const account = emptyAccount();
-    const ran = await runLine("install", account, { asks: true, typed: ["example.com", "you@example.com", TOKEN, false] });
+    const ran = await runLine(`${line} --place example.com --user you@example.com --dry-run`, account, { ...options, asks: true, typed: answer === undefined ? [undefined] : [answer, TOKEN] });
+    const end = ran.shown.indexOf("ask: Account token (hidden): [secret]");
+
+    return { step: ran.shown.slice(0, end === -1 ? ran.shown.length : end), ran, account };
+  }
+
+  test("with nothing typed but the command it takes the one provider, asks each answer in order, shows the way to the token, and offers the login: without this a person must know the options", async () => {
+    const account = emptyAccount();
+    const ran = await runLine("install", account, { asks: true, typed: ["example.com", "you@example.com", true, TOKEN, false] });
 
     expect(ran.code).toBe(0);
-    expect(ran.asked).toEqual(["Your own place (example.com), or Enter for none:", "First user's email:", "Account token (hidden): [secret]", "Log this machine in now? [Y/n]"]);
-    expect(account.tokensFor).toEqual(["install"]);
-    expect(ran.err).toEqual([
-      "The account token needs 2 permissions on this account and this place:",
-      "  Places: Read",
-      "  Programs: Edit",
-      "See: npx poplin install stand-in --help for 1 optional permission",
-      "Create the account token here:",
-      "  https://host.example.com/tokens/new?rights=chosen",
-      "On the form, limit it to this account and this place",
-      "Add on the form: Places: Read",
-    ]);
+    expect(ran.asked).toEqual(["Your own place (example.com), or Enter for none:", "First user's email:", "Open the form in your browser? [Y/n]", "Account token (hidden): [secret]", "Log this machine in now? [Y/n]"]);
+    expect([account.tokensFor, ran.opened]).toEqual([["install"], [FORM]]);
     expect(account.runs[0]).toMatchObject({ where: { kind: "place", name: "example.com" }, login: "you@example.com" });
     expect(ran.out.at(-1)).toBe(`Next: npx poplin login --server ${ADDRESS}`);
   });
 
+  // Drift: the step was a wall of text: every permission a line, then the form's address whole, then what to do on the form as two flat lines under it.
+  test("the token step follows the order a person meets it: what the form opens with and one short link, the offer of the browser, then the numbered steps with the summary to compare under its step", async () => {
+    const { step, ran } = await tokenStep("install stand-in", true, { links: true });
+
+    expect(step).toEqual(["block: Account token", "  row: Stand-In Host's token form opens with 1 of 2 permissions chosen.", `link: Open the token form -> ${FORM}`, "ask: Open the form in your browser? [Y/n]", ...STEPS]);
+    // The browser opened and the terminal made the link, so the address is nowhere shown whole.
+    expect([ran.opened, ran.shown.filter((shown) => shown.includes(FORM))]).toEqual([[FORM], [`link: Open the token form -> ${FORM}`]]);
+  });
+
+  // Drift: a short link the terminal does not honour, or a browser that never came up, would leave a person with no way to the form.
+  test.each([
+    ["on a terminal that makes no link", {}, true, []],
+    ["after a person who declines the browser", { links: true }, false, []],
+    ["after a browser that did not start", { links: true, opens: false }, true, ["err warning: The browser did not open"]],
+  ])("%s the form's address is shown whole, once, on a line of its own, before the steps", async (_name, options, answer, warned) => {
+    const { step, ran } = await tokenStep("install stand-in", answer, options);
+    const after = step.slice(step.indexOf("ask: Open the form in your browser? [Y/n]") + 1);
+
+    expect(after).toEqual([...warned, "block: The form's address", `err plain: ${FORM}`, ...STEPS]);
+    expect([ran.opened, ran.shown.filter((shown) => shown === `err plain: ${FORM}`)]).toEqual([answer ? [FORM] : [], [`err plain: ${FORM}`]]);
+  });
+
+  // Drift: an option that is read and changes nothing a person sees would leave the optional permissions as hard to find as before.
+  test("with --all-permissions the form is asked for with every permission: each optional one is a step and a line of its group, marked, and no line names the option again", async () => {
+    const { step, account } = await tokenStep("install stand-in --all-permissions", true, { links: true });
+
+    expect(account.tokensFor).toEqual(["install, every right"]);
+    expect(step.slice(1, 2)).toEqual(["  row: Stand-In Host's token form opens with 1 of 3 permissions chosen."]);
+    expect(step.slice(4)).toEqual([
+      "block: On the form",
+      "  row: 1. Tick: Places > Read",
+      "  row: 2. Tick: Rules > Edit",
+      "  row: 3. Place: example.com",
+      "  row: 4. Account: yours",
+      "  row: 5. Press Review. It should read:",
+      "  row:    example.com",
+      "  faint:      Places: Read",
+      "  faint:      Rules: Edit (optional)",
+      "  row:    Whole account",
+      "  faint:      Programs: Edit",
+      "  row: 6. Press Make > copy the token",
+    ]);
+  });
+
+  test("a person who ends the offer of the browser stops the command before any look, and no browser is opened: without this Ctrl-C at the new question would go on to ask for the token", async () => {
+    const { ran, account } = await tokenStep("install stand-in", undefined);
+
+    expect([ran.code, ran.asked, ran.err.at(-1), account.finds, ran.opened]).toEqual([1, ["Open the form in your browser? [Y/n]"], "Cancelled. Nothing changed.", [], []]);
+  });
+
+  // Drift: a browser takes a moment to start, and a command stopped in that moment went on to list the steps and ask for the token.
+  test("a person who stops the command while the browser starts is shown nothing more of the step and asked nothing more, and no look follows", async () => {
+    const account = emptyAccount();
+    const ran = await runLine("install stand-in --place example.com --user you@example.com --dry-run", account, { asks: true, stopsAtBrowser: true, typed: [true] });
+    const after = ran.shown.slice(ran.shown.indexOf("ask: Open the form in your browser? [Y/n]") + 1);
+
+    expect([ran.code, after, ran.opened, account.finds]).toEqual([1, ["err error: Cancelled. Nothing changed."], [FORM], []]);
+  });
+
+  // Drift: a token that is given needs no form, and a question about one would stop a script that has nobody to answer it.
+  test.each([
+    ["the token is in its variable", "install stand-in --place example.com --user you@example.com --dry-run", { asks: true, env: HELD }],
+    ["the token is piped", "install stand-in --place example.com --user you@example.com --dry-run --token-stdin", { asks: true, stdin: `${TOKEN}\n` }],
+  ])("where %s nothing of the token step is shown, no question is put, and no browser is opened", async (_name, line, options) => {
+    const account = emptyAccount();
+    const ran = await runLine(line, account, options);
+
+    expect([ran.code, ran.asked, ran.err, ran.opened, account.tokensFor]).toEqual([0, [], [], [], []]);
+  });
+
   test("an answer that is refused is said and asked again, and an answer that was given is not asked: without this one typing mistake ends the run", async () => {
     const account = emptyAccount();
-    const ran = await runLine("install stand-in --user you@example.com", account, { asks: true, typed: ["UPPER", "", "tok_short", TOKEN, false] });
+    const ran = await runLine("install stand-in --user you@example.com", account, { asks: true, typed: ["UPPER", "", true, "tok_short", TOKEN, false] });
 
     expect(ran.code).toBe(0);
     expect(ran.asked).toEqual([
       "Your own place (example.com), or Enter for none:",
       "Your own place (example.com), or Enter for none:",
+      "Open the form in your browser? [Y/n]",
       "Account token (hidden): [secret]",
       "Account token (hidden): [secret]",
       "Log this machine in now? [Y/n]",

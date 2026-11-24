@@ -102,7 +102,7 @@ export async function openMcp(home: string, env?: Readonly<Record<string, string
     terminal: { asks: true, progress: true },
     timeoutMs: 2000,
     computer: "laptop",
-    open: () => undefined,
+    open: async () => false,
     pause: async () => "over",
     stopped: stopping.signal,
   };

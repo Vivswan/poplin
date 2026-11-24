@@ -130,25 +130,30 @@ If the user pastes it to you all the same, do not repeat it. Ask them to open My
 
 Never ask the user to set that variable for you. A line that sets it, such as an export line, stays in their shell's history with the token in it. The first run of part d tells you which row you are in.
 
-The first run of part d prints the link to Cloudflare's token form, just above its question for the token. The user opens it from there. This prints the permissions the token needs, and no link:
+The run the user starts in a terminal of their own shows the way to Cloudflare's token form, before its question for the token. It asks `Open the form in your browser?`.
+
+Then it prints the form's address, unless the browser started and the terminal made a short link. It lists the steps on the form either way.
+
+This prints the permissions the token needs, and no link:
 
 ```sh
 npx poplin install cloudflare --help
 ```
 
-The link opens Cloudflare's form with every permission chosen but one.
+The form opens with every permission chosen.
 
 | On the form       | The user                                                                             |
 | ----------------- | ------------------------------------------------------------------------------------ |
-| the rows          | leaves them: nine under a domain, five without one                                   |
-| Add more          | presses it, and chooses in the new row's three boxes: Account, Workers R2 Storage, Edit |
+| the rows          | leaves them: ten under a domain, six without one                                     |
 | Account Resources | chooses Include, then their account                                                  |
 | Zone Resources    | under a domain alone: chooses Include, then Specific zone, then their domain         |
 | every other field | leaves it as it is                                                                   |
-| the bottom        | presses Continue to summary, then Create Token                                       |
+| the bottom        | presses Continue to summary                                                          |
+| the summary       | holds it beside the list the command printed: the same permissions, in the same groups |
+| the bottom        | presses Create Token                                                                 |
 | the next page     | copies the token: it is shown once. They leave that page open until the install is made: parts d and e each ask for the token |
 
-That makes ten permissions under a domain, and six without one. If the form opens empty, the [install guide](https://github.com/Vivswan/poplin/blob/main/docs/fix/an-install-step-fails.md#the-token-form-opens-empty) has the rows to add by hand.
+The optional permissions are no part of that form. With `--all-permissions` on the line, the command lists each as one more step, `Add more`. If the form opens empty, the [install guide](https://github.com/Vivswan/poplin/blob/main/docs/fix/an-install-step-fails.md#the-token-form-opens-empty) has the rows to add by hand.
 
 ### d. The dry run
 
@@ -231,7 +236,9 @@ Windows:  press the Windows key, type Command Prompt, press Enter
 Linux:    open a new window of the program named Terminal
 ```
 
-It asks `Account token (hidden):`. The user pastes the token there and presses Enter: a row of small marks shows, never the letters. Ask them to copy you everything it printed: the token is in no line.
+It asks `Open the form in your browser?`, where Enter hands the token form to the browser, and then `Account token (hidden):`. Where no browser starts, it prints the form's address.
+
+The user pastes the token at the second question and presses Enter: a row of small marks shows, never the letters. Ask them to copy you everything it printed: the token is in no line.
 
 **The token is asked for twice**, by this dry run and by the run of part e, and Cloudflare shows it once. What the user copies for you takes its place on their clipboard. Say so before the dry run:
 

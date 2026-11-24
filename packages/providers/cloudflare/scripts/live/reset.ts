@@ -158,7 +158,7 @@ function ioOf(ends: ResetEnds, scratch: string, said: string[]): Io {
     machine: { env: { POPLIN_CONFIG_DIR: join(scratch, "config"), POPLIN_SERVER: ends.server, POPLIN_TOKEN: ends.token }, platform: process.platform, home: scratch },
     terminal: { asks: false, progress: false },
     computer: "live-reset",
-    open: () => undefined,
+    open: async () => false,
     pause: async (ms) => {
       await ends.pause(ms);
 

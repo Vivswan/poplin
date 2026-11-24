@@ -67,32 +67,39 @@ npx poplin install cloudflare --no-domain
 ## The account token
 
 ```text
-The account token needs 6 permissions on this account:
-  Access: Apps and Policies: Edit
-  Workers Scripts: Edit
-  Access: Organizations, Identity Providers, and Groups: Edit
-  D1: Edit
-  Workers R2 Storage: Edit
-  Account API Tokens: Edit
-See: npx poplin install cloudflare --help for 1 optional permission
-Create the account token here:
-  https://dash.cloudflare.com/profile/api-tokens?permissionGroupKeys=...
-On the form, limit it to this account
-Add on the form: Workers R2 Storage: Edit
+Account token
+Cloudflare's token form opens with 6 of 6 permissions chosen.
+Open the form in your browser? Yes
+The form's address
+https://dash.cloudflare.com/profile/api-tokens?permissionGroupKeys=...
+On the form
+1. Account Resources: Include > your account
+2. Continue to summary. It should read:
+   Entire <your account> account
+     Access: Apps and Policies: Edit
+     Workers Scripts: Edit
+     Access: Organizations, Identity Providers, and Groups: Edit
+     D1: Edit
+     Workers R2 Storage: Edit
+     API Tokens: Edit
+3. Create Token > copy the token
+
+--all-permissions adds alerts
 Account token (hidden):
 ```
 
-The link opens Cloudflare's form with five rows filled, and none of a domain. The install needs six permissions: the link cannot choose Workers R2 Storage, so add that one yourself.
+The form opens with six rows filled: the six permissions the install needs, and none of a domain. Open it in the browser the command started, or by the address it printed. It is this one:
 
-[Open the token form with the permissions chosen](https://dash.cloudflare.com/profile/api-tokens?permissionGroupKeys=%5B%7B%22key%22%3A%22access%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22workers_scripts%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22access_acct%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22d1%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22account_api_tokens%22%2C%22type%22%3A%22edit%22%7D%5D&accountId=%2A&name=poplin%20install)
+[Open the token form with the permissions chosen](https://dash.cloudflare.com/profile/api-tokens?permissionGroupKeys=%5B%7B%22key%22%3A%22access%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22workers_scripts%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22access_acct%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22d1%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22workers_r2%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22account_api_tokens%22%2C%22type%22%3A%22edit%22%7D%5D&accountId=%2A&name=poplin%20install)
 
 | On the form       | Do                                                                                   |
 | ----------------- | ------------------------------------------------------------------------------------ |
-| the five rows     | leave them                                                                           |
-| Add more          | press it, and choose in the new row's three boxes: Account, Workers R2 Storage, Edit |
+| the six rows      | leave them                                                                           |
 | Account Resources | choose Include, then your account                                                    |
 | every other field | leave it as it is                                                                    |
-| the bottom        | press Continue to summary, then Create Token                                         |
+| the bottom        | press Continue to summary                                                            |
+| the summary       | hold it beside the command's list: the same six permissions, under your account      |
+| the bottom        | press Create Token                                                                   |
 | the next page     | the token is shown once: copy it, and leave the page open                            |
 
 Then paste the token at the command's question, `Account token (hidden):`.
@@ -107,7 +114,11 @@ The terminal shows a row of small marks for what you paste, never the letters. P
 
 **Leave Cloudflare's page with the token open** until the command says `is installed`: Cloudflare shows the token once, and a run that stops asks for it again. If the page is gone, choose Roll in the token's menu, under My Profile, then API Tokens: it shows a new text.
 
-One permission is optional here: Notifications: Edit. **Skip it on a first install:** nothing is wrong without it. With it, the run makes [an email when charges reach 1 dollar](../dashboard/domain.md#optional-an-email-when-charges-reach-1-dollar) at once. Without it, the install makes that email by itself within a day, with the key it keeps. The other optional permissions are all of a domain.
+One permission is optional here: Notifications: Edit. **Skip it on a first install:** nothing is wrong without it. The other optional permissions are all of a domain.
+
+With it, the run makes [an email when charges reach 1 dollar](../dashboard/domain.md#optional-an-email-when-charges-reach-1-dollar) at once. Without it, the install makes that email by itself within a day, with the key it keeps.
+
+To take it at once, add `--all-permissions` to the install's line: the command lists it as one more step, `Add more`.
 
 ## What it prints
 

@@ -4,7 +4,7 @@
 import { type Login, parseLogin } from "../../../../core/src/auth/logins";
 import type { OptionRow, Token } from "../../../../core/src/install/installer";
 import { FLAG_WORDS } from "../../commands/command-table";
-import { TOKEN_VARIABLE } from "../ask";
+import { EVERY_RIGHT, rightsOf, TOKEN_VARIABLE } from "../ask";
 import type { GivenToken, InstallMode, Missing, ParsedInstall, Plan, Provider, Stop } from "../records";
 import { type CommandWords, heldToken, lacking, MISSING_TOKEN, missingOf, type Named, parseWords, type Typed, usage, type Variables } from "../words";
 
@@ -18,6 +18,7 @@ export const SHARED_OPTIONS: readonly OptionRow[] = [
   { flag: "--adopt", value: null, about: "Reuse resources left by an earlier install", variable: null },
   { flag: "--yes", value: null, about: FLAG_WORDS.yes, variable: null },
   { flag: "--token-stdin", value: null, about: FLAG_WORDS.tokenStdin, variable: null },
+  EVERY_RIGHT,
   { flag: "--log-in", value: null, about: "Log this machine in when done", variable: null },
   { flag: "--no-log-in", value: null, about: "", variable: null },
   { flag: "--no-wait", value: null, about: "Do not wait for the install to respond", variable: null },
@@ -117,7 +118,7 @@ function askingPlan(read: Named, env: Variables, json: boolean): Plan | Stop {
 
   const where = answers.where.ok ? ({ known: true, where: answers.where.where } as const) : ({ known: false, open: answers.where.open } as const);
 
-  return { provider: read.provider, json, asking: "terminal", mode, where, login: answers.login, token: answers.token };
+  return { provider: read.provider, json, asking: "terminal", mode, where, login: answers.login, token: answers.token, rights: rightsOf(read.shared) };
 }
 
 /**

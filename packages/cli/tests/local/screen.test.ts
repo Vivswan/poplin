@@ -9,8 +9,8 @@ import stringWidth from "string-width";
 
 import { lookOf, plainScreen, processScreen, showsColour } from "../../src/local/screen";
 
-/** The ends of a screen nobody types into and nothing stops. */
-const NOBODY = { input: new PassThrough(), stop: () => undefined };
+/** The ends of a screen nobody types into and nothing stops, on a terminal that takes no link. */
+const NOBODY = { input: new PassThrough(), stop: () => undefined, link: () => undefined };
 
 /** The screen's module, as a path. */
 const SCREEN = join(import.meta.dir, "..", "..", "src", "local", "screen.ts");
@@ -19,7 +19,7 @@ const SCREEN = join(import.meta.dir, "..", "..", "src", "local", "screen.ts");
 const SPINNING = [
   `import { processScreen } from ${JSON.stringify(SCREEN)};`,
   "const stop = () => { console.log('stopped by the command'); process.exit(1); };",
-  "const screen = processScreen({ out: process.stdout, err: process.stderr, colour: { out: true, err: true }, input: process.stdin, stop });",
+  "const screen = processScreen({ out: process.stdout, err: process.stderr, colour: { out: true, err: true }, link: () => undefined, input: process.stdin, stop });",
   "screen.working('waiting to be allowed');",
   "console.log('spinning');",
 ].join("\n");
@@ -146,6 +146,45 @@ describe("processScreen", () => {
     processScreen({ out: narrow.stream, err: narrow.stream, colour: { out: false, err: false }, ...NOBODY }).aside("laid", laid);
 
     expect([wide.rows(), kept, narrow.widest() <= 60, narrow.rows().at(-1)]).toEqual([laid.split("\n"), [laid], true, "  under it"]);
+  });
+
+  // Drift: the token step was plain lines above the questions of the library, in none of their look, and its one long row ran past a narrow terminal.
+  test("a block stands under the library's guide on a terminal that paints: its title, each row folded to the terminal under where `hang` says, and a faint row dimmed", () => {
+    const err = terminal(40);
+    const screen = processScreen({ out: pipe().stream, err: err.stream, colour: { out: true, err: true }, ...NOBODY });
+
+    screen.block("On the form", [{ text: "1. Choose the place of the store, and under it the row named example", hang: 3 }, { text: "   Stores: Read", faint: true }]);
+
+    // Each row starts with the guide's own three cells, which the library draws.
+    expect(err.rows().map((row) => row.slice(3))).toEqual(["", "On the form", "1. Choose the place of the store, and", "   under it the row named example", "   Stores: Read"]);
+    expect([err.widest() <= 40, err.text().includes("\u001b[2m   Stores: Read\u001b[22m"), err.text().includes("\u001b[2m1. Choose")]).toEqual([true, true, false]);
+  });
+
+  test("where no colour shows, a block is its title and its rows as plain lines of at most 80 columns, on a terminal and off one: without this a log holds the guide's marks, or a row wider than its reader", () => {
+    const wide = terminal(200);
+    const kept: string[] = [];
+    const rows = [{ text: `1. ${"word ".repeat(30)}end`, hang: 3 }, { text: "   Stores: Read", faint: true }];
+
+    processScreen({ out: pipe().stream, err: wide.stream, colour: { out: false, err: false }, ...NOBODY }).block("On the form", rows);
+    plainScreen({ out: () => undefined, err: (line) => kept.push(line) }).block("On the form", rows);
+    const widest = Math.max(...kept.map((line) => line.length));
+
+    expect(wide.text().split("\n").slice(0, -1)).toEqual(kept);
+    expect([kept[0], kept[1]?.startsWith("1. word word"), kept[2]?.startsWith("   word"), kept.at(-1), widest <= 80, wide.text().includes("\u001b")]).toEqual(["On the form", true, true, "   Stores: Read", true, false]);
+  });
+
+  // Drift: an address written whole takes six rows of a terminal. A terminal that takes a link shows a few words that open it, and the caller must know where none was shown, to show the address itself.
+  test("a link is one row, made by the terminal's own link of the text and the address: under the guide where colour shows, and plain where none does; a terminal that takes no link is written nothing and says so", () => {
+    const [painted, plain, none] = [terminal(80), terminal(80), terminal(80)];
+    const link = (text: string, address: string): string => `[${text}](${address})`;
+    const screens = [
+      processScreen({ out: pipe().stream, err: painted.stream, colour: { out: true, err: true }, ...NOBODY, link }),
+      processScreen({ out: pipe().stream, err: plain.stream, colour: { out: false, err: false }, ...NOBODY, link }),
+      processScreen({ out: pipe().stream, err: none.stream, colour: { out: true, err: true }, ...NOBODY }),
+    ];
+
+    expect(screens.map((screen) => screen.link("Open the token form", "https://example.com/form"))).toEqual([true, true, false]);
+    expect([painted.rows().map((row) => row.slice(3)), plain.text(), none.text()]).toEqual([["[Open the token form](https://example.com/form)"], "[Open the token form](https://example.com/form)\n", ""]);
   });
 
   test("where no colour shows, a line is written as it is whatever its tone, the result and the rest apart, and nothing else: without this a pipe or a log file holds marks and control sequences", () => {

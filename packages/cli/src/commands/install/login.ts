@@ -198,7 +198,7 @@ export async function logIn(request: RequestOf<"login">, io: Io): Promise<Outcom
   if (page === undefined) return refused(problem("unexpected_answer", "the approval URL is not on the install's origin"));
 
   announce(page, begun, request.json, io);
-  if (request.browser) io.open(page);
+  if (request.browser) void io.open(page);
 
   const collected = await collect(client, begun, io);
   if (io.terminal.progress) io.screen.rest();

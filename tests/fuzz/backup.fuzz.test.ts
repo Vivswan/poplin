@@ -130,7 +130,7 @@ property(
       terminal: { asks: false, progress: true },
       timeoutMs: 1000,
       computer: "laptop",
-      open: () => undefined,
+      open: async () => false,
       pause: async () => "over",
       stopped: new AbortController().signal,
     });

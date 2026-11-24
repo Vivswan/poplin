@@ -214,7 +214,7 @@ property(
       terminal: { asks: true, progress: true },
       timeoutMs: 1000,
       computer: "laptop",
-      open: () => undefined,
+      open: async () => false,
       pause: async () => "over",
       stopped: new AbortController().signal,
     };

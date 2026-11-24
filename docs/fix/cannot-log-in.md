@@ -38,7 +38,7 @@ Another user of the install who still gets in can add your email on the dashboar
 | the Cloudflare account   | the one the install is in. You must be able to log in at `https://dash.cloudflare.com`                 |
 | a terminal, and Node.js 24 | the start of [step 2 of Install](../start/install.md#2-run-the-command), up to `node --version`      |
 | the kind of your install | your dashboard's address ends in `workers.dev`: no domain. Else it is `poplin.` and then your domain   |
-| an account token         | the command prints the link that makes one, and asks for it. A token you kept from the install works too |
+| an account token         | the command shows the way to the form that makes one, and asks for it. A token you kept from the install works too |
 
 An **account token** is a long password that lets a program change your Cloudflare account.
 
@@ -51,33 +51,43 @@ An **account token** is a long password that lets a program change your Cloudfla
    | the login page is missing or broken    | `npx poplin doctor --repair`                            |
    | your email gets no code                | `npx poplin doctor --repair --add-user new@example.com` |
 
-   The first time, it asks whether it may download poplin: answer `y`. Then it asks two things:
+   The first time, it asks whether it may download poplin: answer `y`. Then it asks three things:
 
    | It asks                                  | Answer                                                                   |
    | ---------------------------------------- | ------------------------------------------------------------------------ |
    | `Custom domain (Enter for workers.dev):` | the install's domain alone, with no `https://` and no `www`; or press Enter, for an install at `workers.dev` |
+   | `Open the form in your browser?`         | press Enter, to open Cloudflare's token form. Or answer `n`              |
    | `Account token (hidden):`                | leave the terminal at this question, and make the token: the next step   |
 
-   Between the two it prints the permissions the token needs, and the link to its form. Without a domain:
+   Before the last it prints what to do on the form, with the permissions the form's summary must show. The form's address stands above that, unless the terminal made a short link and the browser started. Without a domain:
 
    ```text
    Custom domain (Enter for workers.dev):
-   The account token needs 5 permissions on this account:
-     Access: Apps and Policies: Edit
-     Workers Scripts: Edit
-     Access: Organizations, Identity Providers, and Groups: Edit
-     D1: Edit
-     Account API Tokens: Edit
-   See: npx poplin doctor --repair --help for 1 optional permission
-   Create the account token here:
-     https://dash.cloudflare.com/profile/api-tokens?permissionGroupKeys=...
-   On the form, limit it to this account
+   Account token
+   Cloudflare's token form opens with 5 of 5 permissions chosen.
+   Open the form in your browser? Yes
+   The form's address
+   https://dash.cloudflare.com/profile/api-tokens?permissionGroupKeys=...
+   On the form
+   1. Account Resources: Include > your account
+   2. Continue to summary. It should read:
+      Entire <your account> account
+        Access: Apps and Policies: Edit
+        Workers Scripts: Edit
+        Access: Organizations, Identity Providers, and Groups: Edit
+        D1: Edit
+        API Tokens: Edit
+   3. Create Token > copy the token
+
+   --all-permissions adds alerts
    Account token (hidden):
    ```
 
    With `--domain example.com` or `--no-domain` on the line, the first question is not asked.
 
-2. **Make the account token.** Open the link the command printed above its second question, and fill the form as the table of your kind shows: [under a domain](../start/install.md#3-make-the-account-token), or [without a domain](../start/without-a-domain.md#the-account-token). Skip the row that table adds by hand: a repair needs no Workers R2 Storage: Edit. The form names the token "poplin install". An older token of that name can stay.
+2. **Make the account token.** Open the form, in the browser the command started or by the address it printed, and do the steps it printed. The table of your kind shows them too: [under a domain](../start/install.md#3-make-the-account-token), or [without a domain](../start/without-a-domain.md#the-account-token).
+
+   The form of a repair has one row fewer than that table's: a repair needs no Workers R2 Storage: Edit. The form names the token "poplin install". An older token of that name can stay.
 
 3. **Paste the token at the question, and press Enter.** Its letters do not show. Nothing keeps it: not the command, and not your terminal's history.
 
@@ -166,7 +176,9 @@ The dashboard's Activity lists the new user as `Added a user:` and the email, by
 | without a domain       | 5 permissions, on the account: an install's 6 without Workers R2 Storage: Edit                     |
 | `--add-user`, on both  | the same token. Of its permissions, Access: Apps and Policies: Edit is the one that lets a person in |
 
-The link the command prints chooses every one of them. A token you kept from the install has one permission more, and works too. The optional permissions are not needed. `npx poplin doctor --repair --help` lists the permissions of an install's token. The link is printed by the run, above its question for the token.
+The form opens with every one of them chosen. A token you kept from the install has one permission more, and works too. The optional permissions are not needed.
+
+`npx poplin doctor --repair --help` lists the permissions of a repair's token. The run shows the way to the form before its question for the token.
 
 **Why `--add-user` wants that one.** Whoever may change the login page at Cloudflare could let a person in there by hand. So the command first writes the list of emails at Cloudflare, with your token. The email is stored in the install only after Cloudflare took that write. A token that may only read adds nobody.
 

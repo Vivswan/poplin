@@ -82,7 +82,7 @@ Updated the install from 0.3.0 to 0.3.1
 
 `release_refused` comes with a word for which row it is. For `key_refused`, `no_key`, and `lacks_right`, press Repair on the Domain screen with an account token: it makes a key with every permission the install uses. [When poplin refuses](../fix/poplin-refuses.md) has each code.
 
-The token you installed with may be deleted by now. Repair's dialog has the button that opens Cloudflare's form for a new one, and [Domain](../dashboard/domain.md#repair-asks-for-an-account-token) has the steps. `npx poplin doctor --repair` is the same repair from a terminal, and prints the link.
+The token you installed with may be deleted by now. Repair's dialog has the button that opens Cloudflare's form for a new one, and [Domain](../dashboard/domain.md#repair-asks-for-an-account-token) has the steps. `npx poplin doctor --repair` is the same repair from a terminal, and shows the way to the form.
 
 A release that changes the database is taken when you start it, never by itself. Once it ran, an older poplin cannot read the database, so the install cannot [go back](#go-back) from it.
 
@@ -100,7 +100,7 @@ the repair, with an account token       the same checked files, in one upload
 the next request runs the new version
 ```
 
-With `--update`, the repair brings an install that is behind to the newest release, with the account token you give it for that one run. It fetches and checks the release as step 1 to 3 above, uploads it once, and then mends the rest of the install as every repair does. [I cannot log in](../fix/cannot-log-in.md#the-steps) has the token and the two questions.
+With `--update`, the repair brings an install that is behind to the newest release, with the account token you give it for that one run. It fetches and checks the release as step 1 to 3 above, uploads it once, and then mends the rest of the install as every repair does. [I cannot log in](../fix/cannot-log-in.md#the-steps) has the token and the questions.
 
 ```text
 $ npx poplin doctor --repair --update --dry-run

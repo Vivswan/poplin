@@ -55,8 +55,7 @@ interface Read {
 /** Run the words after `poplin` through the command's own entry, with the token in its variable and nobody to ask. */
 async function printed(words: readonly string[], ends: Pick<InstallEnds, "reach" | "sleep">): Promise<Printed> {
   const [out, err]: [string[], string[]] = [[], []];
-  const nobody = async (): Promise<undefined> => undefined;
-  const screen: InstallEnds["screen"] = { line: (_tone, text) => void out.push(text), aside: (_tone, text) => void err.push(text), ask: nobody, confirm: nobody, choose: nobody, working: () => undefined, rest: () => undefined };
+  const screen = plainScreen({ out: (line) => void out.push(line), err: (line) => void err.push(line) });
   const io: Io = {
     out: (line) => void out.push(line),
     screen: plainScreen({ out: (line) => void out.push(line), err: (line) => void err.push(line), status: () => undefined, ask: async () => "" }),
@@ -64,7 +63,7 @@ async function printed(words: readonly string[], ends: Pick<InstallEnds, "reach"
     machine: { env: { [TOKEN_VARIABLE]: TOKEN }, platform: process.platform, home: "/nowhere" },
     terminal: { asks: false, progress: false },
     computer: "test-computer",
-    open: () => undefined,
+    open: async () => false,
     pause: async () => "over",
     stopped: new AbortController().signal,
   };

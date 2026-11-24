@@ -3,7 +3,7 @@ import { describe, expect, test } from "bun:test";
 import type { Found, Removal, RemovalRow, Removed, Token } from "../../../../core/src/install/installer";
 import { TOKEN_VARIABLE } from "../../../src/install/ask";
 import { jsonOf } from "../../commands/support/harness";
-import { ADDRESS, type Account, emptyAccount, type Place, removedOf, runLine, TOKEN, WHOLE, type Where } from "../support/stand-in";
+import { ADDRESS, type Account, emptyAccount, FORM, type Place, removedOf, runLine, TOKEN, WHOLE, type Where } from "../support/stand-in";
 
 /** The environment of a run whose token is in its variable. */
 const HELD = { [TOKEN_VARIABLE]: TOKEN };
@@ -137,12 +137,18 @@ describe("a run", () => {
 
   test("on a terminal asks for where the install is and for the token, hidden, before it looks: without this a person must know every option by heart", async () => {
     const account = installed();
-    const ran = await runLine("uninstall stand-in", account, { asks: true, typed: ["example.com", TOKEN, NAME] });
+    const ran = await runLine("uninstall stand-in", account, { asks: true, typed: ["example.com", true, TOKEN, NAME] });
 
     expect(ran.code).toBe(0);
-    expect(ran.asked).toEqual(["Your own place (example.com), or Enter for none:", "Account token (hidden): [secret]", `Type ${NAME} to confirm:`]);
-    expect(account.tokensFor).toEqual(["remove"]);
+    expect(ran.asked).toEqual(["Your own place (example.com), or Enter for none:", "Open the form in your browser? [Y/n]", "Account token (hidden): [secret]", `Type ${NAME} to confirm:`]);
+    // A removal takes away all an install made, so the token it asks for is told as a removal's, and with the line's option as one with every permission.
+    expect([account.tokensFor, ran.opened]).toEqual([["remove"], [FORM]]);
     expect([account.finds, account.looks]).toEqual([[{ kind: "place", name: "example.com" }], ["remove"]]);
+    // The optional permissions add nothing to a removal: with them it takes away what it could not see without.
+    expect(ran.err).toContain("--all-permissions also removes a guard rule");
+    const every = installed();
+    await runLine("uninstall stand-in --all-permissions --dry-run", every, { asks: true, typed: ["example.com", false, TOKEN] });
+    expect(every.tokensFor).toEqual(["remove, every right"]);
   });
 
   test("given its proof with --confirm asks nothing, lists nothing first, and hands the provider what was given: without this an agent cannot remove an install", async () => {

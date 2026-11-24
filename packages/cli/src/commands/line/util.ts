@@ -114,6 +114,12 @@ export function guardedScreen(screen: Screen, secrets: ReadonlySet<string>): Scr
   return {
     line: (tone, text, hang) => screen.line(tone, line(text), hang),
     aside: (tone, text, hang) => screen.aside(tone, line(text), hang),
+    block: (title, rows) =>
+      screen.block(
+        line(title),
+        rows.map((row) => ({ ...row, text: line(row.text) })),
+      ),
+    link: (text, address) => screen.link(line(text), line(address)),
     ask: (question, secret) => screen.ask(lines(question), secret),
     confirm: (question, initial) => screen.confirm(lines(question), initial),
     choose: (question, picks) =>

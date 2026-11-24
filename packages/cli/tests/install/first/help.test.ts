@@ -26,6 +26,7 @@ Options:
   --yes                    Never prompt. A missing answer stops the run.
   --token-stdin            Read the account token from stdin
                            Or set POPLIN_INSTALL_TOKEN.
+  --all-permissions        Ask for a token with the optional permissions too
   --log-in                 Log this machine in when done
   --no-log-in
   --no-wait                Do not wait for the install to respond
@@ -59,6 +60,7 @@ Options:
   --yes                    Never prompt. A missing answer stops the run.
   --token-stdin            Read the account token from stdin
                            Or set POPLIN_INSTALL_TOKEN.
+  --all-permissions        Ask for a token with the optional permissions too
   --log-in                 Log this machine in when done
   --no-log-in
   --no-wait                Do not wait for the install to respond

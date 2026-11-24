@@ -29,7 +29,7 @@ The block shows an install without a domain. Under a domain, `--domain example.c
 | a terminal, and Node.js 24         | every line here: the start of [step 2 of Install](../start/install.md#2-run-the-command), up to `node --version` |
 | this machine logged in to poplin  | step 1 alone, with a login approved with Can change: Admin. `npx poplin whoami` says whether it is; [step 5 of Install](../start/install.md#5-log-this-machine-in-and-check) logs it in |
 | the Cloudflare account             | the one the install is in. You must be able to log in at `https://dash.cloudflare.com`                |
-| an account token                   | steps 3 and 4, which each ask for it: a removal takes the token an install takes. If yours is gone, the command prints the link that makes a new one |
+| an account token                   | steps 3 and 4, which each ask for it: a removal takes the token an install takes. If yours is gone, the command shows the way to the form that makes a new one |
 
 ## 1. Save a copy
 
@@ -69,7 +69,7 @@ While the two variables are set, `poplin logout` works on that login and leaves 
 npx poplin uninstall cloudflare --no-domain --dry-run
 ```
 
-It prints how many permissions the token needs and a link, then asks for the token without showing what you paste. The form is filled as [without a domain](../start/without-a-domain.md#the-account-token) or [under a domain](../start/install.md#3-make-the-account-token) shows.
+It asks whether to open the token's form, lists the steps on it, then asks for the token without showing what you paste. The form is filled as [without a domain](../start/without-a-domain.md#the-account-token) or [under a domain](../start/install.md#3-make-the-account-token) shows.
 
 **Step 4 asks for the token again.** Cloudflare shows a new token once: leave its page open until step 4 is done. If the page is gone, choose Roll in the token's menu, under My Profile, then API Tokens: it shows a new text.
 
@@ -159,7 +159,11 @@ The install is removed: 16 resource types removed, 2 skipped, 3 unchanged
 Fix: add Notifications: Edit and rerun this command, or delete Budget alert and Certificate alert at Cloudflare
 ```
 
-The link the command prints makes a token without the optional permissions. [The optional part](../dashboard/domain.md#optional-block-junk-traffic-and-crawlers) names them and their boxes on the form.
+The form the command opens makes a token without the optional permissions. With `--all-permissions` on the line, the command lists each one a removal uses as one more step on the form.
+
+Under a domain a removal uses three: Single Redirect: Edit, Zone WAF: Edit, and Notifications: Edit. Without a domain it uses the last alone.
+
+[Domain](../dashboard/domain.md#optional-block-junk-traffic-and-crawlers) has the boxes of the first two on the form, and [its part on the email](../dashboard/domain.md#optional-an-email-when-charges-reach-1-dollar) those of the third. Bot Management: Edit, which the first of the two also lists, is none of a removal's.
 
 Read the rows that say `unchanged`:
 

@@ -79,7 +79,9 @@ Dashboard: https://poplin.example.com
 The account token was not stored
 ```
 
-The sample shows a few of the rows. The repair asks for the domain, or Enter for none, and for the token, as the install did. The line the install printed has `--domain` or `--no-domain` on it, and that repair asks for the token alone. [I cannot log in](cannot-log-in.md) has every line it can stop at.
+The sample shows a few of the rows. [I cannot log in](cannot-log-in.md) has every line it can stop at.
+
+The repair asks for the domain, or Enter for none, and for the token, as the install did. The line the install printed has `--domain` or `--no-domain` on it, and that repair asks for the token, after the question whether to open its form.
 
 **A first user whose email was mistyped** gets no code, so nobody can log in. The repair lets the right email in:
 

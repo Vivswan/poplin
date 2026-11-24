@@ -3,7 +3,7 @@
 
 import { describe, expect, test } from "bun:test";
 import { type Login, parseLogin } from "@poplin/core/src/auth/logins";
-import type { Found, Installed, Run, Startable, Token } from "@poplin/core/src/install/installer";
+import type { Found, Installed, Run, Startable, Token, TokenForm } from "@poplin/core/src/install/installer";
 import type { Place, Where } from "../../../../src/shared/install/first/find";
 import { installer } from "../../../../src/shared/install/first/installer";
 import { ACCOUNT, type Account, emptyAccount, KEY_VALUE_START, TOKEN } from "../support/fake-install";
@@ -606,21 +606,62 @@ describe("the provider's own answers", () => {
   });
 
   // Drift: an install makes the bucket, which no repair does, so its token needs one permission more than the Domain screen's: ten with a domain, six without.
-  test("the token of an install needs the repair's permissions and the storage one, which the form's note names since no link can choose it; text that is no token is refused", () => {
-    const [domain, none] = [installer.facts(KINDS.domain.where, "install"), installer.facts(KINDS["no-domain"].where, "install")];
-    const mending = [installer.facts(KINDS.domain.where, "repair"), installer.facts(KINDS["no-domain"].where, "repair")];
+  test("the token form of an install opens with the repair's permissions and the storage one, each chosen by the link, and lists them as Cloudflare's summary does; text that is no token is refused", () => {
+    const [domain, none] = [installer.form(KINDS.domain.where, "install", "needed"), installer.form(KINDS["no-domain"].where, "install", "needed")];
+    const names = (form: TokenForm): string[] => form.summary.flatMap((group) => group.rights.map((right) => right.name));
+    const keys = (form: TokenForm): string[] => (JSON.parse(new URL(form.link).searchParams.get("permissionGroupKeys") ?? "[]") as { key: string }[]).map((chosen) => chosen.key);
+    const linked = (name: string): { name: string; chosen: boolean; optional: boolean } => ({ name, chosen: true, optional: false });
 
-    expect([domain.tokenRights.length, none.tokenRights.length]).toEqual([10, 6]);
-    // A repair makes no bucket, so the token it asks for needs no storage permission, and its link chooses every one. A removal takes the bucket away, so it asks for an install's.
-    expect(mending.map((facts) => [facts.tokenRights.length, facts.tokenRights.includes("Workers R2 Storage: Edit"), facts.tokenNote.includes("yourself")])).toEqual([[9, false, false], [5, false, false]]);
-    expect(installer.facts(KINDS.domain.where, "remove")).toEqual(domain);
-    expect([domain.tokenRights.includes("Workers R2 Storage: Edit"), none.tokenRights.includes("Workers R2 Storage: Edit"), none.tokenRights.some((right) => right.startsWith("Zone") || right.startsWith("DNS"))]).toEqual([true, true, false]);
-    expect([domain.tokenNote.endsWith("choose it on the form yourself: Workers R2 Storage: Edit."), decodeURIComponent(domain.tokenLink).includes("r2")]).toEqual([true, false]);
-    // The help of each kind of work lists what a run of that work is told it needs, a permission a line: a repair's list that held the bucket's permission asked for a wider token than the run takes.
+    // The two groups are the ones Cloudflare's summary page showed for this link, in its names and its order: a person holds the two side by side before the token is made.
+    expect(domain.summary).toEqual([
+      { heading: "example.com", rights: ["Zone: Read", "DNS: Edit", "Workers Routes: Edit", "Zone Settings: Read"].map(linked) },
+      {
+        heading: "Entire <your account> account",
+        rights: ["Access: Apps and Policies: Edit", "Workers Scripts: Edit", "Access: Organizations, Identity Providers, and Groups: Edit", "D1: Edit", "Workers R2 Storage: Edit", "API Tokens: Edit"].map(linked),
+      },
+    ]);
+    expect(none.summary).toEqual([{ heading: "Entire <your account> account", rights: domain.summary[1]?.rights ?? [] }]);
+    expect([keys(domain), keys(none).includes("workers_r2")]).toEqual([["zone", "dns", "workers_routes", "access", "workers_scripts", "access_acct", "zone_settings", "d1", "workers_r2", "account_api_tokens"], true]);
+    // The steps are what a person does, in the order they meet it: the zone's step names the domain, and an install without one has none.
+    expect([domain.before, domain.compare, domain.after]).toEqual([["Account Resources: Include > your account", "Zone Resources: Include > Specific zone > example.com"], "Continue to summary. It should read:", ["Create Token > copy the token"]]);
+    expect([none.before, new URL(none.link).searchParams.has("zoneId")]).toEqual([["Account Resources: Include > your account"], false]);
+    // A repair makes no bucket, so the token it asks for needs no storage permission. A removal takes the bucket away, so it asks for an install's.
+    const mending = [installer.form(KINDS.domain.where, "repair", "needed"), installer.form(KINDS["no-domain"].where, "repair", "needed")];
+    expect(mending.map((form) => [names(form).length, names(form).includes("Workers R2 Storage: Edit"), keys(form).includes("workers_r2")])).toEqual([[9, false, false], [5, false, false]]);
+    expect(installer.form(KINDS.domain.where, "remove", "needed")).toMatchObject({ link: domain.link, summary: domain.summary, before: domain.before });
+    // The help of each kind of work lists what a run of that work is told it needs, a permission a line, in the name of its row on the form: a repair's list that held the bucket's permission asked for a wider token than the run takes.
     const listed = (work: "install" | "repair" | "remove"): string[] => installer.tokenHelp[work].filter((line) => !line.includes("optional")).map((line) => line.replace(" (--domain)", ""));
-    expect((["install", "repair", "remove"] as const).map((work) => [...listed(work)].sort())).toEqual((["install", "repair", "remove"] as const).map((work) => [...installer.facts(KINDS.domain.where, work).tokenRights].sort()));
+    const rows = (work: "install" | "repair" | "remove"): string[] => names(installer.form(KINDS.domain.where, work, "needed")).map((name) => (name === "API Tokens: Edit" ? "Account API Tokens: Edit" : name));
+    expect((["install", "repair", "remove"] as const).map((work) => [...listed(work)].sort())).toEqual((["install", "repair", "remove"] as const).map((work) => rows(work).sort()));
     expect([listed("repair").includes("Workers R2 Storage: Edit"), installer.tokenHelp.install.filter((line) => line.length > 74)]).toEqual([false, []]);
-    expect([domain, none].map((facts) => new URL(facts.tokenLink).searchParams.get("name"))).toEqual(["poplin install", "poplin install"]);
+    expect([domain, none].map((form) => new URL(form.link).searchParams.get("name"))).toEqual(["poplin install", "poplin install"]);
     expect([installer.token("short"), installer.token("has a space in it, so it is none"), installer.token(TOKEN)]).toEqual([undefined, undefined, KEY]);
+  });
+
+  // Drift: Cloudflare's page on token template links names no key for an optional permission, and its form drops a key it does not know without a word: a link that carried one would open a form that lacks it, with nothing saying so.
+  test("a token form asked for every permission keeps the link of the needed ones, and says each optional one as a row to add and as a line of its group, marked optional", () => {
+    const [needed, every] = [installer.form(KINDS.domain.where, "install", "needed"), installer.form(KINDS.domain.where, "install", "every")];
+    const added = (form: TokenForm): string[][] => form.summary.map((group) => group.rights.flatMap((right) => (right.optional && !right.chosen ? [right.name] : [])));
+
+    expect([every.link, every.leftOut, needed.leftOut.length]).toEqual([needed.link, [], 4]);
+    expect(every.before).toEqual(["Add more: Zone > Single Redirect: Edit", "Add more: Zone > Zone WAF: Edit", "Add more: Zone > Bot Management: Edit", "Add more: Account > Notifications: Edit", ...needed.before]);
+    // Every row a person adds stands under every row the link chose, in its own group: the form puts a new row last.
+    expect(added(every)).toEqual([["Single Redirect: Edit", "Zone WAF: Edit", "Bot Management: Edit"], ["Notifications: Edit"]]);
+    expect<unknown>(every.summary.map((group, at) => group.rights.slice(0, needed.summary[at]?.rights.length))).toEqual(needed.summary.map((group) => group.rights));
+    expect(every.summary.map((group) => group.rights.length)).toEqual([7, 7]);
+    // An install without a domain has one optional permission, and no row of a zone.
+    const none = installer.form(KINDS["no-domain"].where, "repair", "every");
+    expect([none.before, added(none), installer.form(KINDS["no-domain"].where, "repair", "needed").leftOut.length]).toEqual([["Add more: Account > Notifications: Edit", "Account Resources: Include > your account"], [["Notifications: Edit"]], 1]);
+  });
+
+  // Drift: a removal leaves the bot settings as they are, so a token asked for their permission is wider than the run takes, and its help would name a permission no removal uses.
+  test("the token of a removal is asked for no permission of what a removal leaves: its form, with every permission, and its help have the three optional ones a removal uses", () => {
+    const [install, removal] = [installer.form(KINDS.domain.where, "install", "every"), installer.form(KINDS.domain.where, "remove", "every")];
+    const optional = (form: TokenForm): string[] => form.summary.flatMap((group) => group.rights.flatMap((right) => (right.optional ? [right.name] : [])));
+    const helped = (work: "install" | "remove"): string[] => installer.tokenHelp[work].filter((line) => line.includes("optional")).map((line) => line.replace(/ \(.*\)$/, ""));
+
+    expect([optional(install), optional(removal)]).toEqual([["Single Redirect: Edit", "Zone WAF: Edit", "Bot Management: Edit", "Notifications: Edit"], ["Single Redirect: Edit", "Zone WAF: Edit", "Notifications: Edit"]]);
+    expect([removal.before.includes("Add more: Zone > Bot Management: Edit"), installer.form(KINDS.domain.where, "remove", "needed").leftOut.length]).toEqual([false, 3]);
+    expect([helped("install").sort(), helped("remove").sort()]).toEqual([optional(install).sort(), optional(removal).sort()]);
   });
 });

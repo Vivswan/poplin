@@ -5,7 +5,7 @@ import { parseCommand } from "../../../src/commands/line/parse-command";
 import { TOKEN_VARIABLE } from "../../../src/install/ask";
 import { words } from "../../commands/support/command-line";
 import { jsonOf } from "../../commands/support/harness";
-import { ADDRESS, type Account, emptyAccount, type Place, repairedOf, runLine, standIn, TOKEN, type Where } from "../support/stand-in";
+import { ADDRESS, type Account, emptyAccount, FORM, type Place, repairedOf, runLine, standIn, TOKEN, type Where } from "../support/stand-in";
 
 /** The environment of a run whose token is in its variable. */
 const HELD = { [TOKEN_VARIABLE]: TOKEN };
@@ -206,12 +206,15 @@ describe("a repair with the account token", () => {
 
   test("on a terminal the place and the token are asked for, the token without being shown: without this a person must know the options before the first run", async () => {
     const account = installed();
-    const ran = await runLine("doctor --repair", account, { asks: true, typed: ["example.com", TOKEN] });
+    const ran = await runLine("doctor --repair", account, { asks: true, typed: ["example.com", true, TOKEN] });
 
-    expect([ran.code, ran.asked]).toEqual([0, ["Your own place (example.com), or Enter for none:", "Account token (hidden): [secret]"]]);
-    // A repair makes less than an install, so the token it asks for is told as a repair's.
-    expect(account.tokensFor).toEqual(["repair"]);
+    expect([ran.code, ran.asked]).toEqual([0, ["Your own place (example.com), or Enter for none:", "Open the form in your browser? [Y/n]", "Account token (hidden): [secret]"]]);
+    // A repair makes less than an install, so the token it asks for is told as a repair's, and with the line's option as one with every permission.
+    expect([account.tokensFor, ran.opened]).toEqual([["repair"], [FORM]]);
     expect<unknown>(account.repairs[0]?.where).toEqual({ kind: "place", name: "example.com" });
+    const every = installed();
+    await runLine("doctor --repair --all-permissions --dry-run", every, { asks: true, typed: ["example.com", false, TOKEN] });
+    expect(every.tokensFor).toEqual(["repair, every right"]);
   });
 });
 

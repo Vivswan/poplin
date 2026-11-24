@@ -7,7 +7,7 @@
 import type { Token, Whole } from "../../../../core/src/install/installer";
 import { exitCode } from "../../commands/exit-codes";
 import type { Io } from "../../commands/records";
-import { askToken, askWhere, givenToken, lookFor, STOPPED } from "../ask";
+import { askToken, askWhere, type Browser, givenToken, lookFor, STOPPED } from "../ask";
 import { runCommand, type Show, stopped } from "../ends";
 import type { Careful, InstallEnds, Next, Provider, Stop } from "../records";
 import { carefulOf, NEXT, placeOf, repairFor, rowWording, type Unsettled, updateWords, userOption } from "../report";
@@ -38,7 +38,7 @@ function commandOf(update: boolean, repair: typeof NEXT.repair): { readonly name
 }
 
 /** Bring a plan to a request: read the token that is piped, or ask for each answer the plan lacks. A stop holds the place the run knew by then. */
-async function settled(plan: RepairPlan, ends: InstallEnds): Promise<Request | Unsettled> {
+async function settled(plan: RepairPlan, ends: InstallEnds, browser: Browser): Promise<Request | Unsettled> {
   if (plan.asking === "never") {
     const token = await givenToken(plan.token, plan.provider, ends.input);
 
@@ -48,7 +48,7 @@ async function settled(plan: RepairPlan, ends: InstallEnds): Promise<Request | U
   const where = plan.where.known ? plan.where : await askWhere(plan.where.open, ends.screen);
   if (where === undefined) return { stop: STOPPED, place: [] };
 
-  const token = plan.token ?? (await askToken(plan.provider, where.where, ends.screen, "repair"));
+  const token = plan.token ?? (await askToken({ provider: plan.provider, where: where.where, work: "repair", rights: plan.rights }, ends.screen, browser));
 
   return token === undefined ? { stop: STOPPED, place: placeOf(plan.provider, where.where) } : { plan, where: where.where, token };
 }
@@ -77,7 +77,7 @@ async function planned(plan: RepairPlan, io: Io, ends: InstallEnds, show: Show, 
   const user = userOption(plan.addUser, io.machine.platform);
   const repair = repairFor(user);
   const line = { command: commandOf(update, repair), careful: carefulOf(run), provider, run };
-  const request = await settled(plan, ends);
+  const request = await settled(plan, ends, io);
   if ("stop" in request) return stopped(request.stop, show, { ...line, place: request.place });
 
   secrets.add(request.token);

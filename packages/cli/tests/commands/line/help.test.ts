@@ -54,6 +54,7 @@ const COMPANIONS: Readonly<Record<string, readonly string[]>> = {
   "doctor --add-user": ["--repair"],
   "doctor --yes": ["--repair"],
   "doctor --token-stdin": ["--repair"],
+  "doctor --all-permissions": ["--repair"],
 };
 
 function lineWith(spec: CommandSpec, flag: CommandSpec["flags"][number]): string[] {
@@ -142,7 +143,7 @@ describe("helpText", () => {
     const under = LISTED.filter(({ spec, flag }) => spec.name === "doctor" && isPrinted(block, flag));
     const refused = under.map(({ flag }) => parseCommand(["doctor", flag.name, ...(flag.value === undefined ? [] : [FLAG_VALUES[flag.name] ?? ""])]));
 
-    expect(under.map(({ flag }) => flag.name)).toEqual(["--update", "--dry-run", "--add-user", "--yes", "--token-stdin"]);
+    expect(under.map(({ flag }) => flag.name)).toEqual(["--update", "--dry-run", "--add-user", "--yes", "--token-stdin", "--all-permissions"]);
     expect(under.filter(({ flag }) => isPrinted(options, flag))).toEqual([]);
     expect(refused.map((parsed) => parsed.kind === "usage-error" && parsed.message.endsWith("requires --repair"))).toEqual(under.map(() => true));
   });
