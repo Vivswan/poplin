@@ -236,7 +236,7 @@ class Passing extends Error {
 }
 
 /** Add a piece to the summary's rows and print it, so the log shows how far a run came. */
-function note(run: Run, progress: Progress, piece: Piece): void {
+function note(run: Run, progress: Pick<Progress, "pieces">, piece: Piece): void {
   progress.pieces.push(piece);
   run.say(piece.needs === undefined ? `${piece.piece}: ${piece.result}` : `${piece.piece}: ${piece.result}: needs ${piece.needs}`);
 }
@@ -345,10 +345,12 @@ function stopOf(name: string, answer: Exclude<Answer, { readonly kind: "rows" }>
 /**
  * Take the test install off its account with `poplin uninstall`, the sites' files and the database with it.
  *
+ * @param world - what the command reaches the world through and rests by
+ * @param progress - takes each row of the removal as it is printed
  * @param why - what the log says of it: that it was asked for, or what another build made
  * @returns what stopped the run, or `undefined` once nothing of an install is left; a removal that left a kind stops the run, and the next run removes the rest
  */
-async function startOver(run: Run, found: Found, world: World, progress: Progress, why: string): Promise<Stop | undefined> {
+export async function startOver(run: Run, found: Found, world: Pick<World, "ends">, progress: Pick<Progress, "pieces">, why: string): Promise<Stop | undefined> {
   note(run, progress, { piece: "Start over", result: why });
 
   const words = ["cloudflare", ...placeWords(run, found), "--json"];

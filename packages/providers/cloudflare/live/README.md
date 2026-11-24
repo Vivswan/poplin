@@ -172,7 +172,7 @@ A job that finds no build to start from touches no install.
 job upgrade
   migrations/older-build.ts        the older build in a folder of its own, its packages installed, its Worker built: no secret reaches this step
                                    this checkout told one patch above the older build's version and given the later step, then built
-  migrations/upgrade.ts            a test account alone -> the older build's own poplin uninstall and poplin install
+  migrations/upgrade.ts            a test account alone -> this commit's poplin uninstall -> the older build's own poplin install
                                    -> the older build's command line: 3 sites, a second version, a setting, a user; a token of its making
                                    -> the older build's own start of an update, fed the run's build as a release
                                    -> the Worker of the new build starts, and applies the later step to the filled database
@@ -198,6 +198,21 @@ The older build says the version 0.1.0
 An install made by a pre-release whose first schema step, stored shapes, or parts differ from the commit's is not one the commit takes over, so such an upgrade fails as advice until a pre-release with them is an earlier build.
 
 A pre-release on npm is the command alone: no built Worker and no line of the website's `releases.json` exists for one. So the Worker of the older build is built from its commit, and its own harness installs it.
+
+For a while after a bucket is removed, Cloudflare lists no bucket of its name and still refuses the name to a new one, with status 409 and code 10073. A name was seen held 47 seconds after its bucket went, and free 110 seconds after.
+
+| Who installs after the removal | On that refusal |
+| ------------------------------ | --------------- |
+| this commit's `poplin install`: a start-over, a put-back, and a person's own | sends the create again every 15 seconds, 12 times at most, 180 seconds in all, and says `Cloudflare still holds the bucket name poplin-sites after a removal. Retrying in 15 s` |
+| the older build's, which waits for no name | ends on the row `R2 bucket: failed (refused with status 409 and codes 10073)`. The upgrade then rests 30 seconds and runs that install again, 8 runs at most |
+| the older build's, ending on any other row | the upgrade stops at once |
+
+```text
+R2 bucket: failed (refused with status 409 and codes 10073)
+Older install: the bucket's name is still held, trying again in 30 s (2 of 8)
+```
+
+The older build's failed run leaves its own error line and its own summary in the job, above the run that went through.
 
 | Check        | Holds when                                                                                                   |
 | ------------ | ------------------------------------------------------------------------------------------------------------ |

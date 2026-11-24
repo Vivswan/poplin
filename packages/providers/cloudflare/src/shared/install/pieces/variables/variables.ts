@@ -8,7 +8,7 @@
 
 import { BaseScriptAndVersionSettings } from "cloudflare/resources/workers/scripts/script-and-version-settings";
 import pRetry from "p-retry";
-import { type CloudflareFailure, type CloudflareResult, type Connection, callCloudflare } from "../../client";
+import { type CloudflareFailure, type CloudflareResult, type Connection, callCloudflare, clockOf } from "../../client";
 import { INSTALL_OBJECTS } from "../../install-objects";
 import { readRelease, taggedAs } from "../../../release/update/release-mark";
 import { type Mode, reportOf, type Synced } from "../../sync";
@@ -103,7 +103,7 @@ function isWhole(bindings: readonly ListedBinding[]): boolean {
  * @returns the last read where no read settled
  */
 export async function readSettled(connection: Connection, worker: OwnWorker, settled: (bindings: readonly ListedBinding[]) => boolean = isWhole): Promise<WorkerRead> {
-  const sleep = connection.sleep ?? ((milliseconds: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, milliseconds)));
+  const sleep = clockOf(connection);
   const attempt = async (): Promise<WorkerRead> => {
     const read = await readWorker(connection, worker);
     if (read.ok && read.value !== undefined && !settled(read.value)) throw new Trailing(read);
