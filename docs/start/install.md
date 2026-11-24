@@ -307,6 +307,23 @@ An agent on this machine uses the same login. As an admin it reaches a site that
 
 The page takes only the whole code your terminal printed. If it still refuses the code once you pasted it whole, or you did not start a login, press Deny.
 
+Once you press Approve, the command ends:
+
+```text
+Logged in. The token is stored on this machine.
+install  https://poplin.example.com
+role     admin
+token    3f9a1c07b2d84e65 (my-machine.local)
+expires  2026-12-15
+Next: give your agent poplin
+  npx skills add Vivswan/poplin
+Publish by hand: npx poplin <folder>
+```
+
+`npx skills add Vivswan/poplin` finds poplin's skill, and asks which of your agents get it. [Publish](#publish) has both ways.
+
+**The last three lines are for a person at a terminal.** A run with `--json`, and a run where nobody can be asked, such as an agent's or a script's, leaves them out. Where a finished install prints the login line in place of a login, they follow that line.
+
 After a no, or on another machine, the same login is one line, with the URL of your own dashboard, as the command printed it:
 
 ```sh
@@ -339,7 +356,7 @@ Your dashboard is at the URL the command printed. It opens on Sites, which says 
 
 | Publish            | Do                                                                                                            |
 | ------------------ | ------------------------------------------------------------------------------------------------------------- |
-| by asking an agent | set the agent up once, with the line of [With an agent](with-an-agent.md). Then say `Put this report online.` |
+| by asking an agent | give your agent poplin once, with the line the command printed: `npx skills add Vivswan/poplin`. Then say `Put this report online.` [With an agent](with-an-agent.md) is the way from no install |
 | by a command       | `npx poplin ./report`, for a folder with an `index.html` in it, the page a site opens on: see [Publish](../sites/publish.md). With no page yet, ask your agent to write one |
 
 `./report` is a folder named `report` inside the folder the terminal is in. A folder that is somewhere else is named by its whole path:
@@ -438,9 +455,11 @@ npx poplin install cloudflare --no-domain --user you@example.com --yes
 | `--log-in`    | logs this machine in when the install is made; `--no-log-in` does not, and does not ask |
 | `--no-wait`   | does not wait for the new install to answer                                              |
 
-A run that asks nothing logs no machine in unless `--log-in` says so. It ends by printing the login line. A run that kept the users of a database and did not use the email of `--user` logs no machine in. It ends with the line that lets that email in, also where its address does not answer yet.
+A run that asks nothing logs no machine in unless `--log-in` says so. Once the install is made, it prints the login line instead. A run that kept the users of a database and did not use the email of `--user` logs no machine in. It ends with the line that lets that email in, also where its address does not answer yet.
 
 With `--json`, the value of a run, and of a run that stopped, names what to run next in `next`: a `step`, and its `command`. A run without `--json` names the same command in its last lines. After an install that could not be read, that line adds `--dry-run`.
+
+`next` names a command of poplin alone. The line `npx skills add Vivswan/poplin` is in no value: it asks a question, and is for the person at the terminal.
 
 | The `command` holds                                    | When                                                                  |
 | ------------------------------------------------------ | --------------------------------------------------------------------- |

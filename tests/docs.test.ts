@@ -5,6 +5,7 @@ import { describe, expect, test } from "bun:test";
 import { dirname, join, normalize } from "node:path";
 
 import { COMMANDS, type CommandSpec } from "../packages/cli/src/commands/command-table";
+import { SKILL_COMMAND } from "../packages/cli/src/commands/install/publish-ways";
 import { SETTING_SAMPLES } from "../packages/cli/src/commands/install/install-settings";
 import { parseCommand } from "../packages/cli/src/commands/line/parse-command";
 import { problem } from "../packages/cli/src/commands/problems";
@@ -13,6 +14,7 @@ import { PROBLEM_KINDS } from "../packages/core/src/records/problem";
 import { words } from "../packages/cli/tests/commands/support/command-line";
 import { INSTALL_FLAGS, INSTALL_WORDS, PROVIDER_COMMAND_NAMES, providerRefusal } from "./support/install-words";
 import { readPage } from "./support/markdown-page";
+import { repositoryFiles } from "./support/repository-files";
 
 /** The repository this file sits in. */
 const ROOT = join(import.meta.dir, "..");
@@ -81,6 +83,9 @@ const AFTER_COMMAND = /\s+(?:#|->)\s.*$/;
 /** A line a command prints that opens with the product's name and a version, such as `poplin 0.1.0 is installed.`: it is no command line. */
 const VERSION_LINE = /^\s*poplin \d+\.\d+\.\d+ /;
 
+/** The prompt a line of a fenced block may open with, which is no part of what a person copies. */
+const PROMPT = /^\$\s+/;
+
 /** A word written the way tools, their inputs, codes, and settings are: lowercase words joined by underscores. */
 const SNAKE_WORD = /^[a-z]+(?:_[a-z]+)+$/;
 
@@ -122,10 +127,15 @@ async function read(root: string, path: string): Promise<string> {
   return Bun.file(join(root, path)).text();
 }
 
-async function parse(root: string, path: string): Promise<Page> {
-  const { spans, blocks } = readPage(await read(root, path));
+/** What a page's text holds of code. */
+function pageOf(text: string): Page {
+  const { spans, blocks } = readPage(text);
 
   return { spans, blocks: blocks.map((block) => block.text) };
+}
+
+async function parse(root: string, path: string): Promise<Page> {
+  return pageOf(await read(root, path));
 }
 
 function unique(values: readonly string[]): string[] {
@@ -147,6 +157,13 @@ function ownerAndName(address: string): string | undefined {
   const { hostname, pathname } = new URL(address);
 
   return hostname === GITHUB ? pathname.slice(1).replace(/\.git$/, "") : undefined;
+}
+
+/** The lines that install the skill and do not start as the line a finished install prints: that line, with options after it at most. Each is given whole, without its prompt. */
+function notAsPrinted(lines: readonly string[]): string[] {
+  const installs = lines.filter((line) => SKILL_INSTALL.test(line)).map((line) => line.trim().replace(PROMPT, ""));
+
+  return installs.filter((line) => line !== SKILL_COMMAND && !line.startsWith(`${SKILL_COMMAND} -`));
 }
 
 /** Every command line of a page: the ones in its fenced blocks, and the ones a code span holds. */
@@ -277,6 +294,17 @@ describe("the pages a person reads", () => {
     expect<readonly (string | undefined)[]>(unique(named)).toEqual([ownerAndName(manifest.repository.url)]);
     expect(skillSources(["$ npx skills  add  example-user/moved -g", "npx skills add", "npx skills list", "npx poplin ./report"])).toEqual(["example-user/moved", ""]);
     expect(["git+https://github.com/example-user/site.git", "https://notgithub.com/example-user/site.git"].map(ownerAndName)).toEqual(["example-user/site", undefined]);
+  });
+
+  test("every Markdown page that installs the skill, the skill's own among them, gives the line a finished install prints, with options after it at most: without this the command and a page start the tool two ways", async () => {
+    const pages = repositoryFiles(ROOT).filter((path) => path.endsWith(".md"));
+    const shown = await Promise.all(pages.map(async (path) => ({ path, lines: codeLines(await parse(ROOT, path)) })));
+    const planted = [`Run \`${SKILL_COMMAND}\` or \`${SKILL_COMMAND} -g -y\`, never \`${SKILL_COMMAND}s\`.`, "<!-- `npx skills add example/hidden` -->", "```text", `$ ${SKILL_COMMAND}`, "$ npx skills add example/other", "```"].join("\n");
+
+    expect(shown.flatMap(({ lines }) => skillSources(lines)).length).toBeGreaterThan(0);
+    expect(shown.flatMap(({ path, lines }) => notAsPrinted(lines).map((line) => `${path}: ${line}`))).toEqual([]);
+    // Drift: a guard that reads the raw text counts a line no reader sees, and one that reads a part of a line passes a repository whose name starts the same. The planted page is read and judged as the real ones are.
+    expect(notAsPrinted(codeLines(pageOf(planted)))).toEqual(["npx skills add example/other", `${SKILL_COMMAND}s`]);
   });
 
   test("every word written like a tool, a code, a setting, or a kind of problem is one: without this a renamed one stays in a page", async () => {

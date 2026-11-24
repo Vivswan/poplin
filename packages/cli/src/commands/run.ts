@@ -23,6 +23,7 @@ import { helpText } from "./line/help";
 import { runImport } from "../backup/import";
 import { runInstallCommand } from "./install/install-commands";
 import { logIn } from "./install/login";
+import { publishWays } from "./install/publish-ways";
 import { type ProviderCommand, parseCommand } from "./line/parse-command";
 import { type Problem, problem, problemLines } from "./problems";
 import { planPublish, previewPublish, sendPublish } from "./sites/publish";
@@ -175,6 +176,13 @@ async function publish(request: RequestOf<"publish">, io: Io, reached?: Session)
   return online(request, io, (session) => sendPublish(planned.plan, session), reached);
 }
 
+/** Log this computer in, and after a login that worked tell a person at a terminal the ways to publish: give the agent poplin, or run the command. */
+async function login(request: RequestOf<"login">, io: Io): Promise<Outcome> {
+  const outcome = await logIn(request, io);
+
+  return outcome.ok ? { ...outcome, steps: publishWays(io.terminal) } : outcome;
+}
+
 /** Tell the requests of some commands from the rest. */
 function asks<Kind extends Request["kind"]>(request: Request, kinds: readonly Kind[]): request is RequestOf<Kind> {
   return kinds.some((kind) => kind === request.kind);
@@ -219,7 +227,7 @@ function split(request: Exclude<TypedRequest, { readonly kind: "mcp" }>): Split 
 async function dispatch(request: Command, io: Io, reached?: Session): Promise<Outcome> {
   if (asks(request, ["publish"])) return publish(request, io, reached);
 
-  if (asks(request, ["login"])) return logIn(request, io);
+  if (asks(request, ["login"])) return login(request, io);
 
   if (asks(request, INSTALL_COMMANDS)) return online(request, io, (session) => runInstallCommand(request, session));
 

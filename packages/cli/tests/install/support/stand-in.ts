@@ -127,6 +127,9 @@ interface Options {
 
   /** Whether the person stops the command while the browser starts; they do not unless said. */
   readonly stopsAtBrowser?: boolean;
+
+  /** What the new install answers a request of the login offer with; no answer unless given. */
+  readonly answers?: (request: Request) => Response | undefined;
 }
 
 /** What the stand-in's form for a new token asks of a person at a place. Its link chooses the one right of the account: a place's right and the optional one are each a row to tick. */
@@ -368,7 +371,7 @@ function screenOf(ran: Ran, typed: (string | boolean | undefined)[], links: bool
 /**
  * Run one command line against an account, through the command's own `run`.
  *
- * Every run is checked for the token in what it printed and asked before it is handed back. A request the login offer sends is kept in `fetched` and gets no answer.
+ * Every run is checked for the token in what it printed and asked before it is handed back. A request the login offer sends is kept in `fetched`, and gets no answer unless the run is given one.
  *
  * @param line - the words after `poplin`, such as `install stand-in --no-place`
  */
@@ -409,8 +412,10 @@ export async function runLine(line: string, account: Account, options: Options =
       ran.shown.push(`out: ${text}`);
     },
     screen: ends.screen,
-    fetch: async (input) => {
+    fetch: async (input, init) => {
       ran.fetched.push(input);
+      const answer = options.answers?.(new Request(input, init));
+      if (answer !== undefined) return answer;
 
       throw new TypeError("no network in this test");
     },

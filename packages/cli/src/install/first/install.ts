@@ -7,6 +7,7 @@
 import type { Found, Installed, Run, Startable, Whole } from "../../../../core/src/install/installer";
 import { exitCode } from "../../commands/exit-codes";
 import { logIn } from "../../commands/install/login";
+import { publishWays } from "../../commands/install/publish-ways";
 import { problemLines } from "../../commands/problems";
 import type { Io } from "../../commands/records";
 import { installAnswers } from "./answers";
@@ -225,8 +226,9 @@ function followUpOf(installed: Extract<Installed, { readonly ok: true }>, run: R
 }
 
 /**
- * Say what a run that worked through its rows came to, and offer the login after one that left nothing undone. A run that did not use the first login offers none: it ends with the repair that lets that person in.
+ * Say what a run that worked through its rows came to, and offer the login after one that left nothing undone. Whatever becomes of that login, a person at a terminal is then told the ways to publish: give the agent poplin, or run the command.
  *
+ * A run that did not use the first login offers none: it ends with the repair that lets that person in.
  * The line of the optional rows stands under the rows it speaks of, before the wait for the install's address.
  */
 async function ended(installed: Extract<Installed, { readonly ok: true }>, ground: Ground, request: InstallRequest, io: Io, ends: InstallEnds, show: Show): Promise<Ended> {
@@ -249,7 +251,10 @@ async function ended(installed: Extract<Installed, { readonly ok: true }>, groun
 
   if (mode.mode === "dry-run" || value.ok !== true || installed.address === undefined || unused !== undefined) return { code, value };
 
-  return { code, value: { ...value, ...(await offerLogin(mode.login, request.json, installed.address, io, ends, show)) } };
+  const login = await offerLogin(mode.login, request.json, installed.address, io, ends, show);
+  for (const line of publishWays(io.terminal)) show.line("plain", line);
+
+  return { code, value: { ...value, ...login } };
 }
 
 /** Run a request: look, make or say what would be made, and say what it came to. */

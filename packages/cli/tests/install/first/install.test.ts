@@ -685,7 +685,7 @@ describe("on a terminal", () => {
     expect(ran.asked).toEqual(["Your own place (example.com), or Enter for none:", "First user's email:", "Open the form in your browser? [Y/n]", "Account token (hidden): [secret]", "Log this machine in now? [Y/n]"]);
     expect([account.tokensFor, ran.opened]).toEqual([["install"], [FORM]]);
     expect(account.runs[0]).toMatchObject({ where: { kind: "place", name: "example.com" }, login: "you@example.com" });
-    expect(ran.out.at(-1)).toBe(`Next: npx poplin login --server ${ADDRESS}`);
+    expect(ran.out).toContain(`Next: npx poplin login --server ${ADDRESS}`);
   });
 
   // Drift: the step was a wall of text: every permission a line, then the form's address whole, then what to do on the form as two flat lines under it.
