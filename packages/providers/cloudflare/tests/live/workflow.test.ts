@@ -1,6 +1,7 @@
 // The live workflows' own lanes, guard, and report, and the fuzz run, the release gate, and the release's live tests, read beside the tree.
 // There is one workflow for each kind of install, and both call the one file that holds the steps and the one that holds the upgrade.
 // A midnight reset that takes a waiting run's place, or a red night that files nothing would show on a real run alone.
+// So would an issue whose label the settings do not declare: the settings apply deletes the label, and no green night closes the issue.
 // So would a job that reaches a test account from a run that may not, a fuzz target no job runs, a second copy of the fuzz command with a budget of its own, or an upgrade of the test installs under a caller that hands it no secret.
 // So would a release whose live checks ran only where an upgrade reached the install, or that left a test install without the samples and the demo.
 // So would a test install that stays at an older commit after a merge, or as a live check that was cut short left it.
@@ -60,8 +61,11 @@ const GREEN = parse("post-green.yml");
 /** The job of that hook that puts the install of each kind at the newest green commit. */
 const GREEN_JOBS = { domain: "test-install-domain", "account address": "test-install-account-address" } as const;
 
-/** The action that files and closes the issue of a red night. */
-const ISSUE = "Vivswan/repo-platform/actions/fuzz-issue@stable";
+/** The action that files and closes the issue of a red night, without a ref. */
+const ISSUE_ACTION = "Vivswan/repo-platform/actions/fuzz-issue";
+
+/** That action at the ref the live workflows name. */
+const ISSUE = `${ISSUE_ACTION}@stable`;
 
 /** The environments of the two test accounts. */
 const ENVIRONMENTS: readonly string[] = Object.values(KINDS).map((kind) => kind.environment);
@@ -135,6 +139,13 @@ interface Job {
   readonly secrets?: Readonly<Record<string, string>> | "inherit";
 }
 
+/** A label, as a settings file declares it. */
+interface Label {
+  readonly name: string;
+  readonly color: string;
+  readonly description: string;
+}
+
 /** A workflow, as far as a test reads it. */
 interface Workflow {
   readonly on: { readonly workflow_call?: { readonly secrets?: Readonly<Record<string, unknown>> } } & Readonly<Record<string, unknown>>;
@@ -173,6 +184,20 @@ describe("the report of a red night", () => {
         { if: "needs.live.result == 'success' && needs.put-back.result == 'success'", uses: ISSUE, mode: "resolve", label: KINDS[kind].label, stream: "generic" },
       ],
     });
+  });
+
+  // Drift: the settings apply deletes every label the settings do not declare, and no green night finds an issue that lost its label.
+  // A colour or a description that differed would be repainted by the apply and by a red night in turn.
+  test("every label a workflow files or closes an issue under is one the settings declare, with the colour and the description a red night paints it", () => {
+    const own = Bun.YAML.parse(readFileSync(join(ROOT, ".github/settings.local.yml"), "utf8")) as { readonly labels?: readonly Label[] };
+    const rendered = Bun.YAML.parse(readFileSync(join(ROOT, ".github/settings.yml"), "utf8")) as { readonly labels: { readonly entries: readonly Label[] } };
+    // The rendered file follows this repository's own at the next sync, so an entry of the repository's own stands in for its older copy there.
+    const declared = new Map([...rendered.labels.entries, ...(own.labels ?? [])].map((label) => [label.name, label]));
+    const steps = workflows().flatMap((file) => Object.values(parse(file).jobs).flatMap((job) => (job.steps ?? []).filter((step) => step.uses?.startsWith(`${ISSUE_ACTION}@`))));
+    const painted = steps.filter((step) => step.with?.mode === "report").map((step) => ({ name: step.with?.label, color: step.with?.["label-color"], description: step.with?.["label-description"] }));
+    const closed = steps.filter((step) => step.with?.mode === "resolve").map((step) => step.with?.label);
+
+    expect<unknown>({ painted, closed }).toEqual({ painted: painted.map(({ name }) => declared.get(String(name))), closed: closed.map((name) => declared.get(String(name))?.name) });
   });
 });
 
