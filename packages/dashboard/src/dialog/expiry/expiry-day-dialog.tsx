@@ -9,7 +9,7 @@ import { Field, FieldError } from "@/components/ui/field";
 import { thenHome } from "@/lib/focus";
 import { momentIn, useTimeZoneChoice } from "@/lib/timezone";
 import { useOnePress } from "@/dialog/one-press";
-import { dayStart, firstDay } from "@/sites/expiry/expiry";
+import { dayStart, firstDay } from "@/dialog/expiry/expiry-moments";
 
 /** What the dialog is drawn from. */
 interface ExpiryDayDialogProps {

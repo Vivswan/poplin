@@ -1,12 +1,12 @@
 // The removed tokens: folded away until a person opens them, which the browser keeps, each said with how it ended, and not drawn at all where no token ended.
 
-import { clearPage } from "../lib/support/page";
+import { clearPage } from "../../lib/support/page";
 
 import { afterAll, afterEach, describe, expect, test } from "bun:test";
 import { cleanup, fireEvent, render, within } from "@testing-library/react";
 
 import type { Ended, EndedToken } from "@/access/access-queries";
-import { RemovedTokens } from "@/access/removed-tokens";
+import { RemovedTokens } from "@/access/tokens/removed-tokens";
 
 /** A day in November 2026, in milliseconds since the epoch. */
 const THEN = 1_794_000_000_000;

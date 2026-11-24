@@ -11,11 +11,12 @@ import { sayDone } from "@/lib/notify";
 import type { Site } from "@/lib/sites";
 import { momentIn } from "@/lib/timezone";
 import { PanelFact } from "@/shared/side-panel";
-import { afterDays, backTo, expiryMoment, SPANS, sentFor } from "@/sites/expiry/expiry";
+import { afterDays, sentFor } from "@/dialog/expiry/expiry-moments";
+import { backTo, expiryMoment, SPANS } from "@/sites/expiry/expiry";
 import { SITES_KEY } from "@/sites/site-queries";
 
 /** The dialog that asks for a day, read from the server when a day is first asked for: it holds the calendar. */
-const ExpiryDayDialog = lazy(async () => ({ default: (await import("@/sites/expiry/expiry-day-dialog")).ExpiryDayDialog }));
+const ExpiryDayDialog = lazy(async () => ({ default: (await import("@/dialog/expiry/expiry-day-dialog")).ExpiryDayDialog }));
 
 /** What stands under the moment: what its link does then, and where the site goes. */
 function afterIt(expires: Site["expires"], now: number): string | undefined {

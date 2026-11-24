@@ -1,6 +1,6 @@
 // The Tokens tab: what a waiting row and an allowed row each let a person do, and where a waiting login is still listed with no token beside it.
 
-import { clearPage, type Within } from "../lib/support/page";
+import { clearPage, type Within } from "../../lib/support/page";
 
 import { afterAll, afterEach, describe, expect, test } from "bun:test";
 import { cleanup, fireEvent, render, within } from "@testing-library/react";
@@ -8,7 +8,7 @@ import type { ReactNode } from "react";
 
 import type { AccessActions } from "@/access/access-actions";
 import type { Ended, Token, Waiting, WaitingLogin } from "@/access/access-queries";
-import { TokensTab } from "@/access/tokens-tab";
+import { TokensTab } from "@/access/tokens/tokens-tab";
 
 /** A login that waits. */
 const WAITING_LOGIN = { id: "0cbb997f737c56ae", scope: "admin", computer: "build-server", asked: 1_794_700_000_000 } as WaitingLogin;
