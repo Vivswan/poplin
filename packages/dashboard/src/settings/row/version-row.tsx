@@ -1,10 +1,10 @@
-// The first row of Updates on the Settings screen, which is no setting: the version the install runs, and since when where it came in by an update, with the way back to the version before.
-// While a newer version is out, the row also holds its notes and the start of the update.
-// The two buttons that start something are the triggers of one question, joined to it by the dialog library's handle: the library opens the question with what the button asks, and gives the focus back to the button.
+// The first row of Updates on the Settings screen, which is no setting. Beside its name stands the version the install runs, and since when where it came in by an update.
+// At its right, on one line: a newer version that is out, with its notes and the start of the update, and the way back to the version before. One grey line under that says what else there is to say.
+// The two buttons that start something are the triggers of one question, joined to it by the dialog library's handle: the library opens the question and gives the focus back to the button. What the button asks is kept from its press.
 
 import { AlertDialog as AlertDialogPrimitive } from "@base-ui/react/alert-dialog";
 import { useQueryClient } from "@tanstack/react-query";
-import { type ReactNode, type RefObject, useEffect, useRef } from "react";
+import { type ReactNode, type RefObject, useRef, useState } from "react";
 
 import {
   AlertDialog,
@@ -21,7 +21,7 @@ import { Button } from "@/components/ui/button";
 import { useOnePress } from "@/dialog/one-press";
 import { api } from "@/lib/api";
 import { BOOT } from "@/lib/boot";
-import { thenHome } from "@/lib/focus";
+import { thenHome, useFocusHome } from "@/lib/focus";
 import { FRAME_KEY, type Frame, GET_KEY, outWords, useFrame, useStarted } from "@/lib/frame";
 import { sayDone, send } from "@/lib/notify";
 import { dateIn } from "@/lib/timezone";
@@ -29,8 +29,8 @@ import { SettingFrame } from "@/settings/row/setting-frame";
 import { controlId } from "@/settings/row/setting-row";
 import { settingAnchor, VERSION } from "@/settings/setting-address";
 
-/** What joins the row's one question to the two buttons that ask it. */
-const ASKED = AlertDialogPrimitive.createHandle<Asked>();
+/** What joins the row's one question to the two buttons that open it. */
+const ASKED = AlertDialogPrimitive.createHandle();
 
 /** What stands where the start of an update would, on an install that holds no key to send one with. */
 const NO_KEY = `The install holds no key, so it cannot update itself.${GET_KEY}`;
@@ -53,19 +53,19 @@ interface Asked {
   readonly to?: string;
 }
 
-/** What the row shows under the version. */
-interface UnderVersionProps {
+/** What the row's line at the right is drawn from. */
+interface OffersProps {
   /** The newer release the install knows of, or `null`. */
   readonly update: Frame["update"];
 
-  /** The way back to the version before, where it can be started from this page; `null` otherwise. */
-  readonly wayBack: Frame["back"];
+  /** The version the install can go back to, or `null`. */
+  readonly back: Frame["back"];
 
-  /** How a start stands on this page. */
-  readonly standing: Standing;
+  /** `true` where a start can be sent from this page: the two buttons are drawn only then. */
+  readonly ready: boolean;
 
-  /** The reference of the line that says an update has started. */
-  readonly notice: RefObject<HTMLParagraphElement | null>;
+  /** Called at the press of a button that starts something, with what the button asks at that moment. */
+  readonly onAsk: (asked: Asked) => void;
 }
 
 /** What the start of an update asks. An update that changes the database says that the install cannot go back from it. */
@@ -90,30 +90,13 @@ function backAsked(to: string): Asked {
 }
 
 /**
- * The reference of the line that says an update has started.
- *
- * A question a person closed before its answer came left the focus on the button that asked. That button leaves with the start, so the focus drops to the page: the line takes it.
- */
-function useNotice(started: boolean): RefObject<HTMLParagraphElement | null> {
-  const notice = useRef<HTMLParagraphElement>(null);
-  const before = useRef(started);
-
-  useEffect(() => {
-    if (started && !before.current && document.activeElement === document.body) notice.current?.focus();
-
-    before.current = started;
-  }, [started]);
-
-  return notice;
-}
-
-/**
  * Draw the row's question, once for both buttons. It stays while its answer is on its way, and takes no second press meanwhile.
  *
+ * @param asked - what the button that was pressed last asked, `undefined` before the first press
  * @param notice - the line that says an update has started: once it is drawn, it takes the focus of the question that closes
  * @param onStarted - called once the install took the start
  */
-function StartQuestion({ notice, onStarted }: { readonly notice: RefObject<HTMLParagraphElement | null>; readonly onStarted: () => void }): ReactNode {
+function StartQuestion({ asked, notice, onStarted }: { readonly asked: Asked | undefined; readonly notice: RefObject<HTMLParagraphElement | null>; readonly onStarted: () => void }): ReactNode {
   const client = useQueryClient();
   const start = async ({ to }: Asked): Promise<void> => {
     const taken = await send(api.update.$post({ json: to === undefined ? {} : { to } }));
@@ -131,45 +114,39 @@ function StartQuestion({ notice, onStarted }: { readonly notice: RefObject<HTMLP
 
   return (
     <AlertDialog handle={ASKED}>
-      {({ payload: asked }) =>
-        asked === undefined ? null : (
-          <AlertDialogContent finalFocus={thenHome(notice)}>
-            <AlertDialogHeader>
-              <AlertDialogTitle>{asked.title}</AlertDialogTitle>
-              <AlertDialogDescription>{asked.says}</AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction disabled={busy} onClick={() => press(asked)}>
-                {asked.yes}
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        )
-      }
+      {asked === undefined ? null : (
+        <AlertDialogContent finalFocus={thenHome(notice)}>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{asked.title}</AlertDialogTitle>
+            <AlertDialogDescription>{asked.says}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction disabled={busy} onClick={() => press(asked)}>
+              {asked.yes}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      )}
     </AlertDialog>
   );
 }
 
 /**
- * The lines under the version, drawn while there is one: the way back to the version before; a newer release with its notes, what keeps it from starting, and its start; and that an update has started.
+ * The row's line at the right: a newer release with its notes and the start of the update, then the way back to the version before. In a column too narrow for the line, a button goes under what stands before it.
  *
  * What an address that names the row gives the focus carries the id of the row's control: the start of the update, and the notes where there is no start.
  */
-function UnderVersion({ update, wayBack, standing, notice }: UnderVersionProps): ReactNode {
+function Offers({ update, back, ready, onAsk }: OffersProps): ReactNode {
   return (
-    <div className="flex flex-col items-start gap-1.5">
-      {wayBack === null ? null : (
-        <AlertDialogTrigger handle={ASKED} payload={backAsked(wayBack.to)} render={<Button type="button" variant="outline" size="sm" />}>
-          Go back to {wayBack.to}
-        </AlertDialogTrigger>
-      )}
+    <div data-slot="version-line" className="flex min-h-8 flex-wrap items-center gap-x-2 gap-y-1.5">
       {update === null ? null : (
         <>
-          <p className="text-foreground">
+          {/* The sentence is as high as a control's line, so it keeps the height of the row's name where the button goes under it. */}
+          <p className="py-1.5">
             {outWords(update)}.{" "}
             <a
-              id={standing === "ready" ? undefined : controlId(VERSION)}
+              id={ready ? undefined : controlId(VERSION)}
               href={update.notes}
               target="_blank"
               rel="noreferrer"
@@ -178,22 +155,35 @@ function UnderVersion({ update, wayBack, standing, notice }: UnderVersionProps):
               What changed
             </a>
           </p>
-          {update.database ? <p className="text-muted-foreground">This release changes the database, so it never starts by itself.{standing === "ready" ? " Press Update now." : ""}</p> : null}
-          {standing === "no_key" ? <p className="text-muted-foreground">{NO_KEY}</p> : null}
-          {standing === "ready" ? (
-            <AlertDialogTrigger handle={ASKED} payload={updateAsked(update)} render={<Button id={controlId(VERSION)} type="button" variant="outline" size="sm" />}>
+          {ready ? (
+            <AlertDialogTrigger handle={ASKED} onClick={() => onAsk(updateAsked(update))} render={<Button id={controlId(VERSION)} type="button" variant="outline" size="sm" />}>
               Update now
             </AlertDialogTrigger>
           ) : null}
         </>
       )}
-      {standing === "started" ? (
-        <p ref={notice} tabIndex={-1} className="text-muted-foreground outline-none">
-          Updated. Reload the page.
-        </p>
+      {ready && back !== null ? (
+        <AlertDialogTrigger handle={ASKED} onClick={() => onAsk(backAsked(back.to))} render={<Button type="button" variant="outline" size="sm" />}>
+          Go back to {back.to}
+        </AlertDialogTrigger>
       ) : null}
     </div>
   );
+}
+
+/**
+ * What else the row says, as one line: that the release changes the database, that the install holds no key to start an update with, and that an update has started.
+ *
+ * @returns the line, empty while there is nothing to say
+ */
+function noteOf(update: Frame["update"], standing: Standing): string {
+  return [
+    update?.database === true ? `This release changes the database, so it never starts by itself.${standing === "ready" ? " Press Update now." : ""}` : "",
+    update !== null && standing === "no_key" ? NO_KEY : "",
+    standing === "started" ? "Updated. Reload the page." : "",
+  ]
+    .filter((sentence) => sentence !== "")
+    .join(" ");
 }
 
 /** Say how a start stands on this page. A started update is not offered again: the page runs the client it was loaded with until it is loaded again. */
@@ -211,34 +201,45 @@ function standingOf(keyed: boolean, started: boolean): Standing {
 export function VersionRow({ marked }: { readonly marked: boolean }): ReactNode {
   const { update, starts: keyed, back } = useFrame().data;
   const [started, setStarted] = useStarted();
-  const notice = useNotice(started);
+  // What a button asks is kept from its press. The buttons follow the frame, which is read again at any time: a question that followed its button would change its words while it is open, and its answer would send a version nobody pressed.
+  const [asked, setAsked] = useState<Asked>();
+  const notice = useRef<HTMLParagraphElement>(null);
+  // A question a person closed before its answer came left the focus on the button that asked. That button leaves with the start: the note takes the focus then, unless a person moved it off the row meanwhile.
+  const kept = useFocusHome(() => notice.current);
   const standing = standingOf(keyed, started);
   // An install that could not read its version is told of no newer release and no way back, as both come from comparing versions: its row would hold a name and nothing else.
   if (BOOT.version === "") return null;
 
-  const wayBack = standing === "ready" ? back : null;
-  // With nothing under it the version stays beside its name on a phone, as a switch does. With lines under it, it goes under its name, as a field does, and the lines have the whole width.
-  const lined = wayBack !== null || update !== null || started;
+  const ready = standing === "ready";
+  // The line holds a newer release, or the way back, which is there only while it can be started.
+  const offered = update !== null || (ready && back !== null);
+  const note = noteOf(update, standing);
 
   return (
     <>
       <SettingFrame
         name="Version"
+        afterName={`${BOOT.version}${back === null ? "" : `, since ${dateIn(back.since)}`}`}
         controlId={controlId(VERSION)}
         anchor={settingAnchor(VERSION)}
         marked={marked}
         says={[]}
         top
-        beside={!lined}
-        under={lined ? <UnderVersion update={update} wayBack={wayBack} standing={standing} notice={notice} /> : undefined}
+        // With nothing at its right the row is its name's line alone on a phone, as a switch's is. What stands at the right goes under the name there, and has the whole width.
+        beside={!offered && note === ""}
       >
-        {/* The version starts where its name does: a text's line is lower than a control's, which the frame sets the name's height by. */}
-        <p className="leading-6 @[480px]:self-start">
-          {BOOT.version}
-          {back === null ? "" : `, since ${dateIn(back.since)}`}
-        </p>
+        {/* The line and the note are one column in the place of a control, so the note keeps its place when the line over it leaves, and with its place a focus it holds. */}
+        <div className="flex min-w-0 flex-col gap-1.5" {...kept}>
+          {offered ? <Offers update={update} back={back} ready={ready} onAsk={setAsked} /> : null}
+          {note === "" ? null : (
+            // Once an update has started the note takes the focus the start's button held: only then is it the question's way back, and can take a focus a script gives.
+            <p data-slot="version-note" ref={started ? notice : undefined} tabIndex={started ? -1 : undefined} className="text-[13px] leading-5 text-muted-foreground outline-none">
+              {note}
+            </p>
+          )}
+        </div>
       </SettingFrame>
-      <StartQuestion notice={notice} onStarted={setStarted} />
+      <StartQuestion asked={asked} notice={notice} onStarted={setStarted} />
     </>
   );
 }

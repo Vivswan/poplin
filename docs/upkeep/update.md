@@ -186,7 +186,7 @@ the same four steps, for release 0.3.0     fetched, checked, one upload with the
 
 | Where          | Do                                                                                          |
 | -------------- | ------------------------------------------------------------------------------------------- |
-| the dashboard  | on Settings, under Updates: press Go back to 0.3.0, under `0.3.1, since ...` in the Version row |
+| the dashboard  | on Settings, under Updates: press Go back to 0.3.0 in the Version row, which says `0.3.1, since ...` |
 | a terminal     | `npx poplin update --to 0.3.0`; `npx poplin update --dry-run` names the version to go back to |
 
 ```text
@@ -322,7 +322,7 @@ ok  problems  none in 7 days
 | How often            | once a UTC day, by the install itself; a day with no answer is tried again the next day            |
 | What is sent         | a plain request for the file: no version, no id, and no address of the install is put in it        |
 | What Cloudflare adds | a `CF-Worker` header on every request a Worker sends. It names where the Worker runs: the account's `workers.dev` name, or the install's domain |
-| Where it shows       | the Version row of the dashboard's Settings, under Updates: `0.2.0 is out` and a link, What changed |
+| Where it shows       | the Version row of the dashboard's Settings, under Updates: `0.2.0 is out` and a link, What changed, with Update now after them where the install holds its key |
 | On every page        | a sign at Settings, at the side, named `update available`: a press on Settings then opens the Version row. A [problem's sign](../fix/problems.md#where-a-problem-shows) stands in its place while Settings holds a problem |
 | On a phone           | the same sign on the sections button, while no section holds a problem |
 | Where else           | the `update` row of `poplin doctor`, and `update` under `--json`; no row when nothing newer is out |

@@ -20,6 +20,9 @@ interface SettingFrameProps {
   /** The name of what is set. */
   readonly name: string;
 
+  /** What stands after the name, on the name's line, in plain text: a fact the row states that nothing sets, such as the version an install runs. */
+  readonly afterName?: string;
+
   /** The key a command names the setting by, such as `trash_days`: it stands under the name, as text a person can select. */
   readonly settingKey?: string;
 
@@ -123,6 +126,7 @@ function Warnings({ warnings }: { readonly warnings: readonly string[] }): React
 /** Draw one row. */
 export function SettingFrame({
   name,
+  afterName,
   settingKey,
   controlId,
   anchor,
@@ -155,10 +159,12 @@ export function SettingFrame({
       )}
     >
       <div className="min-w-0">
-        <div className="flex items-center gap-1">
+        {/* A line that holds a fact is as high as a control's line, so the fact and what stands at the right are read as one line. Where the column is too narrow for both, the fact goes under the name. */}
+        <div className={cn("flex items-center", afterName === undefined ? "gap-1" : "min-h-8 flex-wrap gap-x-2")}>
           <Field.Label nativeLabel={false} render={(props) => <h3 {...props} />} id={`${controlId}-label`} className="leading-6 font-semibold">
             {name}
           </Field.Label>
+          {afterName === undefined ? null : <p className="leading-6">{afterName}</p>}
           {sentences.length === 0 && fallback === undefined ? null : <About name={name} says={sentences} fallback={fallback} onReset={onReset} />}
         </div>
         {settingKey === undefined ? null : <code className="block w-fit max-w-full font-mono text-xs leading-5 wrap-anywhere text-muted-foreground select-all">{settingKey}</code>}
