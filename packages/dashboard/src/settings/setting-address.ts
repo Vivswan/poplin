@@ -1,10 +1,13 @@
-// Where one setting is on the Settings screen: the address that leads to its line, for a link of another screen, and the anchor of the line itself.
+// Where one setting is on the Settings screen, and where the version is: the address that leads to its line, for a link of another screen, and the anchor of the line itself.
 
 /** The Settings screen's own path. */
 const PATH = "/settings";
 
 /** What the anchor of every setting's line starts with. */
 const ANCHOR = "setting-";
+
+/** What an address names the row of the version by, as it names a setting by its key: the row is no setting, and stands among them. */
+export const VERSION = "version";
 
 /**
  * The anchor of a setting's line: the id the line is found under.

@@ -1,4 +1,4 @@
-// The Settings screen: the one page with every setting under its block's heading, the one Save for everything changed, the refusal that comes back at its field, Discard, and the Undo of a done save.
+// The Settings screen: the one page with every setting under its block's heading and the version over the settings of Updates, the one Save for everything changed, the refusal that comes back at its field, Discard, and the Undo of a done save.
 
 import { clearPage, type Within } from "../lib/support/page";
 
@@ -12,7 +12,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { BOOT } from "@/lib/boot";
 import { FRAME_KEY } from "@/lib/frame";
-import { settingAddress } from "@/settings/setting-address";
+import { settingAddress, VERSION } from "@/settings/setting-address";
 import type { Row } from "@/settings/settings-queries";
 import { SettingsScreen } from "@/settings/settings-screen";
 
@@ -41,6 +41,16 @@ const sentTo: string[] = [];
 
 /** The saves the server holds back until a test lets them through. */
 const held: (() => void)[] = [];
+
+/** The frame of an install that knows of a newer release. */
+const NEWER_FRAME = {
+  ok: true,
+  update: { current: BOOT.version, newest: "1.1.0", released: "2026-11-02", notes: "https://example.com/notes", database: false },
+  back: null,
+  domainNote: null,
+  recent: [],
+  marks: { usage: null, domain: null, settings: null },
+} as const;
 
 /** The row of who gets the alerts, with none chosen, on an install that does not carry the choice by itself. */
 const ALERT_USERS: Row = { key: "alert_users", control: { kind: "users", options: [BOOT.email, "noor@example.com"] }, text: "first", unit: "", fallback: "first", limits: [], repair: true, needs: null };
@@ -174,7 +184,8 @@ afterAll(async () => {
 
 describe("the one page", () => {
   // Drift: a setting that arrives with no words would be named by its raw key, or stand under a heading nobody looks for it under; or the settings would be split over tabs again. A row without its key could not be found in `poplin config`.
-  test("holds every setting once under the heading of its block, a setting with no words under the heading its key reads like, with a readable name and its key under it", async () => {
+  // Drift: the version would stand under the settings of Updates, away from the heading a person finds it under, or carry a key as if `poplin config` took it.
+  test("holds every setting once under the heading of its block, a setting with no words under the heading its key reads like, with a readable name and its key under it, and the version first under Updates with no key", async () => {
     await drawn();
     const blocks = [...document.querySelectorAll("form section")].map((block) => [block.querySelector("h2")?.textContent, ...[...block.querySelectorAll("h3")].map((name) => name.textContent)]);
 
@@ -185,7 +196,7 @@ describe("the one page", () => {
         ["New sites", "Show in search engines", "Keep deleted sites"],
         ["Storage", "All sites together"],
         ["Logs", "Keep logs"],
-        ["Updates", "Check for new versions", "Update automatically", "Update channel"],
+        ["Updates", "Version", "Check for new versions", "Update automatically", "Update channel"],
       ],
       ["default_search_engines", "trash_days", "max_total_size", "provider_logs", "update_check", "auto_update", "update_channel"],
     ]);
@@ -225,6 +236,31 @@ describe("the address of one setting", () => {
     await waitFor(() => expect(document.activeElement === field(page, "Keep deleted sites")).toBe(true));
 
     expect([document.getElementById(hash)?.contains(document.activeElement), document.getElementById(hash)?.classList.contains("bg-muted/60")]).toEqual([true, true]);
+  });
+
+  // Drift: the mark of a newer release at the side leads to this address. The row would not be found under it, so the page would open at its top, a screen away from the start of the update.
+  // On an install that holds no key the row has no start: the focus would stay at the top, and no key would lead on from the row.
+  test.each([
+    { name: "the start of the update, on an install that holds its key", keyed: true, role: "button", focused: "Update now" },
+    { name: "the notes of the release, on an install that holds no key", keyed: false, role: "link", focused: "What changed" },
+  ] as const)("points the row of the version out as it does a setting: the row is shaded, and the focus is on $name", async ({ keyed, role, focused }) => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    client.setQueryData(FRAME_KEY, { ...NEWER_FRAME, starts: keyed });
+    const { to, hash } = settingAddress(VERSION);
+    const page = await drawn(`${to}#${hash}`, client);
+    await waitFor(() => expect(document.activeElement === page.getByRole(role, { name: focused })).toBe(true));
+
+    expect([document.getElementById(hash)?.contains(document.activeElement), document.getElementById(hash)?.classList.contains("bg-muted/60"), bar(page)]).toEqual([true, true, null]);
+  });
+
+  // Drift: the shade leaves by a clock, which is stopped when the address moves on. A row pointed out a moment before would stay shaded for as long as the screen is drawn.
+  test("takes the shade away at once when the address names the row no more", async () => {
+    const { to, hash } = settingAddress("trash_days");
+    const page = await drawn(`${to}#${hash}`);
+    await waitFor(() => expect(document.getElementById(hash)?.classList.contains("bg-muted/60")).toBe(true));
+    await press(page.getByRole("link", { name: "Settings" }));
+
+    expect([window.location.hash, document.getElementById(hash)?.classList.contains("bg-muted/60")]).toEqual(["", false]);
   });
 });
 

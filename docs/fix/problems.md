@@ -22,6 +22,7 @@ The login could not be checked     15 Nov 2026, 11:59 once        Domain
 | a warning sign at Usage, Domain, or Settings, at the side | that screen holds a problem of the last 24 hours; its name says how many |
 | the same sign at Domain                 | also what the [last check of the domain](../dashboard/domain.md#the-last-check-of-the-domain) left to do |
 | the sections button, on a phone         | the same sign, for all sections together                                         |
+| an arrow in a circle at Settings        | no problem: [a newer version is out](../upkeep/update.md#a-newer-version)        |
 | Problems, on the Usage screen           | every problem of the last 7 or 30 days; a press on a row opens it                |
 | the Domain screen                       | a problem of the login, the users, the rules, or the upload key, with what to do |
 | Settings, under Updates                 | an update that did not go as it should, with what to do                                    |

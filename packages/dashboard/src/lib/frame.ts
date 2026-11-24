@@ -27,19 +27,28 @@ export type Frame = InferResponseType<typeof api.frame.$get, 200>;
 /** The frame as the page started with it: nothing is asked until it is stale. */
 const AT_START: Frame = { ok: true, update: BOOT.update, starts: BOOT.starts, back: BOOT.back, domainNote: BOOT.domainNote, recent: BOOT.recent, marks: BOOT.marks, domainAsks: BOOT.domainAsks };
 
+/**
+ * What says that a newer release is out, at the side's mark and in the row of the version: `0.2.0 is out`.
+ */
+export function outWords(update: NonNullable<Frame["update"]>): string {
+  return `${update.newest} is out`;
+}
+
 /** Read the frame's data. It starts from the page's own values, and is read again after a change that touches it and as it grows old, so a mark neither stays past its problem nor comes late. */
 export function useFrame(): DefinedUseQueryResult<Frame> {
   return useQuery({ queryKey: FRAME_KEY, queryFn: () => answerOf(api.frame.$get()), initialData: AT_START, staleTime: FRESH_MS, refetchInterval: READ_AGAIN_MS });
 }
 
 /**
- * Whether an update was started from this page, and the way to say that one was. It is kept beside the frame's data, so the frame of every screen says it.
+ * Whether an update was started from this page, and the way to say that one was. It is kept beside the frame's data for as long as the page is loaded.
+ *
+ * The row of the version alone reads it, and leaves with its screen: a note dropped meanwhile would have the page offer again the update it started.
  *
  * @returns the fact, and a function that sets it
  */
 export function useStarted(): readonly [boolean, () => void] {
   const client = useQueryClient();
-  const { data } = useQuery({ queryKey: STARTED_KEY, queryFn: () => false, initialData: false, staleTime: "static" });
+  const { data } = useQuery({ queryKey: STARTED_KEY, queryFn: () => false, initialData: false, staleTime: "static", gcTime: Number.POSITIVE_INFINITY });
 
   return [data, () => client.setQueryData(STARTED_KEY, true)];
 }

@@ -42,7 +42,7 @@ No build runs, at Cloudflare or anywhere. The install takes the built Worker the
 
 | Where                 | Do                                                                        |
 | --------------------- | ------------------------------------------------------------------------- |
-| the dashboard         | press Update now, at the foot of the side, when a newer version is out    |
+| the dashboard         | on Settings, under Updates: press Update now in the Version row, when a newer version is out |
 | a terminal            | `npx poplin update`                                                       |
 | nowhere               | switch `auto_update` on: [Update by itself](#optional-update-by-itself)   |
 
@@ -56,7 +56,7 @@ $ npx poplin update
 Updated the install from 0.3.0 to 0.3.1
 ```
 
-**It worked when** the foot of the dashboard's side, and the `version` row of `npx poplin doctor`, name the new version. Activity says `Started an update to 0.3.1`.
+**It worked when** the Version row of the dashboard's Settings, under Updates, and the `version` row of `npx poplin doctor`, name the new version. Activity says `Started an update to 0.3.1`.
 
 | What stays as it was                                   | How                                                              |
 | ------------------------------------------------------ | ---------------------------------------------------------------- |
@@ -186,7 +186,7 @@ the same four steps, for release 0.3.0     fetched, checked, one upload with the
 
 | Where          | Do                                                                                          |
 | -------------- | ------------------------------------------------------------------------------------------- |
-| the dashboard  | press Go back to 0.3.0, at the foot of the side, under `Running poplin 0.3.1, since ...`    |
+| the dashboard  | on Settings, under Updates: press Go back to 0.3.0 in the Version row, which says `0.3.1, since ...` |
 | a terminal     | `npx poplin update --to 0.3.0`; `npx poplin update --dry-run` names the version to go back to |
 
 ```text
@@ -322,7 +322,9 @@ ok  problems  none in 7 days
 | How often            | once a UTC day, by the install itself; a day with no answer is tried again the next day            |
 | What is sent         | a plain request for the file: no version, no id, and no address of the install is put in it        |
 | What Cloudflare adds | a `CF-Worker` header on every request a Worker sends. It names where the Worker runs: the account's `workers.dev` name, or the install's domain |
-| Where it shows       | the foot of the dashboard's side, on every page: `0.2.0 is out` and a link, What changed           |
+| Where it shows       | the Version row of the dashboard's Settings, under Updates: `0.2.0 is out` and a link, What changed, with Update now after them where the install holds its key |
+| On every page        | a sign at Settings, at the side, named `update available`: a press on Settings then opens the Version row. A [problem's sign](../fix/problems.md#where-a-problem-shows) stands in its place while Settings holds a problem |
+| On a phone           | the same sign on the sections button, while no section holds a problem |
 | Where else           | the `update` row of `poplin doctor`, and `update` under `--json`; no row when nothing newer is out |
 | Switching it off     | `poplin config update_check off`: nothing is asked, and a release learned before is not shown      |
 | With `auto_update` on | switching `update_check` off is refused with `needs_update_check`: switch `auto_update` off first  |

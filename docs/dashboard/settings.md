@@ -81,6 +81,20 @@ A chosen user who is not a member of your Cloudflare account gets one mail from 
 
 On an install [without a domain](../start/without-a-domain.md), the control of `block_bots` is disabled and says `Needs a domain.`: what it asks for is a switch of a domain at Cloudflare. `search_engines_allowed` and `outside_pages` work there through the Worker alone, and nothing is sent to Cloudflare for them.
 
+## The version
+
+Updates starts with Version, a row that is no setting. The version the install runs stands beside the name, as `0.3.1`, and the row takes no Save.
+
+What else the row holds is one line at its right, with one grey line under it at most. On a phone that line stands under the name. Where the line has no room for a button, on any screen, the button goes under the rest.
+
+| In the row                                | Means                                                                                   |
+| ----------------------------------------- | --------------------------------------------------------------------------------------- |
+| `, since 2026-12-01`, after the version   | the install came to this version by an update of its own, on that day                   |
+| `0.3.2 is out`, What changed              | a newer version, and its notes: [A newer version](../upkeep/update.md#a-newer-version)  |
+| Update now, after them                    | the start of the update to it, on an install that holds its key: [With the kept key](../upkeep/update.md#with-the-kept-key) |
+| Go back to 0.3.0                          | the way back to the version before, on an install that holds its key: [Go back](../upkeep/update.md#go-back) |
+| the grey line                             | what keeps the update from starting, by itself or from this page, and that one has started |
+
 ## The install
 
 | Example                                                              | Does                                              |

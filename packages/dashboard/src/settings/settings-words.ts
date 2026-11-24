@@ -15,7 +15,7 @@ const BLOCKS = [
   { id: "updates", heading: "Updates" },
 ] as const;
 
-/** The block that says what went wrong with an update. */
+/** The block that starts with the version, and says what went wrong with an update. */
 export const UPDATES = "updates";
 
 /** The block of who the provider's alerts go to. */

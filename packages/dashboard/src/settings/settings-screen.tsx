@@ -1,4 +1,5 @@
 // The Settings screen: one page that reads from top to bottom, every setting a row under the heading of its group, and one Save for everything that was changed, in a bar under the page while a change waits.
+// Updates starts with the row of the version, which is no setting and takes no Save.
 
 import { Link, useLocation } from "@tanstack/react-router";
 import { type FormEvent, type ReactNode, useEffect, useRef, useState } from "react";
@@ -12,8 +13,9 @@ import { HomeProblems } from "@/problems/home-problems";
 import { LeaveGuard } from "@/shared/leave-guard";
 import { MiddleColumn } from "@/shared/middle-column";
 import { SaveBar } from "@/shared/save-bar";
-import { settingAnchor, settingOfAnchor } from "@/settings/setting-address";
+import { settingAnchor, settingOfAnchor, VERSION } from "@/settings/setting-address";
 import { controlId, SettingRow } from "@/settings/row/setting-row";
+import { VersionRow } from "@/settings/row/version-row";
 import { boundedBy, isOn } from "@/settings/setting-values";
 import { useDraft } from "@/settings/settings-draft";
 import { type Row, type Settings, useSettings } from "@/settings/settings-queries";
@@ -73,7 +75,7 @@ function noteOf(key: string, keyed: boolean): string | undefined {
   return key === PROVIDER_LOGS ? AT_NEXT_UPDATE : undefined;
 }
 
-/** The blocks of the page: every group of settings under its heading. */
+/** The blocks of the page: every group of settings under its heading, and in Updates the problems of an update and the version over its settings. */
 function Groups({
   settings,
   draft,
@@ -92,6 +94,7 @@ function Groups({
           <h2 className={HEADING}>{block.heading}</h2>
           {block.rows.some((row) => row.repair) ? <RepairNote block={block} /> : null}
           {block.id === UPDATES ? <HomeProblems home="settings" className="flex flex-col gap-2 pb-2" /> : null}
+          {block.id === UPDATES ? <VersionRow marked={marked === VERSION} /> : null}
           {block.rows.map((row) => (
             <SettingRow
               key={row.key}
@@ -143,10 +146,10 @@ function focus(id: string, options?: FocusOptions): void {
 }
 
 /**
- * Point out the setting the address names, once its block is drawn: the block comes into view, its control takes the focus, and the block is shaded for a moment.
+ * Point out the row the address names, a setting's or the version's, once its block is drawn: the row comes into view, its control takes the focus, and the row is shaded for a moment.
  *
  * @param drawn - whether the blocks are on the page
- * @returns the key of the setting that is pointed out now; none before and after
+ * @returns the key of the setting that is pointed out now, or what an address names the version by; none before and after
  */
 function useNamedSetting(drawn: boolean): string | undefined {
   const named = useLocation({ select: (location) => settingOfAnchor(location.hash) });
@@ -161,7 +164,11 @@ function useNamedSetting(drawn: boolean): string | undefined {
     setMarked(named);
     const done = window.setTimeout(() => setMarked(undefined), MARKED_FOR);
 
-    return () => window.clearTimeout(done);
+    // An address that moves on within that time takes the shade with it: the clock that would is stopped here.
+    return () => {
+      window.clearTimeout(done);
+      setMarked(undefined);
+    };
   }, [named, drawn]);
 
   return marked;
