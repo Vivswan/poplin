@@ -51,8 +51,8 @@ export type DomainReading =
 
 /** The provider's side of an install, with what its form for a new token is and asks for. Neither method keeps the token past its own call, and neither throws for anything the provider answers. */
 export interface DomainPlug extends TokenFacts {
-  /** How the screens speak of the install's side at the provider: `thing` is what a sentence calls it, such as `the domain`, and `line` is one sentence said first on its screen, or `null`. */
-  readonly words: { readonly thing: string; readonly line: string | null };
+  /** How the screens speak of this side of the install: `thing` is what a sentence calls it, such as `the domain`, `line` is one sentence said first on its screen, or `null`, and `kind` is the kind of install a report names, such as `under a domain`. */
+  readonly words: { readonly thing: string; readonly line: string | null; readonly kind: string };
 
   /** The settings, beyond the users, that a repair carries to the provider. */
   readonly carriedSettings: readonly (keyof DomainSettings)[];

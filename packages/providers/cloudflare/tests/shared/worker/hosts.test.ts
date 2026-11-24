@@ -323,7 +323,7 @@ describe("the screens of an install without a domain", () => {
     const domain = await (await askFree(worker, `${FREE_ADMIN}/data/domain`, { headers: owner })).json<{ words: unknown; form: { tokenRights: string[] } }>();
     const { rows } = await (await askFree(worker, `${FREE_ADMIN}/data/settings`, { headers: owner })).json<{ rows: { key: string; repair: boolean; needs: string | null }[] }>();
 
-    expect([domain.words, domain.form.tokenRights.length]).toEqual([{ thing: "the install", line: "No domain: your sites answer at Cloudflare's free address." }, 5]);
+    expect([domain.words, domain.form.tokenRights.length]).toEqual([{ thing: "the install", line: "No domain: your sites answer at Cloudflare's free address.", kind: "without a domain" }, 5]);
     expect([rows.filter((row) => row.repair).map((row) => row.key), rows.filter((row) => row.needs !== null).map((row) => [row.key, row.needs])]).toEqual([["alert_users"], [["block_bots", "Needs a domain."]]]);
   });
 });

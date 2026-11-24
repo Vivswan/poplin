@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 
 import { expect, type Locator, type Page } from "@playwright/test";
 
-import { arrive, isUnanswered, onPage, openPanel, reset, SECTIONS_BUTTON, said, screenHeading, siteName, TRASH, test, toSection } from "./visit";
+import { arrive, isUnanswered, onPage, openPanel, ownClipboard, reset, SECTIONS_BUTTON, said, screenHeading, siteName, TRASH, test, toSection } from "./visit";
 
 /** The screens the walk is taken on. A wide one shows tables and the side navigation; a narrow one shows lists, and the sections behind a button. */
 const VIEWPORTS = [
@@ -1356,11 +1356,10 @@ test("a section whose screen holds a problem says so at the side, Usage lists wh
   await expect(panel.getByText("What to do", { exact: true })).toBeVisible();
   await expect(panel.getByText(/ 12\+ times\.$/)).toBeVisible();
 
-  // The walk's own clipboard takes the copy: an engine may let no page write to the real one, and the text is what matters.
-  await page.evaluate(() => Object.defineProperty(navigator, "clipboard", { value: { writeText: async (text: string) => void document.body.setAttribute("data-copied", text) }, configurable: true }));
+  const copied = await ownClipboard(page);
   await panel.getByRole("button", { name: "Copy the details", exact: true }).click();
   await expect(said(page, "Details copied.")).toBeVisible();
-  expect((await page.locator("body").getAttribute("data-copied"))?.split("\n").slice(0, 2)).toEqual([expect.stringMatching(/^poplin \S+: request_failed$/), "A request failed"]);
+  expect((await copied())?.split("\n").slice(0, 2)).toEqual([expect.stringMatching(/^poplin \S+: request_failed$/), "A request failed"]);
 
   await page.keyboard.press("Escape");
   await expect(panel).toBeHidden();

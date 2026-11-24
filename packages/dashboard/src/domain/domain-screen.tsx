@@ -5,8 +5,11 @@
 //   an install whose check needs a token     opens on the last run the install remembers; Check and Repair each ask for the token
 //
 // A token is asked for in a dialog, sent once, and held nowhere. The pieces of a run made here are shown until the screen is left.
+//
+// Copy status copies what the line and the table say, as plain text. It waits while a check is on its way, so the text is never of pieces the check is about to replace.
 
 import { Dialog as DialogParts } from "@base-ui/react/dialog";
+import { CopyIcon } from "lucide-react";
 import { type ReactNode, useMemo } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -18,13 +21,15 @@ import { type Domain, type DomainRun, type Ran, useDomain, useDomainPieces } fro
 import { PersonSteps } from "@/domain/person-steps";
 import { Pieces } from "@/domain/pieces";
 import { RunDialog } from "@/domain/run-dialog";
-import { StatusLine } from "@/domain/status-line";
+import { RAN, REPAIRED, StatusLine, sentenceOf, statusText, versionOf } from "@/domain/status-line";
 import type { Sent } from "@/domain/token-run";
 import { ToneMark } from "@/domain/tone-mark";
 import { answerOf, api, Refused } from "@/lib/api";
-import { sayDone, sayRefused } from "@/lib/notify";
+import { BOOT } from "@/lib/boot";
+import { copy, sayDone, sayRefused } from "@/lib/notify";
 import { shortMoment, wholeMoment } from "@/lib/sites";
 import { useChosenTimeZone } from "@/lib/timezone";
+import { IconButton } from "@/shared/icon-button";
 import { MiddleColumn, ScreenPage } from "@/shared/middle-column";
 import { useOnePress } from "@/dialog/one-press";
 import { HomeProblems } from "@/problems/home-problems";
@@ -39,8 +44,11 @@ const CHECKING = "Checking";
 /** What stands in place of a count when such an install's first check read nothing; why is said small beside it. */
 const UNREAD = "Not checked";
 
-/** What stands before the sentence of a problem a repair ended. */
-const REPAIRED = "Repaired:";
+/** The version the install runs, or `undefined` where the page was handed none it can read: the screen then names none. */
+const VERSION = versionOf(BOOT.version);
+
+/** What a copy of the status says when it worked, and when the browser copies nothing. */
+const COPIED = { done: "Status copied.", failed: "Not copied. The browser did not allow it." } as const;
 
 /** The run the install remembers. */
 type Last = NonNullable<Domain["last"]>;
@@ -56,7 +64,7 @@ interface Headline {
 function LastRun({ last }: { readonly last: Last }): ReactNode {
   return (
     <>
-      {last.run === "check" ? "Checked" : "Repaired"}{" "}
+      {RAN[last.run]}{" "}
       <time dateTime={new Date(last.ran_at).toISOString()} title={wholeMoment(last.ran_at)}>
         {shortMoment(last.ran_at)}
       </time>{" "}
@@ -113,10 +121,8 @@ function Mended({ sentences }: { readonly sentences: readonly string[] }): React
 
 /** Say what a run found, in the words of its count. */
 function sayRan(summary: Ran["summary"]): void {
-  const said = summary.line.endsWith(".") ? summary.line : `${summary.line}.`;
-
-  if (summary.tone === "good") sayDone(said);
-  else sayRefused(said);
+  if (summary.tone === "good") sayDone(sentenceOf(summary.line));
+  else sayRefused(sentenceOf(summary.line));
 }
 
 /** The line over the pieces. A check on its way, or one that read nothing, is said small beside the count of the pieces on show, and in the count's place where none are. */
@@ -136,11 +142,12 @@ function Opened({ domain }: { readonly domain: Domain }): ReactNode {
   const asks = useMemo(() => DialogParts.createHandle<DomainRun>(), []);
   const { ran, checking } = pieces;
   const { line, tone, beside } = headlineOf(domain, pieces);
+  const status = { version: VERSION, kind: domain.words.kind, line, ran, failure: pieces.failure, asking: pieces.asking, mended: pieces.mended };
 
   const run = async (kind: DomainRun, sent: Sent): Promise<Refused | undefined> => {
     try {
       const done = await answerOf(api.domain[kind].$post({ json: { token: sent.token } }));
-      const shown = await pieces.take(kind, done);
+      const shown = await pieces.take(done);
       asks.close();
       sayRan(shown.summary);
 
@@ -155,6 +162,8 @@ function Opened({ domain }: { readonly domain: Domain }): ReactNode {
     const done = await pieces.check();
     if (done !== undefined) sayRan(done.summary);
   });
+  // Check and Copy status wait together: for a check on its way, and for a pressed one that still waits for the network.
+  const waits = checking || pressed;
 
   return (
     <>
@@ -163,10 +172,13 @@ function Opened({ domain }: { readonly domain: Domain }): ReactNode {
           <section aria-label="Domain" className="flex flex-col">
             {domain.words.line === null ? null : <p className="shrink-0 px-6 pb-3 text-muted-foreground max-md:px-4">{domain.words.line}</p>}
             <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 px-6 pb-3 max-md:px-4">
-              <StatusLine line={line} tone={tone} beside={beside} />
+              <StatusLine line={line} tone={tone} beside={beside} version={VERSION} />
               <div className="ml-auto flex items-center gap-2">
+                <IconButton label="Copy status" disabled={waits} onClick={() => void copy(statusText(status), COPIED)}>
+                  <CopyIcon />
+                </IconButton>
                 {domain.checks_alone ? (
-                  <Button variant="outline" disabled={checking || pressed} onClick={check}>
+                  <Button variant="outline" disabled={waits} onClick={check}>
                     {checking ? <Spinner data-icon="inline-start" aria-hidden="true" /> : null}
                     Check
                   </Button>

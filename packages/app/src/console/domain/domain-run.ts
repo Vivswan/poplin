@@ -40,6 +40,9 @@ const WRITTEN: readonly DomainState[] = ["created", "changed"];
 /** What a form asks of the plug: `check` reads, `repair` changes. */
 export type DomainRun = "check" | "repair";
 
+/** A reading that is a table, as the install keeps it: with which run it was, and the moment it remembers the run under, in milliseconds since the epoch. */
+export type KeptReading = Extract<DomainReading, { readonly ok: true }> & { readonly run: DomainRun; readonly ran_at: number };
+
 /** One run, as a form asked for it. */
 interface Asked {
   /** Whether to read or to change. */
@@ -136,11 +139,12 @@ function askPlug(plug: DomainPlug, asked: Asked, token: string, settings: ReadSe
 /**
  * Run the plug once and keep the run: its pieces as the last check of the domain, in place of the run kept before, and its audit entry. A problem the run shows as mended ends with it.
  *
- * @returns the plug's reading with the token taken out of every text. A reading that is no table, such as a refused token, keeps nothing, so the run kept before stays the last one.
+ * @returns the plug's reading with the token taken out of every text, and for a table which run it was and the moment the install keeps it under.
+ *   A reading that is no table, such as a refused token, keeps nothing, so the run kept before stays the last one.
  *   Nothing kept ever holds the token. A repair that left the login standing settles a change of the users while the users it carried are the stored ones
  * @throws {Error} the plug or the database failed; nothing was kept
  */
-export async function runDomain(plug: DomainPlug, install: Pick<Install, "database" | "now">, asked: Asked): Promise<DomainReading> {
+export async function runDomain(plug: DomainPlug, install: Pick<Install, "database" | "now">, asked: Asked): Promise<KeptReading | Extract<DomainReading, { readonly ok: false }>> {
   // A change of the users after the run began, or another try at the provider meanwhile, still waits after it.
   const began = install.now();
   let read: DomainSettings | undefined;
@@ -157,7 +161,8 @@ export async function runDomain(plug: DomainPlug, install: Pick<Install, "databa
   const pieces = reading.rows.map(remembered);
   const detail = asked.unasked === true ? null : { run: asked.run, from: FROM, ...byState(reading) };
   const carried = usersAfter(asked.run, reading.rows, pieces, read?.users);
-  await keepDomainRun(install, { ran_at: install.now(), by: asked.by, run: asked.run, pieces }, detail, carried === undefined ? undefined : { users: carried, since: began });
+  const ranAt = install.now();
+  await keepDomainRun(install, { ran_at: ranAt, by: asked.by, run: asked.run, pieces }, detail, carried === undefined ? undefined : { users: carried, since: began });
 
-  return reading;
+  return { ...reading, run: asked.run, ran_at: ranAt };
 }

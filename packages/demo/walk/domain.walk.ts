@@ -1,8 +1,9 @@
 // The Domain screen of an install that holds what reads its provider: what it shows as it opens, when it checks again by itself, and that Check asks for nothing. And a problem a repair mends, which leaves once the repair is done.
+// And the copy of the whole status, as plain text.
 
 import { expect, type Locator, type Page } from "@playwright/test";
 
-import { arrive, said, screenHeading, test, toSection } from "./visit";
+import { arrive, ownClipboard, said, screenHeading, test, toSection } from "./visit";
 
 /** How far the reader's clock is moved on between two openings of the screen: past the 10 minutes a check is gone by. */
 const PAST_FRESH = "11:00";
@@ -59,4 +60,25 @@ test("a problem a repair mends stays through a check, and leaves the Domain scre
 
   await expect(problem).toHaveCount(0);
   await expect(sections.getByRole("link", { name: "Domain", exact: true })).toBeVisible();
+});
+
+// Drift: a status could only be retyped into a report; or the copy would hold the pieces to repair alone, a count over a problem it does not name, or who ran the check, which is a user's email.
+test("Copy status copies Domain's line, the problem it counts, and every piece of the table, those in place and those to repair, as plain text that names nobody", async ({ page }) => {
+  await arrive(page);
+  await toSection(page, "Domain");
+  await page.getByRole("button", { name: "Check", exact: true }).click();
+  // The line names who ran the check once the screen holds the run the install then remembers: the copy says when that run was.
+  await expect(domainLine(page, "3 to repair")).toContainText("Checked");
+  await expect(domainLine(page, "3 to repair")).toContainText("@");
+  const shown = await page.getByRole("table", { name: "Pieces", exact: true }).locator("tbody tr").evaluateAll((rows) => rows.map((row) => [...row.querySelectorAll("td")].slice(0, 3).map((cell) => cell.textContent ?? "")));
+
+  const copied = await ownClipboard(page);
+  await page.getByRole("button", { name: "Copy status", exact: true }).click();
+  await expect(said(page, "Status copied.")).toBeVisible();
+  const text = (await copied()) ?? "";
+  const [line, problem, ...pieces] = text.split("\n");
+
+  expect([line, problem]).toEqual([expect.stringMatching(/^poplin \S+, under a domain\. Checked \d{4}-\d{2}-\d{2}T\d{2}:\d{2}Z\. 3 to repair\.$/), `To repair: ${MENDED_BY_REPAIR}`]);
+  expect(pieces.map((piece) => piece.split(/ {2,}/))).toEqual(shown.map(([piece, state, detail]) => [state, piece, detail]));
+  expect([pieces.some((piece) => piece.startsWith("unchanged ")), pieces.some((piece) => piece.startsWith("missing ")), text.includes("@")]).toEqual([true, true, false]);
 });

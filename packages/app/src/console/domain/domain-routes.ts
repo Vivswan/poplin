@@ -51,7 +51,7 @@ async function ran(context: Context<Shared, string, { out: { json: v.InferOutput
 
     const kept = await domainState(install, actor);
 
-    return context.json(runDone(run, reading, kept.ok && kept.waits && !selfCarried(context)));
+    return context.json(runDone(reading, kept.ok && kept.waits && !selfCarried(context)));
   } catch (error) {
     // The run is kept after the plug has answered: a database that takes no more today refuses it, whatever the plug did.
     if (!(error instanceof AllowanceSpent)) throw error;
@@ -74,7 +74,7 @@ export const domainRoutes = new Hono<Shared>()
 
     const form = { tokenRights, tokenLink, tokenOptional, tokenNote };
 
-    return context.json({ ok: true as const, form, words: { thing: words.thing, line: words.line }, checks_alone: plug.ownCheck !== undefined, last: keptAnswer({ ...kept, waits: kept.waits && !selfCarried(context) }) });
+    return context.json({ ok: true as const, form, words: { thing: words.thing, line: words.line, kind: words.kind }, checks_alone: plug.ownCheck !== undefined, last: keptAnswer({ ...kept, waits: kept.waits && !selfCarried(context) }) });
   })
   .post("/domain/check", vValidator("json", CHECK, refuseInvalid), (context) => ran(context, "check"))
   .post("/domain/repair", vValidator("json", RUN, refuseInvalid), (context) => ran(context, "repair"));

@@ -112,6 +112,17 @@ export function said(page: Page, words: string): Locator {
 }
 
 /**
+ * Give the page a clipboard of the walk's own: an engine may let no page write to the real one, and the text is what matters.
+ *
+ * @returns a read of the text the page copied last, `null` before any
+ */
+export async function ownClipboard(page: Page): Promise<() => Promise<string | null>> {
+  await page.evaluate(() => Object.defineProperty(navigator, "clipboard", { value: { writeText: async (text: string) => void document.body.setAttribute("data-copied", text) }, configurable: true }));
+
+  return () => page.locator("body").getAttribute("data-copied");
+}
+
+/**
  * Open the demo as a browser that never saw it does, and wait for its sites.
  *
  * @returns what the dashboard calls each sample site it lists: the site's title, or its name where it has none

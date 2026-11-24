@@ -1,4 +1,5 @@
-// What the Domain screen is answered after a run: every piece as a row to draw, one line that counts what is left, and the steps only a person can do. A run that read no table is answered as a refusal that names the box it is about.
+// What the Domain screen is answered after a run: which run it was and when, every piece as a row to draw, one line that counts what is left, and the steps only a person can do.
+// A run that read no table is answered as a refusal that names the box it is about.
 //
 //   2 to repair                      or, with nothing to repair after the users or the choice of who gets the alerts changed: Users or alerts changed. Press Repair.
 //   Piece         State          Detail
@@ -11,8 +12,8 @@ import type { DomainCheck } from "@poplin/core/src/records/domain-check";
 import { domainStateWords } from "@poplin/core/src/records/domain-states";
 
 import { refusalSentence } from "../notices";
-import type { DomainRun } from "./domain-run";
-import type { DomainReading, DomainRow, DomainState, DomainStep } from "./records";
+import type { DomainRun, KeptReading } from "./domain-run";
+import type { DomainRow, DomainState, DomainStep } from "./records";
 
 /** How each state is read: `good` stands, `bad` needs work, `idle` was left as it is and is no failure. Its words are core's. */
 const TONES: Readonly<Record<DomainState, ShownRow["tone"]>> = {
@@ -90,6 +91,12 @@ interface RunDone {
   /** The run read its table. */
   readonly ok: true;
 
+  /** Whether it only read. */
+  readonly run: DomainRun;
+
+  /** When the run was, in milliseconds since the epoch. */
+  readonly ran_at: number;
+
   /** Every piece, in the run's order. */
   readonly rows: readonly ShownRow[];
 
@@ -161,8 +168,15 @@ function count(rows: readonly DomainRow[], states: readonly DomainState[]): numb
   return rows.filter((row) => states.includes(row.state)).length;
 }
 
-/** A run goes on past a row that failed for a right and stops at any other failure, and the rows alone do not say which: the line counts what is left and claims neither. An optional piece that is not set up is no work left over. */
-function summaryOf(run: DomainRun, rows: readonly DomainRow[], waits: boolean): Pick<RunDone, "summary" | "waiting" | "repaired"> {
+/**
+ * Count the rows of a run in one line.
+ *
+ * A run goes on past a row that failed for a right and stops at any other failure, and the rows alone do not say which: the line counts what is left and claims neither. An optional piece that is not set up is no work left over.
+ *
+ * @param waits - whether the users changed with no repair after the run
+ * @returns the line, with how many rows wait for a repair and how many a repair changed where the line counts those
+ */
+export function summaryOf(run: DomainRun, rows: readonly DomainRow[], waits: boolean): Pick<RunDone, "summary" | "waiting" | "repaired"> {
   const failed = count(rows, ["failed"]);
   if (failed > 0) return { summary: { line: `${failed + count(rows, UNDONE)} not done`, tone: "bad" }, waiting: 0, repaired: 0 };
 
@@ -215,12 +229,12 @@ export function runRefusal(code: string, tokenFor: string): RunRefused {
 /**
  * Write a run that read its table as a screen draws it.
  *
- * @param reading - the run's reading, with the token already taken out of every text
+ * @param reading - the run's reading as the install kept it, with the token already taken out of every text
  * @param waits - whether the users changed with no repair after it, this run included
- * @returns the rows in the run's order, the line that counts them, and the steps only a person can do
+ * @returns which run it was and when, the rows in the run's order, the line that counts them, and the steps only a person can do
  */
-export function runDone(run: DomainRun, reading: Extract<DomainReading, { readonly ok: true }>, waits: boolean): RunDone {
+export function runDone(reading: KeptReading, waits: boolean): RunDone {
   const rows = reading.rows.map((row) => ({ piece: row.object, state: domainStateWords(row.state), tone: TONES[row.state], detail: row.detail }));
 
-  return { ok: true, rows, steps: reading.steps, ...summaryOf(run, reading.rows, waits) };
+  return { ok: true, run: reading.run, ran_at: reading.ran_at, rows, steps: reading.steps, ...summaryOf(reading.run, reading.rows, waits) };
 }
