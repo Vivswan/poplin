@@ -20,9 +20,9 @@ Or install the skill yourself, then ask the agent to set poplin up. Have Node.js
 npx skills add Vivswan/poplin
 ```
 
-It asks what it needs, such as which agents get the skill, and whether for this folder or for you. `npx skills add Vivswan/poplin -g -y` skips those questions: `-g` installs for you, in every folder, and `-y` takes the defaults for the rest.
+It offers two skills: `poplin` is enough for an agent that runs commands, and `poplin-mcp` also starts poplin's MCP server in Claude Code.
 
-The skill is enough for an agent that runs commands: without poplin's MCP server, it publishes with `npx poplin` itself.
+It asks what else it needs, such as which agents get them, and whether for this folder or for you. `npx skills add Vivswan/poplin -g -y` skips the questions and takes both: `-g` installs for you, in every folder, and `-y` takes the defaults for the rest.
 
 ## What It Does
 

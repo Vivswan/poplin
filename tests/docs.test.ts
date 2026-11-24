@@ -37,6 +37,15 @@ const SKILL_PAGE = "skills/poplin/README.md";
 /** The package whose manifest names the repository it is published from. */
 const PACKAGE = "packages/cli/package.json";
 
+/** The file that lists the plugin, under the marketplace's own name. */
+const MARKETPLACE = ".claude-plugin/marketplace.json";
+
+/** The manifest of the add-on that Claude Code loads as a plugin from a skills folder. */
+const ADD_ON = "skills/poplin-mcp/.claude-plugin/plugin.json";
+
+/** What Claude Code writes after the `@` of a plugin it loads from a skills folder. */
+const SKILLS_FOLDER = "skills-dir";
+
 /** How a page that is read outside the repository writes the address of a guide page: the page on GitHub. */
 const GUIDE_ON_GITHUB = "https://github.com/Vivswan/poplin/blob/main/";
 
@@ -95,6 +104,15 @@ const FLAG = /^(--\S+)/;
 /** A line that installs the skill with the skills CLI, after a prompt when one is there; the repository it names is the first group, empty when it names none. */
 const SKILL_INSTALL = /^\s*(?:\$\s+)?npx\s+skills\s+add\b\s*(\S*)/;
 
+/** A line that adds this repository to Claude Code as a marketplace, read the same way. */
+const MARKETPLACE_ADD = /^\s*(?:\$\s+)?claude\s+plugin\s+marketplace\s+add\b\s*(\S*)/;
+
+/** A line of Claude Code's that installs a plugin from a marketplace, or removes one; the plugin it names is the first group, empty when it names none. */
+const PLUGIN_FROM_MARKETPLACE = /^\s*(?:\$\s+)?claude\s+plugin\s+(?:install|uninstall)\b\s*(\S*)/;
+
+/** A line of Claude Code's that switches a plugin off, read the same way. */
+const PLUGIN_SWITCH = /^\s*(?:\$\s+)?claude\s+plugin\s+disable\b\s*(\S*)/;
+
 /** The host of a repository the skills CLI takes by its owner and name alone. */
 const GITHUB = "github.com";
 
@@ -147,9 +165,9 @@ function codeLines(page: Pick<Page, "spans" | "blocks">): string[] {
   return [...page.blocks.flatMap((block) => block.split("\n")), ...page.spans];
 }
 
-/** The repository each line that installs the skill names: an empty word for a line that names none, and nothing for any other line. */
-function skillSources(lines: readonly string[]): string[] {
-  return lines.flatMap((line) => SKILL_INSTALL.exec(line)?.[1] ?? []);
+/** What each line a pattern takes names in the pattern's first group: an empty word for a line that names nothing, and nothing for any other line. */
+function namedBy(pattern: RegExp, lines: readonly string[]): string[] {
+  return lines.flatMap((line) => pattern.exec(line)?.[1] ?? []);
 }
 
 /** The owner and the name of the repository at the address a package manifest gives, or nothing for one that is not on GitHub. */
@@ -285,14 +303,12 @@ describe("the pages a person reads", () => {
     expect(unique(named).filter((flag) => !flags.has(flag))).toEqual([]);
   });
 
-  test("every line that installs the skill names the repository the package is published from: without this a repository that moved leaves its old name in the line a person copies", async () => {
+  test("every line that installs the skill, or adds the plugin's marketplace, names the repository the package is published from: without this a repository that moved leaves its old name in the line a person copies", async () => {
     const manifest: { readonly repository: { readonly url: string } } = await Bun.file(join(ROOT, PACKAGE)).json();
-    const pages = await Promise.all([...PAGES, SKILL_PAGE].map((path) => parse(ROOT, path)));
-    const named = skillSources(pages.flatMap(codeLines));
+    const lines = (await Promise.all([...PAGES, SKILL_PAGE].map((path) => parse(ROOT, path)))).flatMap(codeLines);
 
-    expect(named.length).toBeGreaterThan(0);
-    expect<readonly (string | undefined)[]>(unique(named)).toEqual([ownerAndName(manifest.repository.url)]);
-    expect(skillSources(["$ npx skills  add  example-user/moved -g", "npx skills add", "npx skills list", "npx poplin ./report"])).toEqual(["example-user/moved", ""]);
+    for (const line of [SKILL_INSTALL, MARKETPLACE_ADD]) expect<readonly (string | undefined)[]>(unique(namedBy(line, lines))).toEqual([ownerAndName(manifest.repository.url)]);
+    expect(namedBy(SKILL_INSTALL, ["$ npx skills  add  example-user/moved -g", "npx skills add", "npx skills list", "npx poplin ./report"])).toEqual(["example-user/moved", ""]);
     expect(["git+https://github.com/example-user/site.git", "https://notgithub.com/example-user/site.git"].map(ownerAndName)).toEqual(["example-user/site", undefined]);
   });
 
@@ -301,10 +317,23 @@ describe("the pages a person reads", () => {
     const shown = await Promise.all(pages.map(async (path) => ({ path, lines: codeLines(await parse(ROOT, path)) })));
     const planted = [`Run \`${SKILL_COMMAND}\` or \`${SKILL_COMMAND} -g -y\`, never \`${SKILL_COMMAND}s\`.`, "<!-- `npx skills add example/hidden` -->", "```text", `$ ${SKILL_COMMAND}`, "$ npx skills add example/other", "```"].join("\n");
 
-    expect(shown.flatMap(({ lines }) => skillSources(lines)).length).toBeGreaterThan(0);
+    expect(shown.flatMap(({ lines }) => namedBy(SKILL_INSTALL, lines)).length).toBeGreaterThan(0);
     expect(shown.flatMap(({ path, lines }) => notAsPrinted(lines).map((line) => `${path}: ${line}`))).toEqual([]);
     // Drift: a guard that reads the raw text counts a line no reader sees, and one that reads a part of a line passes a repository whose name starts the same. The planted page is read and judged as the real ones are.
     expect(notAsPrinted(codeLines(pageOf(planted)))).toEqual(["npx skills add example/other", `${SKILL_COMMAND}s`]);
+  });
+
+  test("every line of Claude Code's installs a plugin the marketplace lists, and switches off one this repository makes: without this a renamed plugin or marketplace stays in a line a person copies, and the line finds nothing", async () => {
+    const marketplace: { readonly name: string; readonly plugins: readonly { readonly name: string }[] } = await Bun.file(join(ROOT, MARKETPLACE)).json();
+    const addOn: { readonly name: string } = await Bun.file(join(ROOT, ADD_ON)).json();
+    const listed = marketplace.plugins.map((plugin) => `${plugin.name}@${marketplace.name}`);
+    const loaded = [...listed, `${addOn.name}@${SKILLS_FOLDER}`];
+    const lines = (await Promise.all([...PAGES, SKILL_PAGE].map((path) => parse(ROOT, path)))).flatMap(codeLines);
+
+    expect(unique(namedBy(PLUGIN_FROM_MARKETPLACE, lines))).toEqual(listed);
+    expect(unique(namedBy(PLUGIN_SWITCH, lines)).filter((plugin) => !loaded.includes(plugin))).toEqual([]);
+    expect(namedBy(PLUGIN_FROM_MARKETPLACE, ["claude plugin install example@market", "claude plugin uninstall", "claude plugin disable example@market", "claude plugin list"])).toEqual(["example@market", ""]);
+    expect(namedBy(PLUGIN_SWITCH, ["claude plugin disable example@skills-dir", "claude plugin install example@market"])).toEqual(["example@skills-dir"]);
   });
 
   test("every word written like a tool, a code, a setting, or a kind of problem is one: without this a renamed one stays in a page", async () => {

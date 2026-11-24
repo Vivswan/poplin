@@ -56,12 +56,14 @@ It prints `Logged out of` and the install's URL. On the machine of step 1, run i
 | the stored login                       | on each machine you logged in                        | `npx poplin logout`                                                         |
 | a login in two variables              | only if you set `POPLIN_SERVER` and `POPLIN_TOKEN` yourself, as a build server does | delete the two lines where you set them, before the logout, and open a new terminal |
 | an agent's own login                  | only if you set `POPLIN_CONFIG_DIR` for the agent yourself | `npx poplin logout` with that variable set; then delete the folder it names |
-| poplin's tools in your agent          | the MCP server named `poplin`                         | ask the agent: `Remove the poplin MCP server from your configuration.` Then restart it |
+| poplin's tools in your agent          | the MCP server named `poplin`, where a setup added it | ask the agent: `Remove the poplin MCP server from your configuration.` Then restart it |
+| poplin's skills in your agent         | only if you ran `npx skills add Vivswan/poplin`       | `npx skills remove`, with `-g` where you installed them for you: it asks which |
+| poplin's plugin in Claude Code        | only if you ran `claude plugin install poplin@poplin` | `claude plugin uninstall poplin@poplin`                                     |
 | poplin installed with npm             | only if you ran `npm install -g poplin`               | `npm uninstall -g poplin`                                                   |
 
 While the two variables are set, `poplin logout` works on that login and leaves the stored one on the machine. So their lines go first. `poplin logout --dry-run` says which login a logout would end, and ends none.
 
-`npx` keeps the copy it downloaded in npm's own cache. It runs only when you type the command, and there is nothing to do about it.
+`npx` keeps the copy it downloaded in npm's own cache. With the rows above done, it runs only when you type the command, and there is nothing to do about it.
 
 ## 3. Look first
 

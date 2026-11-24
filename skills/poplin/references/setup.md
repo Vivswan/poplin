@@ -387,6 +387,15 @@ npx poplin doctor
 
 ## 5. Add the MCP server to your own configuration
 
+**You already have the poplin tools, `list_sites` among them? Leave this step out, and go to step 6.** A plugin, the add-on installed beside this skill, or an earlier setup added the server. A second one would show every tool twice.
+
+**In Claude Code, look before you add.** `claude plugin list` names `poplin@poplin` or `poplin-mcp@skills-dir` where the plugin or the add-on is installed, each with its status.
+
+| Its status        | Means                              | You                                                     |
+| ----------------- | ---------------------------------- | ------------------------------------------------------- |
+| enabled or loaded | its tools come with a restart      | ask the user for one, as below, and add nothing         |
+| disabled          | the user switched it off           | say so, add nothing, and do step 6 with the command     |
+
 The server has one name, `poplin`, one command, `npx`, and two arguments, `poplin mcp`. [`mcp-server.md`](mcp-server.md) says how each kind of agent adds it.
 
 Edit your own configuration only, and only after the yes of step 1. The tools may not appear until you are restarted: if so, tell the user, and do step 6 with the command.
