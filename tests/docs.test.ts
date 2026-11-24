@@ -1,4 +1,5 @@
-// Scope: the pages a person reads name only commands, flags, tools, tool inputs, refusal codes, and settings that exist; every link into the guide leads to a page and a heading of it; the guide's folders are ranked. Not the prose.
+// Scope: the pages a person reads name only commands, flags, tools, tool inputs, refusal codes, and settings that exist, and install the skill from this repository;
+// every link into the guide leads to a page and a heading of it; the guide's folders are ranked. Not the prose.
 
 import { describe, expect, test } from "bun:test";
 import { dirname, join, normalize } from "node:path";
@@ -27,6 +28,12 @@ const PAGES: readonly string[] = ["README.md", ...GUIDE_PAGES, "packages/cli/REA
 
 /** The pages outside the guide that link into it. */
 const LINKING_PAGES: readonly string[] = ["README.md", "packages/providers/cloudflare/README.md", "skills/poplin/references/setup.md"];
+
+/** The skill's own page for a person, which gives the line that installs the skill as the pages above do. */
+const SKILL_PAGE = "skills/poplin/README.md";
+
+/** The package whose manifest names the repository it is published from. */
+const PACKAGE = "packages/cli/package.json";
 
 /** How a page that is read outside the repository writes the address of a guide page: the page on GitHub. */
 const GUIDE_ON_GITHUB = "https://github.com/Vivswan/poplin/blob/main/";
@@ -80,6 +87,12 @@ const SNAKE_WORD = /^[a-z]+(?:_[a-z]+)+$/;
 /** A span that opens with a flag: the flag is its first word. */
 const FLAG = /^(--\S+)/;
 
+/** A line that installs the skill with the skills CLI, after a prompt when one is there; the repository it names is the first group, empty when it names none. */
+const SKILL_INSTALL = /^\s*(?:\$\s+)?npx\s+skills\s+add\b\s*(\S*)/;
+
+/** The host of a repository the skills CLI takes by its owner and name alone. */
+const GITHUB = "github.com";
+
 /** A span that holds the input of a tool as JSON. */
 const JSON_SPAN = /^\{.*\}$/;
 
@@ -119,11 +132,26 @@ function unique(values: readonly string[]): string[] {
   return [...new Set(values)].sort();
 }
 
+/** Every line a page writes as code: each line of its fenced blocks, and each code span. */
+function codeLines(page: Pick<Page, "spans" | "blocks">): string[] {
+  return [...page.blocks.flatMap((block) => block.split("\n")), ...page.spans];
+}
+
+/** The repository each line that installs the skill names: an empty word for a line that names none, and nothing for any other line. */
+function skillSources(lines: readonly string[]): string[] {
+  return lines.flatMap((line) => SKILL_INSTALL.exec(line)?.[1] ?? []);
+}
+
+/** The owner and the name of the repository at the address a package manifest gives, or nothing for one that is not on GitHub. */
+function ownerAndName(address: string): string | undefined {
+  const { hostname, pathname } = new URL(address);
+
+  return hostname === GITHUB ? pathname.slice(1).replace(/\.git$/, "") : undefined;
+}
+
 /** Every command line of a page: the ones in its fenced blocks, and the ones a code span holds. */
 function commandLines(page: Pick<Page, "spans" | "blocks">): string[] {
-  const fenced = page.blocks.flatMap((block) => block.split("\n"));
-
-  const lines = [...fenced, ...page.spans].filter((line) => !VERSION_LINE.test(line));
+  const lines = codeLines(page).filter((line) => !VERSION_LINE.test(line));
 
   return unique(lines.flatMap((line) => COMMAND_LINE.exec(line)?.[1]?.replace(AFTER_COMMAND, "") ?? []));
 }
@@ -238,6 +266,17 @@ describe("the pages a person reads", () => {
 
     expect(named.length).toBeGreaterThan(0);
     expect(unique(named).filter((flag) => !flags.has(flag))).toEqual([]);
+  });
+
+  test("every line that installs the skill names the repository the package is published from: without this a repository that moved leaves its old name in the line a person copies", async () => {
+    const manifest: { readonly repository: { readonly url: string } } = await Bun.file(join(ROOT, PACKAGE)).json();
+    const pages = await Promise.all([...PAGES, SKILL_PAGE].map((path) => parse(ROOT, path)));
+    const named = skillSources(pages.flatMap(codeLines));
+
+    expect(named.length).toBeGreaterThan(0);
+    expect<readonly (string | undefined)[]>(unique(named)).toEqual([ownerAndName(manifest.repository.url)]);
+    expect(skillSources(["$ npx skills  add  example-user/moved -g", "npx skills add", "npx skills list", "npx poplin ./report"])).toEqual(["example-user/moved", ""]);
+    expect(["git+https://github.com/example-user/site.git", "https://notgithub.com/example-user/site.git"].map(ownerAndName)).toEqual(["example-user/site", undefined]);
   });
 
   test("every word written like a tool, a code, a setting, or a kind of problem is one: without this a renamed one stays in a page", async () => {

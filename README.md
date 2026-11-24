@@ -45,6 +45,16 @@ It acts as you, with the login the setup saves on your machine.
 | no install yet | makes one with you: your own copy of poplin, in your Cloudflare account           |
 | an install     | connects itself to it, and adds poplin's tools to itself                          |
 
+Or install the skill yourself, then ask the agent to set poplin up. Have Node.js 24 or higher on the machine first, as poplin needs:
+
+```sh
+npx skills add Vivswan/poplin
+```
+
+It asks what it needs, such as which agents get the skill, and whether for this folder or for you. `npx skills add Vivswan/poplin -g -y` skips those questions: `-g` installs for you, in every folder, and `-y` takes the defaults for the rest.
+
+The skill is enough for an agent that runs commands: without poplin's MCP server, it publishes with `npx poplin` itself.
+
 [With an agent](docs/start/with-an-agent.md) shows who does what. If you are the agent: the skill is [`skills/poplin/SKILL.md`](skills/poplin/SKILL.md).
 
 ## Install

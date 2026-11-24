@@ -14,6 +14,16 @@ With no install yet, the agent makes one with you: it asks for a domain or none 
 
 The account token never passes through the chat: the agent never sees it. It acts as you, with the login stored on this machine, and adds poplin's tools to its own configuration under the one yes it asks for at the start.
 
+Or install the skill yourself, then ask the agent to set poplin up. Have Node.js 24 or higher on the machine first, as poplin needs:
+
+```sh
+npx skills add Vivswan/poplin
+```
+
+It asks what it needs, such as which agents get the skill, and whether for this folder or for you. `npx skills add Vivswan/poplin -g -y` skips those questions: `-g` installs for you, in every folder, and `-y` takes the defaults for the rest.
+
+The skill is enough for an agent that runs commands: without poplin's MCP server, it publishes with `npx poplin` itself.
+
 ## What It Does
 
 - **Publishes with one call**: a folder with an `index.html`, or one HTML file, becomes a site with its own address
