@@ -2,7 +2,7 @@
 
 import { expect, type Page } from "@playwright/test";
 
-import { arrive, FIRST_LOAD_MS, openPanel, said, siteNames, TRASH, test, trash } from "./visit";
+import { arrive, FIRST_LOAD_MS, openPanel, said, siteNames, TRASH, test, toSection, trash } from "./visit";
 
 /** The sample site that starts in the trash, by its title and by its name. */
 const TRASHED = { title: "Notes from the offsite", name: "old-notes" } as const;
@@ -85,6 +85,7 @@ test("a double click on Approve approves the login once, and says so", async ({ 
 // Drift: a question's button is still drawn while the question fades, and took the second press of a double click: the update was started twice, and the line said that one "was tried in this minute already".
 test("a double click on the button of a question answers it once: one update is started", async ({ page }) => {
   await arrive(page);
+  await toSection(page, "Settings");
   await page.getByRole("button", { name: "Update now", exact: true }).click();
   const sent = changesOf(page);
 

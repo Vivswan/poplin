@@ -20,8 +20,11 @@ const RESET_REFUSED = "The sample data was not reset. Try again.";
 /** WebKit's line for a request by script that ended with no answer, which it reports as an error of the page. The address is the request's. */
 const NO_ANSWER = /^Fetch API cannot load (\S+) due to access control checks\.$/m;
 
-/** The name of the button that opens the sections on a narrow screen: it says how many problems the sections hold, where they hold any. */
-export const SECTIONS_BUTTON = /^Sections(, \d+ problems?)?$/;
+/** What a section's link says after the section's name, where the section is marked: how many problems its screen holds, or that a newer release is out. */
+const MARK = String.raw`\d+ problems?|update available`;
+
+/** The name of the button that opens the sections on a narrow screen: it carries the mark of all sections together, where they have one. */
+export const SECTIONS_BUTTON = new RegExp(`^Sections(, (${MARK}))?$`);
 
 /** The address of the Sites screen when it shows the trash. */
 export const TRASH = "./?view=trash";
@@ -134,12 +137,12 @@ export async function arrive(page: Page): Promise<string[]> {
   return siteNames(page).allTextContents();
 }
 
-/** Go to a section by its entry at the side, which a narrow screen keeps behind a button. A section whose screen holds a problem says how many after its name. */
+/** Go to a section by its entry at the side, which a narrow screen keeps behind a button. A section that is marked says so after its name. */
 export async function toSection(page: Page, label: string): Promise<void> {
   const behind = onPage(page, "button", { name: SECTIONS_BUTTON });
   if (await behind.isVisible()) await behind.click();
 
-  await onPage(onPage(page, "navigation", { name: "Sections", exact: true }), "link", { name: new RegExp(`^${label}( \\d+ problems?)?$`) }).click();
+  await onPage(onPage(page, "navigation", { name: "Sections", exact: true }), "link", { name: new RegExp(`^${label}( (${MARK}))?$`) }).click();
 }
 
 /** Move a site to the trash from its panel, on the Sites screen, and wait until the dashboard says so and the site has left the list. */

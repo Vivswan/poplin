@@ -56,6 +56,9 @@ interface SettingFrameProps {
   /** `true` for a switch: on a phone it stays beside its name, where a field goes under it. */
   readonly beside?: boolean;
 
+  /** `true` for a row whose name and control start at one height in a column of middle width too, where they else stand at each other's middle: a row whose control can grow lines of its own under it. */
+  readonly top?: boolean;
+
   /** `true` for a setting that does nothing on this install: its control takes no change. */
   readonly idle?: boolean;
 }
@@ -132,6 +135,7 @@ export function SettingFrame({
   under,
   refused = false,
   beside = false,
+  top = false,
   idle = false,
 }: SettingFrameProps): ReactNode {
   const sentences = says.filter((sentence) => sentence !== "");
@@ -145,7 +149,8 @@ export function SettingFrame({
       className={cn(
         "-mx-3 flex gap-x-6 gap-y-2 rounded-lg px-3 py-2.5 motion-safe:transition-colors",
         beside ? "items-center justify-between" : "flex-col",
-        "@[480px]:grid @[480px]:grid-cols-[minmax(0,1fr)_16.5rem] @[480px]:items-center @[600px]:grid-cols-[minmax(0,1fr)_19rem] @[600px]:items-start",
+        "@[480px]:grid @[480px]:grid-cols-[minmax(0,1fr)_16.5rem] @[600px]:grid-cols-[minmax(0,1fr)_19rem]",
+        top ? "@[480px]:items-start" : "@[480px]:items-center @[600px]:items-start",
         marked && "bg-muted/60",
       )}
     >

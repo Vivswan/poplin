@@ -44,7 +44,8 @@ for (const size of SCREENS) {
       await arrive(page);
       const sections = page.getByRole("button", { name: SECTIONS_BUTTON });
       const phone = await sections.isVisible();
-      await toSection(page, "Settings");
+      // Settings is opened by its own address, at its top: its link at the side leads to the row of the version while a newer release is out, far down the rows, where they would have moved with no wheel turned.
+      await page.goto("settings");
       const rows = page.getByRole("form", { name: "Settings", exact: true }).locator("div").first();
       await expect(page.getByRole("heading", { name: "New sites", exact: true })).toBeVisible();
 

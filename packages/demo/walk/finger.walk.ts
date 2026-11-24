@@ -10,7 +10,7 @@ const FINGER = 40;
 /** How far from a control's middle a finger still lands on it, in pixels: a pixel inside half a finger. */
 const REACH = FINGER / 2 - 1;
 
-/** The screens, each with the controls that were smaller: a button that opens a sheet, a menu, a dialog, or a hint, a link drawn as a button, a tab, and a field that sits in a group. */
+/** The screens, each with the controls that were smaller: a button that opens a sheet, a menu, a dialog, or a hint, a link drawn as a button, a tab, a field that sits in a group, and a small button of a row. */
 const SCREENS: readonly { readonly section: string; readonly controls: (page: Page) => readonly Locator[] }[] = [
   {
     section: "Sites",
@@ -39,7 +39,7 @@ const SCREENS: readonly { readonly section: string; readonly controls: (page: Pa
     section: "Domain",
     controls: (page) => [page.getByRole("button", { name: "Copy status", exact: true }), page.getByRole("button", { name: "Check", exact: true }), page.getByRole("button", { name: "Repair", exact: true })],
   },
-  { section: "Settings", controls: (page) => [page.getByRole("textbox", { name: "Requests per day", exact: true })] },
+  { section: "Settings", controls: (page) => [page.getByRole("textbox", { name: "Requests per day", exact: true }), page.getByRole("button", { name: "Update now", exact: true })] },
 ];
 
 /** The menus and lists a phone opens, each by its screen, the control that opens it, and the role of its lines: a list to choose one of, a list to tick in, and a menu of things to do. */
@@ -108,8 +108,11 @@ test.describe("on a phone, with a pointer that is not a finger", () => {
   test("a switch of Settings takes a press as far above, below and beside its middle as half a finger", async ({ page }) => {
     await arrive(page);
     await toSection(page, "Settings");
+    // Settings opens at the row of the version while a newer release is out, far under its first switch: a press lands only on what is in sight.
+    const first = page.getByRole("switch").first();
+    await first.scrollIntoViewIfNeeded();
 
-    const taken = await page.getByRole("switch").first().evaluate((drawn, reach) => {
+    const taken = await first.evaluate((drawn, reach) => {
       const box = drawn.getBoundingClientRect();
       const [across, down] = [box.left + box.width / 2, box.top + box.height / 2];
       const lands = (x: number, y: number): boolean => drawn.contains(document.elementFromPoint(x, y));

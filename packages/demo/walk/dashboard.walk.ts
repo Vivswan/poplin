@@ -81,12 +81,6 @@ const STOPS: readonly Stop[] = [
     shows: (page) => [screenHeading(page, "Sites"), siteName(page, SAMPLE.site)],
   },
   {
-    name: "the notes of the newer version, at the side",
-    only: "wide",
-    open: async () => {},
-    shows: (page) => [page.locator(`a[href="${RELEASES}"][target="_blank"][rel="noreferrer"]`, { hasText: "What changed" })],
-  },
-  {
     name: "Access, from the side",
     screen: "Access",
     open: (page) => toSection(page, "Access"),
@@ -136,6 +130,17 @@ const STOPS: readonly Stop[] = [
       page.getByRole("textbox", { name: "All sites together", exact: true }),
       page.getByRole("switch", { name: "Check for new versions", exact: true }),
     ],
+  },
+  {
+    name: "the notes of the newer version, in the row of the version",
+    open: async () => {},
+    shows: (page) => [page.locator("#setting-version").locator(`a[href="${RELEASES}"][target="_blank"][rel="noreferrer"]`, { hasText: "What changed" })],
+  },
+  {
+    name: "the question before an update, from the row of the version",
+    open: (page) => page.getByRole("button", { name: "Update now", exact: true }).click(),
+    shows: (page) => [question(page, /^Update to /)],
+    close: leaveBy("Cancel"),
   },
   {
     name: "Domain, from the side",
@@ -212,25 +217,6 @@ const STOPS: readonly Stop[] = [
         .getByRole("button", { name: /^Close/ })
         .click(),
     shows: (page) => [screenHeading(page, "Sites"), siteName(page, SAMPLE.site)],
-  },
-  {
-    name: "the question before an update, from the side",
-    only: "wide",
-    open: (page) => page.getByRole("button", { name: "Update now", exact: true }).click(),
-    shows: (page) => [question(page, /^Update to /)],
-    close: leaveBy("Cancel"),
-  },
-  {
-    name: "the notes of the newer version in the sections of a phone, and from there the question before an update",
-    only: "narrow",
-    open: async (page) => {
-      await page.getByRole("button", { name: SECTIONS_BUTTON }).click();
-      const sections = page.getByRole("dialog");
-      await expect(sections.locator(`a[href="${RELEASES}"][target="_blank"][rel="noreferrer"]`, { hasText: "What changed" })).toBeVisible();
-      await sections.getByRole("button", { name: "Update now", exact: true }).click();
-    },
-    shows: (page) => [question(page, /^Update to /)],
-    close: leaveBy("Cancel"),
   },
   {
     name: "the dialog that adds a user, with an email typed",
@@ -1023,7 +1009,8 @@ test("a screen that follows another one gives its title the focus and names the 
   await arrive(page);
   for (const size of [VIEWPORTS[0], PHONE]) {
     await page.setViewportSize(size);
-    for (const screen of ["Activity", "Settings", "Sites"]) {
+    // Settings is left out: while a newer release is out its link leads to the row of the version, where the start of the update takes the focus.
+    for (const screen of ["Activity", "Access", "Sites"]) {
       await toSection(page, screen);
       await expect(screenHeading(page, screen)).toBeFocused();
       await expect(page).toHaveTitle(`${screen} - poplin`);
@@ -1150,17 +1137,17 @@ for (const viewport of SMALL_PHONES) {
   test.describe(`on a phone of ${viewport.width}x${viewport.height}, in the sections`, () => {
     test.use({ viewport });
 
-    // Drift: the sheet of the sections would not scroll again, and on a screen shorter than what it holds the start of an update would lie under its edge, out of reach; or the button that closes the sheet would scroll away with its top.
-    test("the start of an update can be reached and pressed, by scrolling where the sheet is too short, with the way to close the sheet still in sight", async ({ page }) => {
+    // Drift: the sheet of the sections would not scroll again, and on a screen shorter than what it holds the way out of the login would lie under its edge, out of reach; or the button that closes the sheet would scroll away with its top.
+    test("the email, the last control of the sheet, can be reached and pressed, by scrolling where the sheet is too short, with the way to close the sheet still in sight", async ({ page }) => {
       await arrive(page);
       await page.getByRole("button", { name: SECTIONS_BUTTON }).click();
-      const start = page.getByRole("dialog").getByRole("button", { name: "Update now", exact: true });
+      const account = page.getByRole("dialog").getByRole("button", { name: /@/u });
 
-      await start.scrollIntoViewIfNeeded();
-      await expect(start).toBeInViewport({ ratio: 1 });
+      await account.scrollIntoViewIfNeeded();
+      await expect(account).toBeInViewport({ ratio: 1 });
       await expect(page.getByRole("dialog").getByRole("button", { name: "Close", exact: true })).toBeInViewport({ ratio: 1 });
-      await start.click();
-      await expect(question(page, /^Update to /)).toBeVisible();
+      await account.click();
+      await expect(page.getByRole("menuitem", { name: "Sign out", exact: true })).toBeVisible();
     });
   });
 }
@@ -1354,7 +1341,8 @@ test("a section whose screen holds a problem says so at the side, Usage lists wh
   const sections = page.getByRole("navigation", { name: "Sections", exact: true });
   await expect(sections.getByRole("link", { name: "Usage 2 problems", exact: true })).toBeVisible();
   await expect(sections.getByRole("link", { name: "Domain 1 problem", exact: true })).toBeVisible();
-  await expect(sections.getByRole("link", { name: "Settings", exact: true })).toBeVisible();
+  // A newer release is out, and it is no problem: Settings says so in other words than a screen with a problem.
+  await expect(sections.getByRole("link", { name: "Settings update available", exact: true })).toBeVisible();
 
   await toSection(page, "Usage");
   await rows(page, true, "Problems").getByText("A request failed", { exact: true }).click();

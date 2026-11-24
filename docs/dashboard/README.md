@@ -13,4 +13,4 @@ The screens of the dashboard.
 | [Usage](usage.md)         | what is used, beside each limit; the graph of visits            |
 | [Access](access.md)       | who can log in, this machine's login                            |
 | [Domain](domain.md)       | the Domain screen, Repair, the last check, the optional rules   |
-| [Settings](settings.md)   | the install's settings                                          |
+| [Settings](settings.md)   | the install's settings, and the version it runs                 |

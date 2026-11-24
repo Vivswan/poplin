@@ -170,6 +170,22 @@ describe("a read of the dashboard", () => {
     expect([result.current[0], again.result.current[0]]).toEqual([true, true]);
   });
 
+  // Drift: the row of the version alone reads the note, and it leaves with its screen. A note dropped five minutes later, as the library drops what no screen reads, would have the page offer again the update it started.
+  test("that only notes what this page did keeps its note for an hour that no screen reads it", () => {
+    const first = renderHook(() => useStarted(), { wrapper: inQueries });
+    act(() => first.result.current[1]());
+    jest.useFakeTimers();
+    try {
+      first.unmount();
+      jest.advanceTimersByTime(3600 * SECOND);
+    } finally {
+      jest.useRealTimers();
+    }
+    const again = renderHook(() => useStarted(), { wrapper: inQueries });
+
+    expect(again.result.current[0]).toBe(true);
+  });
+
   // Drift: the graph's reads would be kept under another key than the one that gives them thirty minutes, and every look at the window would walk its rows again.
   test.each([
     ["29 minutes 59 seconds on", 1799 * SECOND, 1],
