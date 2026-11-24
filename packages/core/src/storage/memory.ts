@@ -1,21 +1,17 @@
 // An object store held in memory: the test double every core test runs against, behaving as the store contract says.
 
-import { compareUint8Arrays } from "uint8array-extras";
-
 import {
   type ByteSpan,
   checkBytes,
-  checkListOptions,
   checkWriteOptions,
   type Etag,
   type HeadResult,
-  type ListCursor,
   type ListOptions,
   type ListPage,
+  listHeld,
   type ObjectInfo,
   type ObjectKey,
   type ObjectStore,
-  type ObjectSummary,
   type ReadOptions,
   type ReadResult,
   resolveRange,
@@ -23,16 +19,9 @@ import {
   type WriteOptions,
 } from "./storage";
 
-const UTF8 = new TextEncoder();
-
 interface StoredObject {
   readonly info: ObjectInfo;
   readonly bytes: Uint8Array;
-}
-
-/** A listing ascends by the UTF-8 bytes of its keys, which is not the order of a string comparison. */
-function compareNames(left: string, right: string): number {
-  return compareUint8Arrays(UTF8.encode(left), UTF8.encode(right));
 }
 
 async function bufferBody(body: WriteBody): Promise<Uint8Array> {
@@ -59,18 +48,12 @@ function streamOf(bytes: Uint8Array): ReadableStream<Uint8Array> {
   });
 }
 
-function summaryOf(stored: StoredObject): ObjectSummary {
-  const { key, size, etag } = stored.info;
-
-  return { key, size, etag };
-}
-
 /**
  * An `ObjectStore` that keeps its objects in this instance and loses them with it.
  *
  * It differs from a store that hashes the content in one stated way: every write gets a fresh etag, equal bytes included.
  *
- * A list cursor is the last key of its page.
+ * A list cursor is the last key its page stands for, as `listHeld` makes it.
  */
 export class MemoryStore implements ObjectStore {
   readonly #objects = new Map<ObjectKey, StoredObject>();
@@ -140,17 +123,9 @@ export class MemoryStore implements ObjectStore {
    * @throws {TypeError} `prefix` holds a lone surrogate or is not in NFC
    */
   async list(options: ListOptions): Promise<ListPage> {
-    const limit = checkListOptions(options);
-    const { prefix, cursor } = options;
-    const listed = [...this.#objects.values()]
-      .filter((stored) => stored.info.key.startsWith(prefix))
-      .filter((stored) => cursor === undefined || compareNames(stored.info.key, cursor) > 0)
-      .sort((left, right) => compareNames(left.info.key, right.info.key));
-
-    const objects = listed.slice(0, limit).map(summaryOf);
-    const last = objects.at(-1);
-    if (last === undefined || listed.length <= limit) return { objects, more: false };
-
-    return { objects, more: true, cursor: last.key as string as ListCursor };
+    return listHeld(
+      [...this.#objects.values()].map((stored) => stored.info),
+      options,
+    );
   }
 }

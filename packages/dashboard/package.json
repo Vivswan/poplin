@@ -23,6 +23,8 @@
     "@tanstack/react-query": "5.107.1",
     "@tanstack/react-router": "1.170.46",
     "@tanstack/react-table": "9.3.1",
+    "@ui-sdk/core": "0.1.0-beta.16",
+    "@ui-sdk/react": "0.1.0-beta.16",
     "@visx/axis": "4.0.0",
     "@visx/event": "4.0.0",
     "@visx/grid": "4.0.0",

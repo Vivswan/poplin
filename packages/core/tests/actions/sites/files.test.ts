@@ -1,11 +1,12 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 
 import { beginPublish } from "../../../src/actions/publish/begin-publish";
-import { checkFilePath, fileKey, removeFiles } from "../../../src/actions/sites/files";
+import { publishSite } from "../../../src/actions/publish/publish";
+import { checkFilePath, fileKey, listFolder, removeFiles } from "../../../src/actions/sites/files";
 import type { SiteFolder } from "../../../src/records/site";
 import { MemoryStore } from "../../../src/storage/memory";
 import type { ObjectKey } from "../../../src/storage/storage";
-import { makeWorld, OWNER, PAGE_SHA256 } from "../support/actions-fixture";
+import { ADMIN, file, makeWorld, OWNER, PAGE_SHA256, STRANGER, type World } from "../support/actions-fixture";
 
 const FOLDER = "0123456789abcdef" as SiteFolder;
 
@@ -65,5 +66,78 @@ describe("removeFiles", () => {
 
     expect([left, kept]).toEqual([[`${FOLDER}/v2/`, `${FOLDER}/v3/`], [`${FOLDER}/v2/c.html`, `${FOLDER}/v3/a.html`, `${FOLDER}/v3/b.html`, `${FOLDER}/v3/c.html`]] as never);
     expect(await removeFiles(store, prefixes, 15)).toEqual([]);
+  });
+});
+
+describe("listFolder", () => {
+  /** A site whose first version holds folders in folders, and a file and a folder of one name; its second version, the live one, holds other files. Answers its id. */
+  async function nested(world: World): Promise<string> {
+    const first = ["index.html", "about", "about/team.html", "assets/app.css", "assets/img/logo.svg", "assets/img/photo.jpg", "z.txt"];
+    const published = await publishSite(world.install, OWNER, { name: "report", files: first.map((path) => file(path, path)) });
+    if (!published.ok) throw new Error(`the fixture site was refused: ${published.code}`);
+
+    const again = await publishSite(world.install, OWNER, { site: published.site.id, files: [file("index.html", "v2"), file("only-in-v2.txt", "x")] });
+    if (!again.ok) throw new Error(`the fixture's second version was refused: ${again.code}`);
+
+    return published.site.id;
+  }
+
+  // Drift: the dashboard shows a site's files as a tree read one folder at a time; a page that held what lies inside a folder, named a folder twice, lost a row at a page's edge, or cost more than one listing
+  // would show a tree the site does not serve, or spend the day's listings on one press.
+  test("a folder of a kept version comes a page at a time, one listing each: the folders and the files right in it, each once by its path in the version, with the count of the whole version", async () => {
+    const world = await makeWorld();
+    const site = await nested(world);
+    const lists = spyOn(world.install.store, "list");
+    const seen: { folders: string[]; files: unknown[]; totals: number[] } = { folders: [], files: [], totals: [] };
+    let cursor: string | undefined;
+
+    do {
+      const page = await listFolder(world.install, OWNER, { site, version: 1, limit: 2, cursor });
+      if (!page.ok) throw new Error(`the listing was refused: ${page.code}`);
+
+      seen.folders.push(...page.folders);
+      seen.files.push(...page.files);
+      seen.totals.push(page.total);
+      cursor = page.next;
+      // Five rows are three pages of two: a walk that went on past them would never end on a cursor that came back.
+    } while (cursor !== undefined && seen.totals.length < 4);
+
+    expect([seen, lists.mock.calls.length]).toEqual([
+      { folders: ["about", "assets"], files: [{ path: "about", size: 5 }, { path: "index.html", size: 10 }, { path: "z.txt", size: 5 }], totals: [7, 7, 7] },
+      3,
+    ]);
+  });
+
+  // Drift: a folder inside a folder would be listed from the version's top, or with paths counted from itself, so its files would link to nothing; or the tree of the live version would show the files of an older one.
+  test.each([
+    ["a folder of the first version", { version: 1, folder: "assets" }, { folders: ["assets/img"], files: [{ path: "assets/app.css", size: 14 }], total: 7 }],
+    ["a folder inside that folder", { version: 1, folder: "assets/img" }, { folders: [], files: [{ path: "assets/img/logo.svg", size: 19 }, { path: "assets/img/photo.jpg", size: 20 }], total: 7 }],
+    ["the folder that shares a file's name", { version: 1, folder: "about" }, { folders: [], files: [{ path: "about/team.html", size: 15 }], total: 7 }],
+    ["the top of the live version", { version: 2 }, { folders: [], files: [{ path: "index.html", size: 2 }, { path: "only-in-v2.txt", size: 1 }], total: 2 }],
+    ["a folder the version does not hold", { version: 2, folder: "assets" }, { folders: [], files: [], total: 2 }],
+  ])("%s is listed by the paths its files have in the version, for an admin as for the owner", async (_what, asked, listed) => {
+    const world = await makeWorld();
+    const site = await nested(world);
+
+    expect([await listFolder(world.install, OWNER, { site, ...asked }), await listFolder(world.install, ADMIN, { site, ...asked })]).toEqual([
+      { ok: true, ...listed },
+      { ok: true, ...listed },
+    ]);
+  });
+
+  // Drift: a folder's path is the caller's text; one that was put into the prefix as it came would list another version, another site, or the whole bucket.
+  test.each([
+    ["a path that climbs to another version", OWNER, { version: 1, folder: "../v2" }, { ok: false, code: "bad_argument", about: "folder" }],
+    ["a path that ends in a slash", OWNER, { version: 1, folder: "assets/" }, { ok: false, code: "bad_argument", about: "folder" }],
+    ["a path with a backslash", OWNER, { version: 1, folder: "assets\\img" }, { ok: false, code: "bad_argument", about: "folder" }],
+    ["a version the site does not keep", OWNER, { version: 3 }, { ok: false, code: "no_such_version" }],
+    ["a page of more than a listing takes", OWNER, { version: 1, limit: 1001 }, { ok: false, code: "bad_argument", about: "limit" }],
+    ["a publisher that does not own the site", STRANGER, { version: 1 }, { ok: false, code: "not_found" }],
+  ] as const)("%s is refused, and nothing is listed", async (_what, actor, asked, refusal) => {
+    const world = await makeWorld();
+    const site = await nested(world);
+    const lists = spyOn(world.install.store, "list");
+
+    expect<unknown>([await listFolder(world.install, actor, { site, ...asked }), lists.mock.calls.length]).toEqual([refusal, 0]);
   });
 });

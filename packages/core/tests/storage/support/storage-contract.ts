@@ -335,6 +335,26 @@ function listing(label: string, makeStore: StoreFactory): void {
       expect(keysOf(await listEveryPage(store, { prefix }))).toEqual([...keys]);
     });
 
+    // Drift: a site's files are shown as a tree that is read one folder at a time; a store that listed what lies inside a folder, named a folder once for each file in it, or lost a row at a page's edge would show a tree the bucket does not hold.
+    test.each([1, 2, 3, MAX_LIST_LIMIT])(
+      "a shallow listing in pages of %d lists the objects right under the prefix and names each folder there once, both in UTF-8 byte order, with no page over its limit",
+      async (limit) => {
+        const store = await makeStore();
+        // `notes` is a file and a folder at once: a key is a text, and one may go on where another ends.
+        await seed(store, [...LISTED_KEYS, "blog/v1/notes", "blog/v1/notes/b.txt", "blog/v1/notes/deep/c.txt", "blog/v1/zebra/d.txt"]);
+
+        const pages = await listEveryPage(store, { prefix: "blog/v1/", limit, shallow: true });
+        const deep = await listEveryPage(store, { prefix: "blog/v1/", limit });
+
+        expect([keysOf(pages), pages.flatMap((page) => page.folders)]).toEqual([
+          ["blog/v1/index.html", "blog/v1/notes", "blog/v1/\uff5e", "blog/v1/\u{1f600}"],
+          ["blog/v1/notes/", "blog/v1/zebra/"],
+        ]);
+        expect(pages.every((page) => page.objects.length + page.folders.length <= limit)).toBe(true);
+        expect([keysOf(deep).length, deep.flatMap((page) => page.folders)]).toEqual([8, []]);
+      },
+    );
+
     test("a listing carries each object's size and etag, and an empty prefix lists the whole store", async () => {
       const store = await makeStore();
       const style = await store.write(objectKey("art/v1/style.css"), bytesOf("{}"), TEXT);

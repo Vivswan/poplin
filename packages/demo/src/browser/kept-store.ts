@@ -1,16 +1,13 @@
 // An object store in memory whose whole content can be handed out and put back, so a host that is stopped at any moment goes on where it was.
 
-import { compareUint8Arrays } from "uint8array-extras";
-
 import {
   checkBytes,
-  checkListOptions,
   checkWriteOptions,
   type Etag,
   type HeadResult,
-  type ListCursor,
   type ListOptions,
   type ListPage,
+  listHeld,
   type ObjectInfo,
   type ObjectKey,
   type ObjectStore,
@@ -20,8 +17,6 @@ import {
   type WriteBody,
   type WriteOptions,
 } from "../../../core/src/storage/storage";
-
-const UTF8 = new TextEncoder();
 
 /** One object as it is kept and saved. */
 interface KeptObject {
@@ -36,11 +31,6 @@ export interface SavedStore {
 
   /** How many writes the store has taken: the next etag follows from it, so no etag is ever given twice. */
   readonly writes: number;
-}
-
-/** A listing ascends by the UTF-8 bytes of its keys, which is not the order of a string comparison. */
-function compareKeys(left: string, right: string): number {
-  return compareUint8Arrays(UTF8.encode(left), UTF8.encode(right));
 }
 
 async function bytesOf(body: WriteBody): Promise<Uint8Array> {
@@ -60,7 +50,7 @@ async function bytesOf(body: WriteBody): Promise<Uint8Array> {
  *
  * An etag stays the same across a save, since a browser may hold a copy under it. Every write gets a fresh one, equal bytes included.
  *
- * A list cursor is the last key of its page.
+ * A list cursor is the last key its page stands for, as `listHeld` makes it.
  */
 export class KeptStore implements ObjectStore {
   readonly #objects = new Map<ObjectKey, KeptObject>();
@@ -126,17 +116,9 @@ export class KeptStore implements ObjectStore {
   }
 
   async list(options: ListOptions): Promise<ListPage> {
-    const limit = checkListOptions(options);
-    const { prefix, cursor } = options;
-    const listed = [...this.#objects.values()]
-      .map((kept) => kept.info)
-      .filter((info) => info.key.startsWith(prefix) && (cursor === undefined || compareKeys(info.key, cursor) > 0))
-      .sort((left, right) => compareKeys(left.key, right.key));
-
-    const objects = listed.slice(0, limit).map(({ key, size, etag }) => ({ key, size, etag }));
-    const last = objects.at(-1);
-    if (last === undefined || listed.length <= limit) return { objects, more: false };
-
-    return { objects, more: true, cursor: last.key as string as ListCursor };
+    return listHeld(
+      [...this.#objects.values()].map((kept) => kept.info),
+      options,
+    );
   }
 }
