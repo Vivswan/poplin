@@ -1,8 +1,9 @@
 // The update offered in the row of the version, on Settings: the mark at the side that leads to it, where the focus is after its question and once the update has started, and what the page loaded again says it runs.
+// And Check now, in the same row: what a press finds on an install that knows of no release, and what it says once the install runs the newest.
 
 import { expect, type Locator, type Page } from "@playwright/test";
 
-import { arrive, onPage, reset, test, toSection } from "./visit";
+import { arrive, FIRST_LOAD_MS, onPage, reset, test, toSection } from "./visit";
 
 /** What a screen with the sections at its side has room for: the row's name, the version, and what the row holds at its right on one line, with the next row under it. */
 const ONE_LINE = {
@@ -53,6 +54,11 @@ function notes(page: Page): Locator {
 /** The start of the update, in the row. */
 function start(page: Page): Locator {
   return versionRow(page).getByRole("button", { name: "Update now", exact: true });
+}
+
+/** The asking for a newer version, in the row. */
+function checkNow(page: Page): Locator {
+  return versionRow(page).getByRole("button", { name: "Check now", exact: true });
 }
 
 /**
@@ -145,4 +151,32 @@ test("after an update the page loaded again says it runs the new version, offers
   await expect(start(page)).toBeVisible();
   await expect(settingsLink(page, "Settings update available")).toBeVisible();
   expect(version).not.toBe("");
+});
+
+// Drift: right after a release the row was empty until the day's own asking, with nothing to press. A press whose answer took the button away and left the focus on the page would leave a keyboard nowhere.
+test("Check now, on an install that knows of no release, finds the newer one: its notes stand in the button's place, and have the focus", async ({ page }) => {
+  await page.goto("./empty/settings");
+  await expect(checkNow(page)).toBeVisible({ timeout: FIRST_LOAD_MS });
+  await checkNow(page).focus();
+  await page.keyboard.press("Enter");
+
+  await expect(notes(page)).toBeFocused();
+  expect(await versionRow(page).textContent()).toMatch(/\d+\.\d+\.\d+ is out\. What changed/u);
+  // The control: the button left with the answer, so the focus is not on it.
+  await expect(checkNow(page)).toHaveCount(0);
+});
+
+// Drift: a press that found nothing and said nothing reads as a button that does not work, and one whose answer dropped the focus to the page would leave a keyboard nowhere.
+test("after an update, Check now says the install is up to date, and keeps the focus", async ({ page }) => {
+  await arrive(page);
+  await toSection(page, "Settings");
+  await start(page).click();
+  await page.getByRole("alertdialog", { name: /^Update to / }).getByRole("button", { name: "Update now", exact: true }).click();
+  await expect(page.getByText("Updated. Reload the page.", { exact: true })).toBeVisible();
+  await page.reload();
+
+  await checkNow(page).focus();
+  await page.keyboard.press("Enter");
+  await expect(versionRow(page).getByText("Up to date. Checked just now.", { exact: true })).toBeVisible();
+  await expect(checkNow(page)).toBeFocused();
 });

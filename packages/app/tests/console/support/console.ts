@@ -51,6 +51,9 @@ interface Opened {
   /** The stand-in for the provider's way to end every login: `answer` is what the next try is answered, done unless a test sets a refusal, and `asked` counts the tries. */
   readonly logins: { answer: Awaited<ReturnType<EndLogins>>; asked: number };
 
+  /** The stand-in for the project's website: `latest` is the file it publishes, `undefined` while it does not answer, as it does not until a test sets one, and `asked` counts the requests for the file. */
+  readonly website: { latest: unknown; asked: number };
+
   /** Ask anything at all, as it is: no login, origin, or type is added. `later` is what a host holds the request open with after its answer. */
   readonly fetch: (request: Request, later?: Later) => Promise<Response>;
 
@@ -116,6 +119,7 @@ async function openWith({ base, domain, usage, follow, rules, jobs, logs, kind }
     return { ok: false, refusal: who.refusal === "not-a-user" ? who.refusal : PROVIDER_REFUSALS[who.refusal as keyof typeof PROVIDER_REFUSALS] };
   };
   const logins: Opened["logins"] = { answer: { ok: true }, asked: 0 };
+  const website: Opened["website"] = { latest: undefined, asked: 0 };
   const host = updateHost("1.1.0");
   const built = createConsole({
     install: opened.install,
@@ -128,6 +132,13 @@ async function openWith({ base, domain, usage, follow, rules, jobs, logs, kind }
     freeLimits: FREE_LIMITS,
     usage,
     update: hostUpdate(host),
+    latest: {
+      fetch: async () => {
+        website.asked += 1;
+
+        return website.latest === undefined ? new Response(null, { status: 503 }) : Response.json(website.latest);
+      },
+    },
     demo: { reset: "/reset" },
     signOut: SIGN_OUT,
     domain,
@@ -147,6 +158,7 @@ async function openWith({ base, domain, usage, follow, rules, jobs, logs, kind }
   return {
     base: opened,
     logins,
+    website,
     host,
     fetch: (request, later) => built.fetch(request, later),
     get: (path) => built.fetch(new Request(`${ORIGIN}${base}${path}`, { headers: opened.proof })),

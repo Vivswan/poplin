@@ -95,10 +95,14 @@ interface Asked {
 /** An update that is in place: the version the install ran, and the version of the release. */
 type Started = { readonly ok: true } & Readonly<v.InferOutput<typeof STARTED_UPDATE>>;
 
-/** Count one start against the install's minute. A counter that cannot answer counts as a full minute. */
-async function takeStart(updating: Updating, now: number): Promise<Taken> {
+/**
+ * Count one try against a minute of the whole install, all callers together. A counter that cannot answer counts as a full minute.
+ *
+ * @param window - what the tries are counted under, and the most of them a minute takes
+ */
+export async function takeInstallMinute(counters: Updating["counters"], window: { readonly key: string; readonly limit: number }, now: number): Promise<Taken> {
   try {
-    return await updating.counters.takeMinute({ scope: "install", key: COUNT_KEY, limit: STARTS_PER_MINUTE }, now);
+    return await counters.takeMinute({ scope: "install", ...window }, now);
   } catch (error) {
     // A database that is spent for the day is told as that, never as a full minute.
     if (error instanceof AllowanceSpent) throw error;
@@ -135,7 +139,7 @@ export async function startUpdate(install: Pick<Install, "database" | "now">, ac
 
   if (!updating.self.holdsKey()) return refuse("no_key");
 
-  const taken = await takeStart(updating, install.now());
+  const taken = await takeInstallMinute(updating.counters, { key: COUNT_KEY, limit: STARTS_PER_MINUTE }, install.now());
   if (!taken.ok) return refuse("too_many_requests", "update");
 
   const ready = await updating.self.ready({ version: asked.to ?? NEWEST, automatic: asked.automatic === true, back: wayBack(updating.self.last, asked.version)?.to });

@@ -8,16 +8,33 @@
 // The database keeps, beside the release, the moment the install first learned of its version: a later day that names the same version leaves that moment as it was.
 //
 // The request carries nothing of the install: no version, no id, and no address is put in its URL or its headers.
+//
+// An admin asks the same question at once, by a press in the dashboard, whether `update_check` is on or off:
+//
+//   an asking for a person in this minute already       too_many_requests about `check`: nothing is fetched
+//   another version than the kept one, or none for it   kept as the daily asking keeps it, with the moment: that UTC day counts as asked
+//   the kept version, or none where none is kept        nothing is written: the day's own asking is still to come
+//   no answer that can be read                          website_unreachable: nothing is written
+//
+// A version first seen today is started by no install today. So a press takes the day's own asking only on a day that has nothing to start: it never holds back an update that is due.
 
 import { homepage } from "../../../../cli/package.json";
 import { textUpTo } from "../../api/text-up-to";
+import type { Actor } from "../../auth/scopes";
 import type { SettingValues } from "../../records/settings";
 import { publishedRelease, type UpdateCheck, type UpdateNews } from "../../records/update";
-import { type Install, settingsOf } from "../records";
+import { type Install, type Refused, refuse, settingsOf } from "../records";
 import { DAY_MS } from "../sites/site-object";
+import { takeInstallMinute, type Updating } from "../start-update";
 
 /** Where the newest release is published: one static file of the project's website. */
 const LATEST_ADDRESS = new URL("latest.json", homepage).href;
+
+/** The most askings a minute the whole install makes for a person, whoever presses. */
+const ASKINGS_PER_MINUTE = 1;
+
+/** What the count of those askings is kept under. */
+const COUNT_KEY = "check_update";
 
 /** How long the website has to answer, in milliseconds. */
 const PATIENCE_MS = 5000;
@@ -101,4 +118,38 @@ export async function checkForUpdate(
   const check = await install.database.keepUpdateCheck({ checked_at: now, news: newest === undefined ? (last?.news ?? null) : newest });
 
   return { check, settings, answered: newest !== undefined };
+}
+
+/**
+ * Ask for the newest release now, for an admin who pressed for it, and keep a version the install did not know of as the daily asking keeps it. It asks whether `update_check` is on or off, and at most once a minute, all callers together.
+ *
+ * It costs one count of the minute and one request, then one read of the database, and one row written where the website names another version than the kept one.
+ * An answer that names the kept version, or none where none is kept, writes nothing, so the day's own asking is still made, and with it the update an install starts by itself right after.
+ *
+ * @param counters - where the askings of a minute are counted
+ * @returns the release the install keeps after the asking, `null` where it keeps none, or `not_allowed`, `too_many_requests` about `check` for a second asking in a minute, or `website_unreachable` for no answer that can be read
+ * @throws {Error} the database failed; nothing was kept
+ */
+export async function checkNow(
+  install: Pick<Install, "database" | "now">,
+  actor: Actor,
+  asking: Asking,
+  counters: Updating["counters"],
+): Promise<{ readonly ok: true; readonly news: UpdateNews | null } | Refused<"not_allowed" | "too_many_requests" | "website_unreachable">> {
+  if (actor.scope !== "admin") return refuse("not_allowed");
+
+  // The asking is of the moment it starts, as the daily one is: an answer that comes after midnight still counts to the day it was asked on.
+  const now = install.now();
+  const taken = await takeInstallMinute(counters, { key: COUNT_KEY, limit: ASKINGS_PER_MINUTE }, now);
+  if (!taken.ok) return refuse("too_many_requests", "check");
+
+  const news = await newestRelease(asking);
+  if (news === undefined) return refuse("website_unreachable");
+
+  const known = (await install.database.readUpdateCheck())?.news ?? null;
+  if (known?.version === news?.version) return { ok: true, news: known };
+
+  await install.database.keepUpdateCheck({ checked_at: now, news });
+
+  return { ok: true, news };
 }

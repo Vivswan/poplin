@@ -1,6 +1,7 @@
 // The time zone the dashboard writes its times in: the browser's own, or UTC, as a person chose on the Activity screen. The choice is kept in the browser.
 // Every absolute time of the dashboard is written by the two writers here, so one choice holds on every screen.
 
+import { useEffect, useState } from "react";
 import useLocalStorageState from "use-local-storage-state";
 
 /** The key the choice is kept under in the browser. */
@@ -129,18 +130,35 @@ export function briefMomentIn(moment: number, now: number, choice: TimeZoneChoic
 }
 
 /**
- * Write how long ago a read was made, as the words after "Updated": "just now" within ten seconds, the seconds in tens within a minute, the minutes within an hour, and a brief time otherwise.
+ * Write how long ago a moment was, as the words after "Updated" or "Checked": "just now" within ten seconds, the seconds in tens within a minute, the minutes within an hour, and a brief time otherwise.
  *
  * @param moment - milliseconds since the epoch
  * @param now - the moment it is read at
  */
-export function agoWords(moment: number, now: number): string {
+function agoWords(moment: number, now: number): string {
   const passed = Math.max(now - moment, 0);
   if (passed < SECONDS_STEP * SECOND_MS) return "just now";
   if (passed < MINUTE_MS) return RELATIVE_FORMAT.format(-Math.floor(passed / (SECONDS_STEP * SECOND_MS)) * SECONDS_STEP, "second");
   if (passed < HOUR_MS) return RELATIVE_FORMAT.format(-Math.floor(passed / MINUTE_MS), "minute");
 
   return briefMomentIn(moment, now);
+}
+
+/**
+ * Write how long ago a moment was, as `agoWords` does, and write it again as it grows older while the part that asks is drawn.
+ *
+ * @param moment - milliseconds since the epoch
+ */
+export function useAgoWords(moment: number): string {
+  const [now, setNow] = useState(Date.now);
+  useEffect(() => {
+    // The words of a young moment change every ten seconds, and no words change sooner.
+    const tick = window.setInterval(() => setNow(Date.now()), SECONDS_STEP * SECOND_MS);
+
+    return () => window.clearInterval(tick);
+  }, []);
+
+  return agoWords(moment, now);
 }
 
 /**

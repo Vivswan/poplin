@@ -92,8 +92,10 @@ What else the row holds is one line at its right, with one grey line under it at
 | `, since 2026-12-01`, after the version   | the install came to this version by an update of its own, on that day                   |
 | `0.3.2 is out`, What changed              | a newer version, and its notes: [A newer version](../upkeep/update.md#a-newer-version)  |
 | Update now, after them                    | the start of the update to it, on an install that holds its key: [With the kept key](../upkeep/update.md#with-the-kept-key) |
+| Check now, while no newer version is known | one press has the install ask at once which version is the newest: [A newer version](../upkeep/update.md#a-newer-version) |
 | Go back to 0.3.0                          | the way back to the version before, on an install that holds its key: [Go back](../upkeep/update.md#go-back) |
-| the grey line                             | what keeps the update from starting, by itself or from this page, and that one has started |
+| the grey line                             | what keeps the update from starting, by itself or from this page, that one has started, or that a press of Check now found none: `Up to date. Checked just now.` |
+| a red line under Check now                | why a press learned nothing: the project's website did not answer, or a check was made in the same minute |
 
 ## The install
 

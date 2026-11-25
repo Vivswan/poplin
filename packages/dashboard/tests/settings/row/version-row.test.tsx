@@ -14,8 +14,8 @@ import { VersionRow } from "@/settings/row/version-row";
 import { AppShell } from "@/shell/app-shell";
 import { drawAt } from "../../lib/support/router";
 
-/** The frame of an install that holds no key, knows of no newer release, and has no way back. */
-const FRAME = { ok: true, update: null, starts: false, back: null, domainNote: null, recent: [], marks: { usage: null, domain: null, settings: null } } as const;
+/** The frame of an install that runs the version the page was loaded with, holds no key, knows of no newer release, and has no way back. */
+const FRAME = { ok: true, version: BOOT.version, update: null, starts: false, back: null, domainNote: null, recent: [], marks: { usage: null, domain: null, settings: null } } as const;
 
 /** A newer release the install knows of. */
 const NEWER = { current: BOOT.version, newest: "1.1.0", released: "2026-11-02", notes: "https://example.com/notes", database: false } as const;
@@ -37,7 +37,7 @@ const SINCE = `${BOOT.version}, since 2026-12-01`;
 
 /** The states of an install, each with what the row then holds: what stands beside its name, the line at its right with its buttons, and the note under that line. `null` is a part that is not drawn. */
 const STATES = [
-  { name: "the version alone, while nothing newer is known and there is no way back", frame: {}, named: BOOT.version, line: null, note: null, buttons: [] },
+  { name: "the version and Check now, while nothing newer is known and there is no way back", frame: {}, named: BOOT.version, line: "Check now", note: null, buttons: ["Check now"] },
   {
     name: "a newer release, its notes, and the start of the update on one line, on an install that holds its key",
     frame: { update: NEWER, starts: true },
@@ -63,8 +63,15 @@ const STATES = [
     note: `${DATABASE} ${NO_KEY}`,
     buttons: [],
   },
-  { name: "since when the version runs, and the way back, after an update", frame: { back: BACK, starts: true }, named: SINCE, line: "Go back to 0.9.0", note: null, buttons: ["Go back to 0.9.0"] },
-  { name: "since when the version runs, and no way back, on an install that holds no key", frame: { back: BACK }, named: SINCE, line: null, note: null, buttons: [] },
+  {
+    name: "since when the version runs, and Check now before the way back, after an update",
+    frame: { back: BACK, starts: true },
+    named: SINCE,
+    line: "Check nowGo back to 0.9.0",
+    note: null,
+    buttons: ["Check now", "Go back to 0.9.0"],
+  },
+  { name: "since when the version runs, and no way back, on an install that holds no key", frame: { back: BACK }, named: SINCE, line: "Check now", note: null, buttons: ["Check now"] },
   {
     name: "the newer release and its start before the way back, where the install has both",
     frame: { back: BACK, update: NEWER, starts: true },
@@ -242,6 +249,186 @@ describe("a try to start an update", () => {
     const asked = server.mock.calls.map(([input, init]) => `${sent(input, init).method} ${new URL(sent(input, init).url).pathname.slice(BOOT.base.length)}`);
 
     expect([before, asked]).toEqual([["update available"], ["POST /data/update", "GET /data/frame"]]);
+  });
+});
+
+describe("a press of Check now", () => {
+  /** What the row asked of the server so far, each request as its method and its path under the console. */
+  function asked(server: { readonly mock: { readonly calls: readonly (readonly [Request | string | URL, RequestInit?])[] } }): string[] {
+    return server.mock.calls.map(([input, init]) => `${sent(input, init).method} ${new URL(sent(input, init).url).pathname.slice(BOOT.base.length)}`);
+  }
+
+  /** What the install answers a check it made: the version it runs, and the newer release or `null`. */
+  function learned(update: object | null): object {
+    return { ok: true, version: BOOT.version, update };
+  }
+
+  /** What the line a screen reader is told a result in holds now; the line is nowhere in sight. */
+  function told(): string | null | undefined {
+    return document.querySelector("output")?.textContent;
+  }
+
+  /** Answer every request of the row: a check with what is given, at the status given, and the frame read again with the frame given. */
+  function serveCheck(check: object, frame: object = {}, status = 200): ReturnType<typeof spyOn<typeof globalThis, "fetch">> {
+    return spyOn(globalThis, "fetch").mockImplementation((async (input: Request | string | URL, init?: RequestInit) =>
+      sent(input, init).method === "POST" ? Response.json(check, { status }) : Response.json({ ...FRAME, ...frame })) as typeof fetch);
+  }
+
+  /** Give Check now the focus, as a key that reaches it does, and press it. */
+  async function check(): Promise<void> {
+    const button = screen.getByRole("button", { name: "Check now" });
+    act(() => button.focus());
+    await press(button);
+  }
+
+  // Drift: right after a release the row was empty, with nothing to press. A found release that waited for a reload, or left the focus on the page, would read as a press that did nothing.
+  test("that finds a newer release puts it in the row with the start of the update, gives the start the focus, and has the frame read again", async () => {
+    const server = serveCheck(learned(NEWER), { update: NEWER, starts: true });
+    await drawWith({ starts: true });
+    await check();
+    const expected = drawnRight({ named: BOOT.version, line: "1.1.0 is out. What changedUpdate now", note: null, buttons: ["Update now"] });
+    await waitFor(() => expect(held()).toEqual(expected));
+    await waitFor(() => expect(asked(server)).toEqual(["POST /data/update/check", "GET /data/frame"]));
+
+    expect(document.activeElement?.textContent).toBe("Update now");
+  });
+
+  // Drift: the frame names a release only while `update_check` is on. A row that followed the frame alone would lose the release a person just asked for at the frame's next read.
+  test("keeps the release it found in the row while the frame, read again, names none", async () => {
+    const server = serveCheck(learned(NEWER));
+    await drawWith();
+    await check();
+    await waitFor(() => expect(asked(server)).toEqual(["POST /data/update/check", "GET /data/frame"]));
+    // The control: the frame was read again and names no release.
+    await waitFor(() => expect(screen.queryAllByRole("link", { name: "Settings update available" })).toEqual([]));
+
+    expect(held()).toEqual(drawnRight({ named: BOOT.version, line: "1.1.0 is out. What changed", note: NO_KEY }));
+  });
+
+  // Drift: what a press learned is kept by the page, beside the frame, and is said of the version the install ran then.
+  // An install updated or put back meanwhile, from another tab or by a command, runs another one: the row would go on offering an update that is in, or calling an install up to date that is behind.
+  test.each([
+    { name: "the release it found", update: NEWER, line: "1.1.0 is out. What changed", note: NO_KEY },
+    { name: "that none is newer", update: null, line: "Check now", note: "Up to date. Checked just now." },
+  ])("lets $name go once the frame says the install runs another version", async ({ update, line, note }) => {
+    const runs = { version: BOOT.version };
+    const server = spyOn(globalThis, "fetch").mockImplementation((async (input: Request | string | URL, init?: RequestInit) =>
+      Response.json(sent(input, init).method === "POST" ? learned(update) : { ...FRAME, ...runs })) as typeof fetch);
+    const client = await drawWith();
+    await check();
+    await waitFor(() => expect(asked(server)).toEqual(["POST /data/update/check", "GET /data/frame"]));
+    const before = [parts("version-line"), parts("version-note")];
+    runs.version = NEWER.newest;
+    await act(async () => client.invalidateQueries({ queryKey: FRAME_KEY }));
+    const expected = drawnRight({ named: BOOT.version, line: "Check now", note: null, buttons: ["Check now"] });
+    await waitFor(() => expect(held()).toEqual(expected));
+
+    expect(before).toEqual([[line], [note]]);
+  });
+
+  // Drift: the answer names the version the install ran when it asked. A result kept under the version this page was loaded with would be shown for an install another tab has updated meanwhile, before the frame says so.
+  test("holds what it learned back while the frame names another version than the answer's, and shows it once the frame names that one", async () => {
+    const runs = { version: BOOT.version };
+    const server = spyOn(globalThis, "fetch").mockImplementation((async (input: Request | string | URL, init?: RequestInit) =>
+      Response.json(sent(input, init).method === "POST" ? { ok: true, version: NEWER.newest, update: null } : { ...FRAME, ...runs })) as typeof fetch);
+    const client = await drawWith();
+    await check();
+    await waitFor(() => expect(asked(server)).toEqual(["POST /data/update/check", "GET /data/frame"]));
+    // The control: the asking is over and drawn, so a note that is not there was held back, not late.
+    await waitFor(() => expect(screen.getByRole("button", { name: "Check now" }).getAttribute("aria-disabled")).toBe("false"));
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+    const before = parts("version-note");
+    runs.version = NEWER.newest;
+    await act(async () => client.invalidateQueries({ queryKey: FRAME_KEY }));
+    await waitFor(() => expect(parts("version-note")).toEqual(["Up to date. Checked just now."]));
+
+    expect(before).toEqual([]);
+  });
+
+  // Drift: a press that found nothing and said nothing reads as a button that does not work. The focus stays on the button, so a screen reader hears the result only from a line that was on the page before its words.
+  test("that finds none says that the install is up to date and when it asked, to a screen reader too, and leaves the button with the focus", async () => {
+    serveCheck(learned(null));
+    await drawWith();
+    const before = told();
+    await check();
+    const expected = drawnRight({ named: BOOT.version, line: "Check now", note: "Up to date. Checked just now.", buttons: ["Check now"] });
+    await waitFor(() => expect(held()).toEqual(expected));
+
+    expect([before, told(), document.activeElement?.textContent]).toEqual(["", "Up to date.", "Check now"]);
+  });
+
+  // Drift: the install's sentence says why nothing was learned. Said as a line at the edge of the screen it is gone in a moment, and the row would look as it did before the press.
+  test("that is refused says the install's sentence under the button, until the next press", async () => {
+    const sentence = "A check was made in this minute already. Wait a minute.";
+    serveCheck({ ok: false, code: "too_many_requests", about: "check", sentence }, {}, 429);
+    await drawWith();
+    await check();
+    const refused = await within(row() as HTMLElement).findByRole("alert");
+    const said = [refused.textContent, row()?.textContent, document.activeElement?.textContent];
+    mock.restore();
+    serveCheck(learned(null));
+    await check();
+    await waitFor(() => expect(parts("version-note")).toEqual(["Up to date. Checked just now."]));
+
+    expect([said, within(row() as HTMLElement).queryByRole("alert")]).toEqual([[sentence, `Version${BOOT.version}Check now${sentence}`, "Check now"], null]);
+  });
+
+  // Drift: the line a screen reader hears is emptied while an asking is on its way, and filled at its answer. Filled again after a press that was refused, it would say "Up to date." as the result of a press that learned nothing.
+  test("that is refused after one that found none keeps the grey line of the first, and tells a screen reader the refusal alone", async () => {
+    const sentence = "A check was made in this minute already. Wait a minute.";
+    serveCheck(learned(null));
+    await drawWith();
+    await check();
+    await waitFor(() => expect(told()).toBe("Up to date."));
+    mock.restore();
+    serveCheck({ ok: false, code: "too_many_requests", about: "check", sentence }, {}, 429);
+    await check();
+    const refused = await within(row() as HTMLElement).findByRole("alert");
+
+    expect([refused.textContent, parts("version-note"), told()]).toEqual([sentence, ["Up to date. Checked just now."], ""]);
+  });
+
+  // Drift: a double click comes before the page is drawn again, so a button that is only drawn as off still takes it. Two askings would spend the minute's one and answer the second press with a refusal.
+  // A button the browser itself switches off drops the focus to the page, so this one is off by its state alone and keeps the focus.
+  test("takes one press of two that come before it is drawn again, and while its asking is on its way it is off, keeps the focus, and shows that it works", async () => {
+    const answer = Promise.withResolvers<void>();
+    const server = spyOn(globalThis, "fetch").mockImplementation((async (input: Request | string | URL, init?: RequestInit) => {
+      if (sent(input, init).method !== "POST") return Response.json(FRAME);
+
+      await answer.promise;
+
+      return Response.json(learned(null));
+    }) as typeof fetch);
+    await drawWith();
+    const button = screen.getByRole<HTMLButtonElement>("button", { name: "Check now" });
+    act(() => button.focus());
+    await act(async () => {
+      fireEvent.click(button);
+      fireEvent.click(button);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    const busy = [button.getAttribute("aria-disabled"), button.disabled, document.activeElement === button, button.querySelector("[data-slot=spinner]") !== null];
+    await act(async () => answer.resolve());
+    await waitFor(() => expect(parts("version-note")).toEqual(["Up to date. Checked just now."]));
+    const posts = asked(server).filter((request) => request.startsWith("POST"));
+
+    expect([busy, button.getAttribute("aria-disabled"), button.querySelector("[data-slot=spinner]"), posts]).toEqual([["true", false, true, true], "false", null, ["POST /data/update/check"]]);
+  });
+
+  // Drift: an update that has started is the release the press found. Offered again beside "Updated. Reload the page.", it would start the same update twice.
+  test("leaves the row with the update it led to: once that has started, the release it found is offered no more, and neither is another check", async () => {
+    spyOn(globalThis, "fetch").mockImplementation((async (input: Request | string | URL, init?: RequestInit) => {
+      const request = sent(input, init);
+      if (request.method !== "POST") return Response.json({ ...FRAME, starts: true });
+
+      return Response.json(new URL(request.url).pathname.endsWith("/check") ? learned(NEWER) : { ok: true, to: NEWER.newest });
+    }) as typeof fetch);
+    await drawWith({ starts: true });
+    await check();
+    fireEvent.click(await screen.findByRole("button", { name: "Update now" }));
+    await press(within(await screen.findByRole("alertdialog", { name: "Update to 1.1.0?" })).getByRole("button", { name: "Update now" }));
+    const expected = drawnRight({ named: BOOT.version, line: null, note: RELOAD });
+    await waitFor(() => expect(held()).toEqual(expected));
   });
 });
 

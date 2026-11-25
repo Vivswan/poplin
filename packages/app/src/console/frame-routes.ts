@@ -1,18 +1,20 @@
-// The data routes of the frame around every screen: the newer release the install knows of, what its domain needs, what went wrong within a day, and the start of an update.
+// The data routes of the frame around every screen: the newer release the install knows of, what its domain needs, what went wrong within a day, the start of an update, and the asking for a newer release.
 //
-//   GET  /frame    the newer release or `null`, whether an update can be started from here, the version to go back to or `null`, the note on the domain or `null`, and the problems with the mark of each screen
-//   POST /update   start the update: the host takes the newest release, or the one version the body names, and puts it in place
+//   GET  /frame          the version the install runs, the newer release or `null`, whether an update can be started from here, the version to go back to or `null`, the note on the domain or `null`, and the problems with the mark of each screen
+//   POST /update         start the update: the host takes the newest release, or the one version the body names, and puts it in place
+//   POST /update/check   ask the project's website now which version is the newest, and keep what was learned: the version the install runs, and the newer release or `null`
 
 import { vValidator } from "@hono/valibot-validator";
 import { domainSentence, domainStateOf } from "@poplin/core/src/actions/install/domain-state";
 import type { Install } from "@poplin/core/src/actions/records";
 import { type WayBack, wayBack } from "@poplin/core/src/actions/update/go-back";
 import { startUpdate, UPDATE_REQUEST } from "@poplin/core/src/actions/start-update";
-import { type Update, updateIn } from "@poplin/core/src/actions/update/update";
+import { checkNow } from "@poplin/core/src/actions/update/check-update";
+import { noticeIn, type Update, updateIn } from "@poplin/core/src/actions/update/update";
 import type { Actor } from "@poplin/core/src/auth/scopes";
 import { Hono } from "hono";
 
-import { refused, refuseInvalid, type Shared } from "./data";
+import { NOTHING, refused, refuseInvalid, type Shared } from "./data";
 import { type Marked, markedIn, NOTHING_MARKED } from "./problems/problems-routes";
 
 /** What the side says in a few words when a piece of the domain needs work, when the users or who gets the alerts changed since the last repair, and when the last check is only old. */
@@ -32,6 +34,9 @@ interface DomainNote {
 
 /** What the frame shows of the install. */
 interface Frame extends Marked {
+  /** The version the install runs now. A page that was loaded before an update reads the new one here, and offers no more what it learned of the old one. */
+  readonly version: string;
+
   /** The newer release the install knows of, or `null`. */
   readonly update: Update | null;
 
@@ -63,8 +68,8 @@ interface Asked {
   readonly back: WayBack | undefined;
 }
 
-/** A frame that shows nothing of the install. */
-const NO_FRAME: Frame = { update: null, starts: false, back: null, domainNote: null, ...NOTHING_MARKED };
+/** What a frame holds beside the running version when it shows nothing of the install. */
+const NOTHING_SHOWN: Omit<Frame, "version"> = { update: null, starts: false, back: null, domainNote: null, ...NOTHING_MARKED };
 
 /** Word the note on the domain from what the install remembers of its last check. */
 function domainNoteOf(state: ReturnType<typeof domainStateOf>, thing: string): DomainNote | null {
@@ -82,12 +87,13 @@ function domainNoteOf(state: ReturnType<typeof domainStateOf>, thing: string): D
  * @returns the frame of an install whose settings cannot be read has no release, no start, no note, and nothing marked
  */
 export async function frameOf(install: Install, actor: Actor, asked: Asked): Promise<Frame> {
-  if (actor.scope !== "admin") return NO_FRAME;
+  const { version } = asked;
+  if (actor.scope !== "admin") return { version, ...NOTHING_SHOWN };
 
   const read = await install.database.readFrame(install.now());
   // A request that brought the settings answers all it shows from those.
   const settings = install.knownSettings ?? read.settings;
-  if (settings === undefined) return NO_FRAME;
+  if (settings === undefined) return { version, ...NOTHING_SHOWN };
 
   // A change of the users that the install carries by itself is settled by a later try, and a try no later one mends is a problem of its own.
   const remembered = read.domainCheck !== undefined && asked.selfCarried ? { ...read.domainCheck, users_changed_at: null } : read.domainCheck;
@@ -95,7 +101,7 @@ export async function frameOf(install: Install, actor: Actor, asked: Asked): Pro
   // What the domain needs marks its screen as a problem there does. A check that is only old is a reminder, and marks nothing.
   const marked = markedIn(read.problems, install.now(), { screen: asked.domain !== undefined, says: domainNote === null || domainNote.quiet ? null : domainNote.sentence });
 
-  return { update: updateIn({ settings, updateCheck: read.updateCheck }, asked.version) ?? null, starts: asked.keyed, back: asked.back ?? null, domainNote, ...marked };
+  return { version, update: updateIn({ settings, updateCheck: read.updateCheck }, version) ?? null, starts: asked.keyed, back: asked.back ?? null, domainNote, ...marked };
 }
 
 /** The frame's data routes. */
@@ -114,4 +120,14 @@ export const frameRoutes = new Hono<Shared>()
     const started = await startUpdate(install, actor, { version, to: context.req.valid("json").to }, updating);
 
     return started.ok ? context.json({ ok: true as const, to: started.to }) : refused(context, started);
+  })
+  .post("/update/check", vValidator("json", NOTHING, refuseInvalid), async (context) => {
+    const { install, actor } = context.get("asker");
+    const { version, updating, latest } = context.get("host");
+    const checked = await checkNow(install, actor, latest, updating.counters);
+    if (!checked.ok) return refused(context, checked);
+
+    // The release is answered whatever `update_check` says: the frame's notice follows the setting, and this is the answer to a person who asked.
+    // The answer is said of the version the install runs now, and names it: a page holds the answer only for as long as the frame names the same version.
+    return context.json({ ok: true as const, version, update: noticeIn(checked, version) ?? null });
   });

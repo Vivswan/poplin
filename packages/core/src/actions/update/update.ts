@@ -58,6 +58,19 @@ export function changesDatabase(release: Pick<UpdateNews, "schema">): boolean {
 }
 
 /**
+ * Word the release of a kept check that is newer than the running version, as an answer holds it, whatever `update_check` says. Nothing is read.
+ *
+ * @param current - the version the install runs
+ * @returns the newer release, or `undefined` when none is known, the newest known is not strictly newer, or either version is not of the form `1.2.3`
+ */
+export function noticeIn(check: Pick<UpdateCheck, "news"> | undefined, current: string): Update | undefined {
+  const newer = newerRelease(check, current);
+  if (newer === undefined) return undefined;
+
+  return { current, newest: newer.version, released: newer.released, notes: newer.notes, database: changesDatabase(newer) };
+}
+
+/**
  * Pick the release an install shows as newer than the running version, from what it has read already. Nothing is read.
  *
  * @param current - the version the install runs
@@ -66,10 +79,7 @@ export function changesDatabase(release: Pick<UpdateNews, "schema">): boolean {
 export function updateIn(read: { readonly settings: Pick<SettingValues, "update_check"> | undefined; readonly updateCheck: Pick<UpdateCheck, "news"> | undefined }, current: string): Update | undefined {
   if (read.settings?.update_check !== true) return undefined;
 
-  const newer = newerRelease(read.updateCheck, current);
-  if (newer === undefined) return undefined;
-
-  return { current, newest: newer.version, released: newer.released, notes: newer.notes, database: changesDatabase(newer) };
+  return noticeIn(read.updateCheck, current);
 }
 
 /**

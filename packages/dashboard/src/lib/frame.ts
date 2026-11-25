@@ -18,14 +18,34 @@ const READ_AGAIN_MS = 15 * 60_000;
 /** The key it is kept under that an update was started from this page. */
 const STARTED_KEY = ["update", "started"] as const;
 
+/** The key it is kept under what a press of Check now learned on this page. */
+const CHECKED_KEY = ["update", "checked"] as const;
+
 /** Where a key is to be had, after a sentence that says the install holds none: only a console with a Domain screen has the place. */
 export const GET_KEY = BOOT.domain ? " Open Domain and press Repair." : "";
 
 /** What the server answers. */
 export type Frame = InferResponseType<typeof api.frame.$get, 200>;
 
+/** What a press of Check now learned: the version the install ran when it asked, the newer release or `null`, and the moment the answer came, by this browser's clock. */
+export interface Checked {
+  readonly version: string;
+  readonly update: Frame["update"];
+  readonly at: number;
+}
+
 /** The frame as the page started with it: nothing is asked until it is stale. */
-const AT_START: Frame = { ok: true, update: BOOT.update, starts: BOOT.starts, back: BOOT.back, domainNote: BOOT.domainNote, recent: BOOT.recent, marks: BOOT.marks, domainAsks: BOOT.domainAsks };
+const AT_START: Frame = {
+  ok: true,
+  version: BOOT.version,
+  update: BOOT.update,
+  starts: BOOT.starts,
+  back: BOOT.back,
+  domainNote: BOOT.domainNote,
+  recent: BOOT.recent,
+  marks: BOOT.marks,
+  domainAsks: BOOT.domainAsks,
+};
 
 /**
  * What says that a newer release is out, at the side's mark and in the row of the version: `0.2.0 is out`.
@@ -51,4 +71,18 @@ export function useStarted(): readonly [boolean, () => void] {
   const { data } = useQuery({ queryKey: STARTED_KEY, queryFn: () => false, initialData: false, staleTime: "static", gcTime: Number.POSITIVE_INFINITY });
 
   return [data, () => client.setQueryData(STARTED_KEY, true)];
+}
+
+/**
+ * What the last press of Check now learned on this page, and the way to keep it. It is kept beside the frame's data for as long as the page is loaded.
+ *
+ * The row of the version alone reads it, and leaves with its screen. The frame names a release only while `update_check` is on, and a press is answered either way: an answer dropped meanwhile would take a release a person just asked for out of the row.
+ *
+ * @returns what was learned, `null` before the first press, and a function that keeps it
+ */
+export function useChecked(): readonly [Checked | null, (checked: Checked) => void] {
+  const client = useQueryClient();
+  const { data } = useQuery<Checked | null>({ queryKey: CHECKED_KEY, queryFn: () => null, initialData: null, staleTime: "static", gcTime: Number.POSITIVE_INFINITY });
+
+  return [data, (checked) => client.setQueryData(CHECKED_KEY, checked)];
 }

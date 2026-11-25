@@ -10,6 +10,12 @@ import { readShell } from "./support/shell";
 /** A release newer than the test console's version. */
 const NEWER = { version: "1.1.0", released: "2026-12-01", notes: "https://example.com/changelog/", schema: OWN_SCHEMA };
 
+/** The same release as the project's website publishes one: its notes are a page of the project's releases. */
+const PUBLISHED = { ...NEWER, notes: "https://github.com/Vivswan/poplin/releases/tag/v1.1.0" };
+
+/** What an answer says of that release to an install that runs the test console's version. */
+const NOTICE = { current: "1.0.0", newest: "1.1.0", released: PUBLISHED.released, notes: PUBLISHED.notes, database: false };
+
 /** What the frame holds of the problems of an install where nothing went wrong. */
 const NOTHING_MARKED = { recent: [], marks: { usage: null, domain: null, settings: null }, domainAsks: [] };
 
@@ -25,16 +31,17 @@ async function learnRelease(opened: Opened): Promise<void> {
 
 describe("the frame", () => {
   // Drift: a release the install learned of would show in the side only after a reload, and the side would offer a start on an install whose host holds no key to send it with.
-  test("answers the newer release, and whether an update can be started", async () => {
+  test("answers the version the install runs, the newer release, and whether an update can be started", async () => {
     const opened = await openConsole();
     opened.host.key = false;
     const before = await (await opened.get("/data/frame")).json();
     await learnRelease(opened);
     opened.host.key = true;
 
-    expect(before).toEqual({ ok: true, update: null, starts: false, back: null, domainNote: null, ...NOTHING_MARKED });
+    expect(before).toEqual({ ok: true, version: "1.0.0", update: null, starts: false, back: null, domainNote: null, ...NOTHING_MARKED });
     expect(await (await opened.get("/data/frame")).json()).toEqual({
       ok: true,
+      version: "1.0.0",
       update: { current: "1.0.0", newest: "1.1.0", released: NEWER.released, notes: NEWER.notes, database: false },
       starts: true,
       back: null,
@@ -169,5 +176,73 @@ describe("starting an update", () => {
     const second = await opened.change("/data/update", {});
 
     expect([await second.json(), opened.host.put]).toMatchObject([{ ok: false, code: "too_many_requests" }, ["1.1.0"]]);
+  });
+});
+
+describe("checking for a newer version now", () => {
+  /** Press Check now, and answer the status, the body, and what the frame names afterwards. */
+  async function pressed(opened: Opened): Promise<unknown[]> {
+    const response = await opened.change("/data/update/check", {});
+    const frame = (await (await opened.get("/data/frame")).json()) as { readonly update: unknown };
+
+    return [response.status, await response.json(), frame.update];
+  }
+
+  // Drift: right after a release the row of the version is empty until the day's own asking. A press that kept nothing would show the release in the row and leave the sign at Settings without it.
+  test("has the install ask the website at once, answers the version it runs with the newer release, and keeps the release for the frame", async () => {
+    const opened = await openConsole();
+    opened.website.latest = PUBLISHED;
+
+    expect([await pressed(opened), opened.website.asked]).toEqual([[200, { ok: true, version: "1.0.0", update: NOTICE }, NOTICE], 1]);
+  });
+
+  // Drift: `update_check` off stops the install asking by itself and showing a notice. A press that followed the setting would answer a person who asked with nothing.
+  test("answers the release with update_check off too, while the frame goes on naming none", async () => {
+    const opened = await openConsole();
+    const { install, owner } = opened.base;
+    await install.database.changeSettings({ update_check: false }, { as: "person", by: owner, at: install.now() });
+    opened.website.latest = PUBLISHED;
+
+    expect(await pressed(opened)).toEqual([200, { ok: true, version: "1.0.0", update: NOTICE }, null]);
+  });
+
+  // Drift: the row says "Up to date" from this answer. A release that is not above the running version, told as newer, would offer an update to the version the install runs.
+  test.each([
+    ["the version the install runs", { ...PUBLISHED, version: "1.0.0" }],
+    ["no release yet", { version: null }],
+  ])("answers no release where the website names %s", async (_what, latest) => {
+    const opened = await openConsole();
+    opened.website.latest = latest;
+
+    expect(await pressed(opened)).toEqual([200, { ok: true, version: "1.0.0", update: null }, null]);
+  });
+
+  // Drift: the sentence stands under the button. A press the website did not answer, told as "Up to date", would say so of an install that is behind.
+  test("refuses in a sentence while the website does not answer, and a second press in the minute without asking the website again", async () => {
+    const opened = await openConsole();
+    const down = await pressed(opened);
+    opened.base.clock.now += 60_000;
+    opened.website.latest = PUBLISHED;
+    await pressed(opened);
+    const again = await pressed(opened);
+
+    expect(down).toEqual([502, { ok: false, code: "website_unreachable", about: null, sentence: "The project's website did not answer. Try again in a minute." }, null]);
+    expect(again).toEqual([429, { ok: false, code: "too_many_requests", about: "check", sentence: "A check was made in this minute already. Wait a minute." }, NOTICE]);
+    expect(opened.website.asked).toBe(2);
+  });
+
+  // Drift: a start of an update and an asking for a newer version are each bounded to one a minute, under one code.
+  // Counted together, a check would spend the minute's one update. Told in one sentence, a refused check would read as an update nobody started.
+  test("counts apart from the start of an update, whichever comes first, and each full minute is told in its own words", async () => {
+    const opened = await openConsole();
+    opened.website.latest = PUBLISHED;
+    const taken = [await opened.change("/data/update", {}), await opened.change("/data/update/check", {})];
+    const refused = [await opened.change("/data/update", {}), await opened.change("/data/update/check", {})];
+    opened.base.clock.now += 60_000;
+    const later = [await opened.change("/data/update/check", {}), await opened.change("/data/update", {})];
+    const sentences = await Promise.all(refused.map(async (response) => ((await response.json()) as { readonly sentence: string }).sentence));
+
+    expect([...taken, ...refused, ...later].map((response) => response.status)).toEqual([200, 200, 429, 429, 200, 200]);
+    expect(sentences).toEqual(["An update was tried in this minute already. Wait a minute.", "A check was made in this minute already. Wait a minute."]);
   });
 });
