@@ -5,7 +5,7 @@ order: 20
 
 # Limits
 
-What an install caps or protects, and what a day counts; none of the limits is a cap on what Cloudflare bills.
+What an install caps or protects, what a day counts, and Cloudflare's limits beside poplin's own; none of the limits is a cap on what Cloudflare bills.
 
 ## What is capped or protected
 
@@ -70,3 +70,20 @@ On the free Workers plan, a month at the settings a new install starts with stay
 | reads                 | 10,000,000   | 9,765,000                           |
 
 A finish, a look at an upload, a delete, a copy, and a backup's list of files each list the storage. At the limit they answer `allowance_spent` until 00:00 UTC; a delete still removes the site, and its files go later.
+
+## Cloudflare's limit and poplin's own
+
+Cloudflare's free plan limits what one request, one run of the background work, and one day may ask of the database and the storage. Under most of those limits poplin draws a line of its own.
+
+| What is counted | Cloudflare's limit | poplin's own limit |
+| --- | --- | --- |
+| database queries, in one request or one run | [50](https://developers.cloudflare.com/d1/platform/limits/) | 40 |
+| calls to the storage, in one request | [1,000](https://developers.cloudflare.com/workers/platform/limits/#subrequests) | 250 |
+| reads of the storage, in one request to a site | 1,000 | 3 |
+| queries and calls to the storage together, in one run | 1,000 | 300 |
+| rows the database reads, in one day | [5,000,000](https://developers.cloudflare.com/d1/platform/pricing/) | none |
+| rows the database writes, in one day | 100,000 | none |
+
+- **The 1,000** are the calls one request or run makes to Cloudflare's own services, the database and the storage among them.
+- **A run** is one scheduled run of the sweep, or one step of a job.
+- **The checks of every change to poplin** measure each action against these, and an action over a line of poplin's own fails them, unless it is marked there as known to be over. [What one action costs](what-one-action-costs.md) lists what an action spends.

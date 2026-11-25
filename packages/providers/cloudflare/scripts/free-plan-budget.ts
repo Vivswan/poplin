@@ -2,7 +2,7 @@
 //
 //   this run's costs      FREE_PLAN_BUDGET_FILE, written by the budget test's reporter
 //   main's costs          a pull request alone: the `free-plan-budget` artifact of the newest CI run of a push to main that ended green
-//   the job's summary     one line on what changed, the standing, the actions that moved, one row a ceiling, then every table folded away
+//   the job's summary     one line on what changed, the standing, the actions that moved, one row a ceiling with Cloudflare's limit and poplin's own, then every table folded away
 //   the annotation        a pull request alone: the first line, as a notice, a warning when a cost rose, an error when the budget is broken
 //   the comment           a pull request alone: the summary again, in FREE_PLAN_BUDGET_COMMENT_FILE, for the workflow to post
 //
@@ -15,6 +15,8 @@ import { error, notice, summary, warning } from "@actions/core";
 import diff from "microdiff";
 import * as v from "valibot";
 
+import { CEILINGS, type Ceiling, heldTo } from "../src/shared/limits/budget-ceilings";
+
 /** The name of the artifact a run keeps its costs in, and of the file in it. */
 const ARTIFACT = { name: "free-plan-budget", file: "free-plan-budget.json" } as const;
 
@@ -24,8 +26,14 @@ const WORKFLOW = "ci.yml";
 /** What the summary opens with, and the annotation is named. */
 const TITLE = "Free-plan budget";
 
-/** What the summary ends with. */
-const LEAD = "Measured on the local Workers runtime with the real database driver. Cloudflare's free plan answers one request 50 database queries; a request here may spend 40.";
+/** What the summary ends with: how the costs were measured, and what Cloudflare's limit beside a count of bucket calls is a limit on. */
+const LEAD = "Measured on the local Workers runtime with the real database driver. Cloudflare's limit beside the bucket calls is on one invocation's calls to all of its own services, the database and the bucket together.";
+
+/** The two limits of each ceiling, by the ceiling's name. */
+const LIMITS: ReadonlyMap<string, Ceiling> = new Map(Object.entries(CEILINGS));
+
+/** What the column of poplin's own limit says of a ceiling poplin draws no line under. */
+const NO_OWN = "none";
 
 /** The share of a ceiling from which a row is marked. */
 const NEAR = 0.8;
@@ -158,9 +166,9 @@ function percent(part: number, whole: number): string {
   return `${of100.toFixed(of100 < 10 && !Number.isInteger(of100) ? 1 : 0)}%`;
 }
 
-/** The share of a ceiling, in bold and marked from the share that is near it. */
-function used(spent: number, most: number): string {
-  return spent / most >= NEAR ? `<b>${percent(spent, most)}</b> ${MARK}` : percent(spent, most);
+/** The share of a ceiling, in bold and marked from the share that is near it; `of` names whose limit it is a share of, where a table shows two. */
+function used(spent: number, most: number, of = ""): string {
+  return spent / most >= NEAR ? `<b>${percent(spent, most)}</b>${of} ${MARK}` : `${percent(spent, most)}${of}`;
 }
 
 /** Whether a use is of an allowance a row may spend in full, and is inside it: such a use is near no ceiling. */
@@ -168,9 +176,9 @@ function inFull({ spent, most, exact = false }: Pick<Worst, "spent" | "most" | "
   return exact && spent <= most;
 }
 
-/** The share of a ceiling as its table shows it: an allowance that may be spent in full by its counts, any other by its percentage. */
-function share(use: Pick<Worst, "spent" | "most" | "exact">): string {
-  return inFull(use) ? `${shown(use.spent)} of ${shown(use.most)} (allowed in full)` : used(use.spent, use.most);
+/** The share of a ceiling as its table shows it, with whose limit it is a share of: an allowance that may be spent in full by its counts, any other by its percentage. */
+function share(use: Pick<Worst, "spent" | "most" | "exact">, whose: string): string {
+  return inFull(use) ? `${shown(use.spent)} of ${whose} ${shown(use.most)} (allowed in full)` : used(use.spent, use.most, ` of ${whose}`);
 }
 
 /** How far a count moved: the difference with its sign, then the share of what it was; the share is left out for a count that was zero. */
@@ -290,16 +298,30 @@ function standing(broken: readonly string[], closest: Worst | undefined): string
   return `All within budget. Closest: "${closest.name}" at ${percent(closest.spent, closest.most)} of ${closest.ceiling}.`;
 }
 
-/** One row a ceiling, in the order given: its worst row, what main's worst spent, what this run's does, how far that moved, the ceiling, and the share of it. */
+/**
+ * The limits of one ceiling as its row shows them.
+ *
+ * @returns Cloudflare's limit, as a link to the page of Cloudflare's that states it; poplin's own line, or `none`; and the share spent, with whose limit it is a share of: poplin's own where it draws one, else Cloudflare's
+ */
+function limitCells(worst: Worst): Cell[] {
+  const limits = LIMITS.get(worst.ceiling);
+  if (limits === undefined) throw new Error(`"${worst.ceiling}" is no ceiling of this budget`);
+
+  const link = summary.emptyBuffer().addLink(shown(limits.cloudflare.most), limits.cloudflare.page).stringify().trim();
+
+  return [link, limits.own ?? NO_OWN, share(worst, heldTo(limits).whose)];
+}
+
+/** One row a ceiling, in the order given: its worst row, what main's worst spent, what this run's does, how far that moved, and the ceiling's limits. */
 function ceilingRows(now: readonly Worst[], main: Compared["main"]): Cell[][] {
   const before = typeof main === "object" ? worstOf(main) : undefined;
 
   return now.map((worst) => {
-    const { ceiling, name, spent, most } = worst;
+    const { ceiling, name, spent } = worst;
     const was = before?.get(ceiling)?.spent;
-    if (was === undefined) return [ceiling, name, "-", spent, "-", most, share(worst)];
+    if (was === undefined) return [ceiling, name, "-", spent, "-", ...limitCells(worst)];
 
-    return [ceiling, name, was, spent, was === spent ? "no change" : delta(was, spent), most, share(worst)];
+    return [ceiling, name, was, spent, was === spent ? "no change" : delta(was, spent), ...limitCells(worst)];
   });
 }
 
@@ -344,7 +366,7 @@ export function budgetReport({ now, main }: Compared): Report {
     ...(main === undefined ? [stands] : [changed, stands]).map((line) => `<p>${line}</p>\n`),
     ...(moved.length > 0 ? [`<h3>What changed</h3>\n${table(["Action", "Count", "Before", "After", "Change"], moved.map(movedRow))}`] : []),
     ...(known.length > 0 ? [`<p>Known to be over a ceiling:</p>\n${summary.emptyBuffer().addList(known).stringify()}`] : []),
-    table(["Ceiling", "Worst action", "Before (main)", "After", "Change", "Most", "Used"], ceilingRows(worst, main)),
+    table(["Ceiling", "Worst action", "Before (main)", "After", "Change", "Cloudflare's limit", "poplin's own limit", "Used"], ceilingRows(worst, main)),
     folded(now),
     `<p>${LEAD}</p>\n`,
   ];
