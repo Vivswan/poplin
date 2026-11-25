@@ -14,11 +14,11 @@ npx poplin config
 npx poplin config trash_days 30
 ```
 
-The dashboard's Settings screen changes the same settings, all but `users`: change them, then press Save in the bar at the foot. Each setting is a row, with its key under its name: the name `poplin config` takes.
+The dashboard's Settings screen changes the same settings, all but `users`: change them, then press Save in the bar at the foot. Each setting is a row, with its key beside its name: the name `poplin config` takes.
 
 | In a row                        | Means                                                                    |
 | ------------------------------- | ------------------------------------------------------------------------ |
-| `max_total_size`, in small letters under the name | the setting's key, as text to select and copy             |
+| `max_total_size`, in small letters beside the name | the setting's key, as text to select and copy. On a screen too narrow for both it stands under the name |
 | `(Default: 9,000 MB)`           | the setting's default                                                    |
 | Reset                           | beside a default the row differs from: puts it back                      |
 | a warning under the field, in plain words after a mark | follows the number as it is typed. A number above a free limit earns one: [Limits and cost](../upkeep/cost/what-can-cost-money.md). So does One site above All sites together: `More than all sites together may hold, so that limit is reached first.` And One visitor per minute above One site per minute: `More than one site answers in a minute, so that limit is reached first.` |
