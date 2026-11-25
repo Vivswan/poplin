@@ -27,31 +27,61 @@
 import type { FreeLimits } from "@poplin/app/src/console/settings/free-limits";
 import { SWEEP_SPARE_WRITES } from "@poplin/core/src/actions/install/sweep";
 
-/** The bytes R2 stores for free. */
-const FREE_STORAGE_BYTES = 10_000_000_000;
+/** Cloudflare's page of what a Worker may do on each plan. */
+const WORKERS_LIMITS = "https://developers.cloudflare.com/workers/platform/limits/";
 
-/** The Class A operations R2 takes for free in a month: every file stored and every listing is one. */
-const FREE_WRITES_A_MONTH = 1_000_000;
+/** Cloudflare's page of what a D1 database may do on each plan. */
+const D1_LIMITS = "https://developers.cloudflare.com/d1/platform/limits/";
 
-/** The Class B operations R2 takes for free in a month: every read of a file, and every look at one, is one. */
-const FREE_READS_A_MONTH = 10_000_000;
+/** Cloudflare's page of what D1 reads and writes for free. */
+const D1_PRICING = "https://developers.cloudflare.com/d1/platform/pricing/";
+
+/** Cloudflare's page of what R2 stores and takes for free. */
+const R2_PRICING = "https://developers.cloudflare.com/r2/pricing/";
+
+/** What the free plans of Workers, D1, and R2 allow, each number beside the page of Cloudflare's it is read from. */
+export const CLOUDFLARE_FREE = {
+  /** Workers: the requests of a day. */
+  requestsADay: { most: 100_000, page: `${WORKERS_LIMITS}#daily-requests` },
+
+  /** Workers: the subrequests one invocation makes to Cloudflare's own services, D1 and R2 among them. */
+  serviceCallsAnInvocation: { most: 1_000, page: `${WORKERS_LIMITS}#subrequests` },
+
+  /** D1: the queries of one invocation, a batch being one. */
+  queriesAnInvocation: { most: 50, page: D1_LIMITS },
+
+  /** D1: the rows read in a day. */
+  rowsReadADay: { most: 5_000_000, page: D1_PRICING },
+
+  /** D1: the rows written in a day. */
+  rowsWrittenADay: { most: 100_000, page: D1_PRICING },
+
+  /** R2: the bytes stored through a whole month, which Cloudflare counts as 10 GB-months. */
+  storedBytes: { most: 10_000_000_000, page: R2_PRICING },
+
+  /** R2: the Class A operations of a month: every file stored and every listing is one. */
+  writesAMonth: { most: 1_000_000, page: R2_PRICING },
+
+  /** R2: the Class B operations of a month: every read of a file, and every look at one, is one. */
+  readsAMonth: { most: 10_000_000, page: R2_PRICING },
+} as const satisfies Record<string, PlanLimit>;
 
 /** The days of the longest month. */
 const DAYS_A_MONTH = 31;
 
 /** The most writes and listings a day whose month stays free: a month spends at most 31 days of the setting and of the sweep's own listings, and one more day of the setting, for the writes an upload counted the day before the month began. */
-const FREE_WRITES_A_DAY = Math.floor((FREE_WRITES_A_MONTH - DAYS_A_MONTH * SWEEP_SPARE_WRITES) / (DAYS_A_MONTH + 1));
+const FREE_WRITES_A_DAY = Math.floor((CLOUDFLARE_FREE.writesAMonth.most - DAYS_A_MONTH * SWEEP_SPARE_WRITES) / (DAYS_A_MONTH + 1));
 
 /** The most files a publish declares and still starts within the processing time a Worker gets on the Free plan. */
 const FREE_FILES_PER_PUBLISH = 5000;
 
 /** The limits the dashboard of an install on Cloudflare warns against. */
 export const FREE_LIMITS: FreeLimits = {
-  totalBytes: { most: FREE_STORAGE_BYTES, warning: "Cloudflare bills storage past 10 GB." },
-  siteBytes: { most: FREE_STORAGE_BYTES, warning: "Cloudflare bills storage past 10 GB." },
+  totalBytes: { most: CLOUDFLARE_FREE.storedBytes.most, warning: "Cloudflare bills storage past 10 GB." },
+  siteBytes: { most: CLOUDFLARE_FREE.storedBytes.most, warning: "Cloudflare bills storage past 10 GB." },
   filesPerPublish: { most: FREE_FILES_PER_PUBLISH, warning: "A publish over 5,000 files may not start on the free plan." },
   filesPerDay: {
-    most: Math.floor(FREE_WRITES_A_MONTH / DAYS_A_MONTH),
+    most: Math.floor(CLOUDFLARE_FREE.writesAMonth.most / DAYS_A_MONTH),
     warning: "Past 1,000,000 writes a month, Cloudflare bills the rest.",
   },
   storageWritesPerDay: {
@@ -59,9 +89,18 @@ export const FREE_LIMITS: FreeLimits = {
     warning: "Past 1,000,000 writes a month, Cloudflare bills the rest.",
   },
   storageReadsPerMonth: {
-    most: FREE_READS_A_MONTH,
+    most: CLOUDFLARE_FREE.readsAMonth.most,
     warning: "Requests read the storage. Past 10,000,000 reads a month, Cloudflare bills the rest.",
   },
-  requestsPerDay: { most: 100_000, warning: "Past 100,000 requests a day you need Cloudflare's paid plan." },
+  requestsPerDay: { most: CLOUDFLARE_FREE.requestsADay.most, warning: "Past 100,000 requests a day you need Cloudflare's paid plan." },
   users: { most: 50, warning: "Past 50 users, Cloudflare bills each login." },
 };
+
+/** One number a free plan of Cloudflare's allows. */
+export interface PlanLimit {
+  /** The most the plan allows. */
+  readonly most: number;
+
+  /** The address of the page of Cloudflare's that states it. */
+  readonly page: string;
+}
