@@ -185,7 +185,7 @@ afterAll(async () => {
 describe("the one page", () => {
   // Drift: a setting that arrives with no words would be named by its raw key, or stand under a heading nobody looks for it under; or the settings would be split over tabs again. A row without its key could not be found in `poplin config`.
   // Drift: the version would stand under the settings of Updates, away from the heading a person finds it under, or carry a key as if `poplin config` took it.
-  test("holds every setting once under the heading of its block, a setting with no words under the heading its key reads like, with a readable name and its key under it, and the version first under Updates with no key", async () => {
+  test("holds every setting once under the heading of its block, a setting with no words under the heading its key reads like, with a readable name and its key, and the version first under Updates with no key", async () => {
     await drawn();
     const blocks = [...document.querySelectorAll("form section")].map((block) => [block.querySelector("h2")?.textContent, ...[...block.querySelectorAll("h3")].map((name) => name.textContent)]);
 

@@ -1,4 +1,5 @@
-// One setting of the Settings screen as a row. A wide column has the name at the left, with the setting's key, one short sentence and the default under it, and the control at the right, with what the host warns of at its value in plain words under it.
+// One setting of the Settings screen as a row. A wide column has the name at the left with the setting's key beside it, and one short sentence and the default under them.
+// The control stands at the right, with what the host warns of at its value in plain words under it.
 // A narrow column keeps the sentence and the default behind a "?" beside the name. The narrowest one, a phone's, has a field under its name and a switch beside it.
 
 import { Field } from "@base-ui/react/field";
@@ -23,7 +24,7 @@ interface SettingFrameProps {
   /** What stands after the name, on the name's line, in plain text: a fact the row states that nothing sets, such as the version an install runs. */
   readonly afterName?: string;
 
-  /** The key a command names the setting by, such as `trash_days`: it stands under the name, as text a person can select. */
+  /** The key a command names the setting by, such as `trash_days`: it stands beside the name, and under it where the column has no room for both, as text a person can select. */
   readonly settingKey?: string;
 
   /** The id of the control: the name has this id with `-label` after it, for a control it names. */
@@ -161,14 +162,17 @@ export function SettingFrame({
     >
       <div className="min-w-0">
         {/* A line that holds a fact is as high as a control's line, so the fact and what stands at the right are read as one line. Where the column is too narrow for both, the fact goes under the name. */}
-        <div className={cn("flex items-center", afterName === undefined ? "gap-1" : "min-h-8 flex-wrap gap-x-2")}>
-          <Field.Label nativeLabel={false} render={(props) => <h3 {...props} />} id={`${controlId}-label`} className="leading-6 font-semibold">
-            {name}
-          </Field.Label>
+        {/* The key stands on the name's line too, on the line the name's letters stand on, and goes under the name where the column has no room for both. The "?" stays with the name. */}
+        <div data-slot="setting-name-line" className={cn("flex flex-wrap gap-x-2", afterName === undefined ? "items-baseline" : "min-h-8 items-center")}>
+          <div className="flex items-center gap-1">
+            <Field.Label nativeLabel={false} render={(props) => <h3 {...props} />} id={`${controlId}-label`} className="leading-6 font-semibold">
+              {name}
+            </Field.Label>
+            {sentences.length === 0 && fallback === undefined ? null : <About name={name} says={sentences} fallback={fallback} onReset={onReset} />}
+          </div>
+          {settingKey === undefined ? null : <code className="max-w-full font-mono text-xs leading-5 wrap-anywhere text-muted-foreground select-all">{settingKey}</code>}
           {afterName === undefined ? null : <p className="leading-6">{afterName}</p>}
-          {sentences.length === 0 && fallback === undefined ? null : <About name={name} says={sentences} fallback={fallback} onReset={onReset} />}
         </div>
-        {settingKey === undefined ? null : <code className="block w-fit max-w-full font-mono text-xs leading-5 wrap-anywhere text-muted-foreground select-all">{settingKey}</code>}
         <p className={cn("text-muted-foreground", WIDE_ONLY)}>
           {about === "" ? null : <Field.Description render={<span />}>{about}</Field.Description>}
           {onReset === undefined ? null : (
@@ -179,7 +183,8 @@ export function SettingFrame({
           )}
         </p>
       </div>
-      <div className="flex max-w-full min-w-0 flex-col gap-1.5">
+      {/* A switch beside its name on a phone is never narrower than what it holds, so a switch with no line under it ends at the row's edge. The name's side gives way: its key goes under the name. */}
+      <div className={cn("flex max-w-full flex-col gap-1.5", beside ? "min-w-min @[480px]:min-w-0" : "min-w-0")}>
         <div className="flex min-h-8 max-w-full items-center gap-2">{children}</div>
         {warnings.length === 0 ? null : <Warnings warnings={warnings} />}
         {under === undefined ? null : <div className="text-[13px] leading-5 empty:hidden">{under}</div>}

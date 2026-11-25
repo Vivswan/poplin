@@ -1,7 +1,8 @@
 // The Settings screen under the wheel: its rows scroll, and the page around them never does. A count too large to keep, which is refused at its field. The switch of the logs, which stays as it was saved.
 // And the moment Save rests after a save the install carries by itself. The choice of who gets the alerts, which holds a user ticked in its list.
+// And where a row's parts stand: the key on the line of its name on a wide screen, and the switches of a phone at one edge.
 
-import { expect, type Page } from "@playwright/test";
+import { expect, type Locator, type Page } from "@playwright/test";
 
 import { arrive, SECTIONS_BUTTON, said, screenHeading, test, toSection } from "./visit";
 
@@ -11,11 +12,23 @@ const SAVED_ON = [
   { name: "an install that holds no key", settings: "empty/settings", says: "Saved. Takes effect at the next Repair." },
 ] as const;
 
-/** The screens Settings is walked on: the widest, and a phone. */
-const SCREENS = [
-  { width: 1440, height: 900 },
-  { width: 390, height: 844 },
-] as const;
+/** The widest screen Settings is walked on. */
+const WIDE = { width: 1440, height: 900 } as const;
+
+/** A common phone. */
+const PHONE = { width: 390, height: 844 } as const;
+
+/** A narrow phone. */
+const NARROW_PHONE = { width: 320, height: 640 } as const;
+
+/** The screens the wheel is turned on. */
+const SCREENS = [WIDE, PHONE] as const;
+
+/** The phones the switches are measured on. */
+const PHONES = [NARROW_PHONE, PHONE] as const;
+
+/** The line of a row's name, which holds a setting's key too. */
+const NAME_LINE = "[data-slot='setting-name-line']";
 
 /** How far one turn of the wheel goes, in pixels, and how many turns reach the end of the longest list of rows. */
 const [TURN, TURNS] = [400, 12] as const;
@@ -33,6 +46,23 @@ const ALERTS = { group: "Alerts", label: /^Send alerts to/u, first: /^First user
 async function wheelDown(page: Page, x: number, y: number): Promise<void> {
   await page.mouse.move(x, y);
   for (let turn = 0; turn < TURNS; turn++) await page.mouse.wheel(0, TURN);
+}
+
+/** Whether the key on the line of a row's name stands after the name, at the name's height. */
+async function besideName(line: Locator): Promise<boolean> {
+  const [name, key] = await Promise.all([line.locator("h3").boundingBox(), line.locator("code").boundingBox()]);
+  if (name === null || key === null) return false;
+
+  const middle = key.y + key.height / 2;
+
+  return key.x >= name.x + name.width && middle > name.y && middle < name.y + name.height;
+}
+
+/** A switch's id, and where it ends at the right, in whole pixels. */
+async function endOf(part: Locator): Promise<readonly [string | null, number | null]> {
+  const box = await part.boundingBox();
+
+  return [await part.getAttribute("id"), box === null ? null : Math.round(box.x + box.width)];
 }
 
 for (const size of SCREENS) {
@@ -58,6 +88,43 @@ for (const size of SCREENS) {
       expect(await page.evaluate(() => [window.scrollY, document.documentElement.scrollHeight - window.innerHeight]), "how far the page went, and how far it could go").toEqual([0, 0]);
       await expect(screenHeading(page, "Settings")).toBeInViewport({ ratio: 1 });
       await expect(phone ? sections : page.getByRole("navigation", { name: "Sections", exact: true }).getByRole("link", { name: /^Sites/u })).toBeInViewport({ ratio: 1 });
+    });
+  });
+}
+
+test.describe("on the widest screen, Settings", () => {
+  test.use({ viewport: WIDE });
+
+  // Drift: the key would go back to a line of its own under the name, on a screen with room for both on one line.
+  test("has the key of every setting on the line of its name, after the name", async ({ page }) => {
+    await arrive(page);
+    await page.goto("settings");
+    const form = page.getByRole("form", { name: "Settings", exact: true });
+    await expect(form.getByRole("switch", { name: LOGS.label, exact: true })).toBeVisible();
+
+    const lines = await form.locator(NAME_LINE).filter({ has: page.locator("code") }).all();
+    const placed = await Promise.all(lines.map(async (line) => [await line.locator("code").textContent(), await besideName(line)]));
+    expect(lines.length, "how many settings the screen holds").toBeGreaterThan(1);
+    expect(placed).toEqual(placed.map(([key]) => [key, true]));
+  });
+});
+
+for (const size of PHONES) {
+  test.describe(`on a phone ${size.width} px wide, Settings`, () => {
+    test.use({ viewport: size });
+
+    // Drift: a long name with its key beside it asks for more room than a phone's row has. A row that took it from the switch would hang the switch out at the right, past the switches of shorter rows.
+    test("ends every switch at one edge, however long the name and the key beside it", async ({ page }) => {
+      await arrive(page);
+      await page.goto("settings");
+      const form = page.getByRole("form", { name: "Settings", exact: true });
+      await expect(form.getByRole("switch", { name: LOGS.label, exact: true })).toBeVisible();
+
+      // On this install no switch has a line under it: such a line shares the switch's column, and the switch then stands at the column's left.
+      const ends = await Promise.all((await form.getByRole("switch").all()).map(endOf));
+      const [, edge] = ends[0] ?? [];
+      expect(ends.length, "how many switches the screen holds").toBeGreaterThan(1);
+      expect(ends).toEqual(ends.map(([id]) => [id, edge]));
     });
   });
 }

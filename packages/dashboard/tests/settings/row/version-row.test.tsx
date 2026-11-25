@@ -131,12 +131,12 @@ function parts(slot: string): (string | null)[] {
 function held(): unknown[] {
   const drawn = within(row() as HTMLElement);
 
-  return [row()?.textContent, drawn.getByRole("heading").parentElement?.textContent, parts("version-line"), parts("version-note"), drawn.queryAllByRole("button").map((button) => button.textContent)];
+  return [row()?.textContent, parts("setting-name-line"), parts("version-line"), parts("version-note"), drawn.queryAllByRole("button").map((button) => button.textContent)];
 }
 
-/** What a row holds that is drawn right: its parts in their order and nothing else, the version on the line of the row's name, at most one line at the right, and at most one note. */
+/** What a row holds that is drawn right: its parts in their order and nothing else, the version on the one line of the row's name, at most one line at the right, and at most one note. */
 function drawnRight({ named, line, note, buttons = [] }: { readonly named: string; readonly line: string | null; readonly note: string | null; readonly buttons?: readonly string[] }): unknown[] {
-  return [`Version${named}${line ?? ""}${note ?? ""}`, `Version${named}`, line === null ? [] : [line], note === null ? [] : [note], [...buttons]];
+  return [`Version${named}${line ?? ""}${note ?? ""}`, [`Version${named}`], line === null ? [] : [line], note === null ? [] : [note], [...buttons]];
 }
 
 /** Press a button of a question, and wait a turn inside the same act: after a press sent bare, a cancelled question stayed drawn for many seconds. */
