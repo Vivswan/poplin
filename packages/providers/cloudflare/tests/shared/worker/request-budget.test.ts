@@ -4,10 +4,10 @@
 import { reset } from "cloudflare:test";
 import type { Api } from "@poplin/app/src/api/api";
 import { dataRoutes } from "@poplin/app/src/console/routes";
-import { MOST_STORE_CALLS } from "@poplin/app/src/sites/serve";
 import type { ExtractSchema } from "hono/types";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import guide from "../../../../../../docs/upkeep/cost/what-one-action-costs.md?raw";
+import { CEILINGS, type Ceiling, heldTo } from "../../../src/shared/limits/budget-ceilings";
 import { API_ROWS, DRY_RUN_ROWS } from "./support/budget-rows-api";
 import { CONSOLE_ROWS } from "./support/budget-rows-console";
 import { ENTRY_ROWS } from "./support/budget-rows-entry";
@@ -18,21 +18,6 @@ import { type Budget, type BudgetRow, type CostLine, costOf, type Use } from "./
 
 /** One row per thing the product does. */
 const ROWS: readonly BudgetRow[] = [...ENTRY_ROWS, ...CONSOLE_ROWS, ...PUBLISH_ROWS, ...JOBS_ROWS, ...API_ROWS, ...DRY_RUN_ROWS];
-
-/** The most queries a row may budget: D1 answers one invocation 50 on the Free plan, and 10 are left for a start of the instance and for what a change adds before anyone looks. */
-const MOST_QUERIES = 40;
-
-/** The most calls to the bucket one request may budget: the bound the product sets a copy, the request that makes the most. */
-const MOST_STORE_CALLS_A_REQUEST = 250;
-
-/** The most calls one scheduled run may budget: the bound the run sets itself, with the start of its instance. */
-const MOST_RUN_CALLS = 300;
-
-/** The rows D1 reads in a day on the Free plan. */
-const MOST_ROWS_READ_A_DAY = 5_000_000;
-
-/** The rows D1 writes in a day on the Free plan. */
-const MOST_ROWS_WRITTEN_A_DAY = 100_000;
 
 /** The most values D1 binds to one statement. */
 const MOST_BOUND = 100;
@@ -102,23 +87,25 @@ function statedInGuide(): (readonly [action: string, cost: ActionCost])[] {
   });
 }
 
+/** What is spent of one ceiling, beside the limit the ceiling holds it to. */
+function useOf(ceiling: keyof typeof CEILINGS, spent: number): Use {
+  const declared: Ceiling = CEILINGS[ceiling];
+
+  return { ceiling, spent, most: heldTo(declared).most, ...(declared.exact === undefined ? {} : { exact: declared.exact }) };
+}
+
 /**
  * How much of each ceiling a row spends, or may spend: the queries of one invocation, the bucket calls of one request, every call of one run, the bucket reads of one page view, and the rows of a day.
  * A removal is a call, though R2 bills none. A count of rows that is left out is of no ceiling.
  */
 function usesOf(row: BudgetRow, { queries, reads, writes, deletes = 0, read, written }: Budget): Use[] {
   const stored = reads + writes + deletes;
-  const rows = [
-    ...(read === undefined ? [] : [{ ceiling: "Rows read, of one day's", spent: read, most: MOST_ROWS_READ_A_DAY }]),
-    ...(written === undefined ? [] : [{ ceiling: "Rows written, of one day's", spent: written, most: MOST_ROWS_WRITTEN_A_DAY }]),
-  ];
-  if (row.status === undefined) {
-    return [{ ceiling: "Database queries, one scheduled run", spent: queries, most: MOST_QUERIES }, { ceiling: "Every call, one scheduled run", spent: queries + stored, most: MOST_RUN_CALLS }, ...rows];
-  }
+  const rows = [...(read === undefined ? [] : [useOf("Rows read, of one day's", read)]), ...(written === undefined ? [] : [useOf("Rows written, of one day's", written)])];
+  if (row.status === undefined) return [useOf("Database queries, one scheduled run", queries), useOf("Every call, one scheduled run", queries + stored), ...rows];
 
-  const view = row.group === "One page view of a site" ? [{ ceiling: "Bucket reads, one page view", spent: reads, most: MOST_STORE_CALLS, exact: true as const }] : [];
+  const view = row.group === "One page view of a site" ? [useOf("Bucket reads, one page view", reads)] : [];
 
-  return [{ ceiling: "Database queries, one request", spent: queries, most: MOST_QUERIES }, { ceiling: "Bucket calls, one request", spent: stored, most: MOST_STORE_CALLS_A_REQUEST }, ...view, ...rows];
+  return [useOf("Database queries, one request", queries), useOf("Bucket calls, one request", stored), ...view, ...rows];
 }
 
 /** Whether what a row spends, or may spend, is over a ceiling. */

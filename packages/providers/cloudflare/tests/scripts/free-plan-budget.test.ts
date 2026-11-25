@@ -6,12 +6,26 @@ import { describe, expect, test } from "bun:test";
 import { EOL } from "node:os";
 
 import { budgetReport } from "../../scripts/free-plan-budget";
+import type { CEILINGS } from "../../src/shared/limits/budget-ceilings";
 
 /** What every summary ends with. */
-const LEAD = "<p>Measured on the local Workers runtime with the real database driver. Cloudflare's free plan answers one request 50 database queries; a request here may spend 40.</p>\n";
+const LEAD =
+  "<p>Measured on the local Workers runtime with the real database driver. Cloudflare's limit beside the bucket calls is on one invocation's calls to all of its own services, the database and the bucket together.</p>\n";
 
 /** The head of the table of the ceilings. */
-const CEILINGS = "<tr><th>Ceiling</th><th>Worst action</th><th>Before (main)</th><th>After</th><th>Change</th><th>Most</th><th>Used</th></tr>";
+const HEAD = "<tr><th>Ceiling</th><th>Worst action</th><th>Before (main)</th><th>After</th><th>Change</th><th>Cloudflare's limit</th><th>poplin's own limit</th><th>Used</th></tr>";
+
+/** The cell of Cloudflare's limit on the queries of one invocation, as a row links it to D1's page. */
+const QUERIES = '<td><a href="https://developers.cloudflare.com/d1/platform/limits/">50</a></td>';
+
+/** The cell of Cloudflare's limit on the calls of one invocation to its own services, as a row links it to the Workers page. */
+const SERVICE_CALLS = '<td><a href="https://developers.cloudflare.com/workers/platform/limits/#subrequests">1,000</a></td>';
+
+/** The cells of Cloudflare's limits on the rows of a day, as a row links them to D1's page of what is free. */
+const ROWS_A_DAY = {
+  read: '<td><a href="https://developers.cloudflare.com/d1/platform/pricing/">5,000,000</a></td>',
+  written: '<td><a href="https://developers.cloudflare.com/d1/platform/pricing/">100,000</a></td>',
+} as const;
 
 /** The head of the table of one group's rows. */
 const GROUP =
@@ -69,6 +83,20 @@ const OVER = { ...PAGE, queries: 44, budget: { queries: 44, reads: 1, writes: 0 
 
 /** The page that reads the storage as often as a page view may, by design, and as often as its budget lets it. */
 const IN_FULL = { ...PAGE, gets: 3, budget: { queries: 5, reads: 3, writes: 0 }, uses: [{ ceiling: "Database queries, one request", spent: 5, most: 40 }, { ...ONE_READ, spent: 3 }] };
+
+/**
+ * What a row spends of each ceiling: half of the limit the ceiling holds it to, and the bucket reads of a page view in full.
+ * A ceiling declared with no entry here does not compile.
+ */
+const OF_EACH: Readonly<Record<keyof typeof CEILINGS, { readonly spent: number; readonly most: number; readonly exact?: true }>> = {
+  "Database queries, one request": { spent: 20, most: 40 },
+  "Database queries, one scheduled run": { spent: 20, most: 40 },
+  "Bucket calls, one request": { spent: 125, most: 250 },
+  "Bucket reads, one page view": { spent: 3, most: 3, exact: true },
+  "Every call, one scheduled run": { spent: 150, most: 300 },
+  "Rows read, of one day's": { spent: 2_500_000, most: 5_000_000 },
+  "Rows written, of one day's": { spent: 50_000, most: 100_000 },
+};
 
 /** The costs of a run that measured the rows. */
 function run(...rows: Compared["now"]["rows"]): Compared["now"] {
@@ -160,10 +188,10 @@ describe("the report of the free-plan budget", () => {
         '<p>All within budget. Closest: "a copy" at 82% of Bucket calls, one request.</p>\n' +
         "<h3>What changed</h3>\n" +
         "<table><tr><th>Action</th><th>Count</th><th>Before</th><th>After</th><th>Change</th></tr><tr><td>a page</td><td>Database queries</td><td>5</td><td>6</td><td>+1 (+20%)</td></tr></table>\n" +
-        `<table>${CEILINGS}` +
-        "<tr><td>Bucket calls, one request</td><td>a copy</td><td>205</td><td>205</td><td>no change</td><td>250</td><td><b>82%</b> &#9888;</td></tr>" +
-        "<tr><td>Database queries, one request</td><td>a copy</td><td>8</td><td>8</td><td>no change</td><td>40</td><td>20%</td></tr>" +
-        "<tr><td>Bucket reads, one page view</td><td>a page</td><td>1</td><td>1</td><td>no change</td><td>3</td><td>1 of 3 (allowed in full)</td></tr>" +
+        `<table>${HEAD}` +
+        `<tr><td>Bucket calls, one request</td><td>a copy</td><td>205</td><td>205</td><td>no change</td>${SERVICE_CALLS}<td>250</td><td><b>82%</b> of poplin's own &#9888;</td></tr>` +
+        `<tr><td>Database queries, one request</td><td>a copy</td><td>8</td><td>8</td><td>no change</td>${QUERIES}<td>40</td><td>20% of poplin's own</td></tr>` +
+        `<tr><td>Bucket reads, one page view</td><td>a page</td><td>1</td><td>1</td><td>no change</td>${SERVICE_CALLS}<td>3</td><td>1 of poplin's own 3 (allowed in full)</td></tr>` +
         `</table>\n${folded}${LEAD}`,
     );
   });
@@ -181,7 +209,7 @@ describe("the report of the free-plan budget", () => {
         "<h3>What changed</h3>\n" +
         "<table><tr><th>Action</th><th>Count</th><th>Before</th><th>After</th><th>Change</th></tr><tr><td>a copy</td><td>Database queries</td><td>8</td><td>4</td><td>-4 (-50%)</td></tr></table>\n" +
         "<p>Known to be over a ceiling:</p>\n<ul><li>a page: 44 database queries. it reads its sites one by one</li></ul>\n" +
-        `<table>${CEILINGS}<tr><td>Database queries, one request</td><td>a copy</td><td>8</td><td>4</td><td>-4 (-50%)</td><td>40</td><td>10%</td></tr></table>\n` +
+        `<table>${HEAD}<tr><td>Database queries, one request</td><td>a copy</td><td>8</td><td>4</td><td>-4 (-50%)</td>${QUERIES}<td>40</td><td>10% of poplin's own</td></tr></table>\n` +
         "<details><summary>What a person does</summary><table><tr><th>Action</th><th>Requests</th><th>Database queries</th></tr><tr><td>Open a page</td><td>1</td><td>44</td></tr></table>\n</details>\n" +
         `<details><summary>One page view of a site</summary><table>${GROUP}${row}</table>\n</details>\n` +
         `<details><summary>Publishing</summary><table>${GROUP}<tr><td>a copy</td><td>10%</td><td>4</td><td>4</td><td>1,200</td><td>24</td><td>100</td><td>104</td><td>1</td><td>0</td><td>40</td><td>-</td></tr></table>\n</details>\n` +
@@ -195,12 +223,29 @@ describe("the report of the free-plan budget", () => {
     expect(summaryOf({ now: run(IN_FULL) })).toBe(
       "<h2>Free-plan budget</h2>\n" +
         '<p>All within budget. Closest: "a page" at 13% of Database queries, one request.</p>\n' +
-        `<table>${CEILINGS}` +
-        "<tr><td>Database queries, one request</td><td>a page</td><td>-</td><td>5</td><td>-</td><td>40</td><td>13%</td></tr>" +
-        "<tr><td>Bucket reads, one page view</td><td>a page</td><td>-</td><td>3</td><td>-</td><td>3</td><td>3 of 3 (allowed in full)</td></tr>" +
+        `<table>${HEAD}` +
+        `<tr><td>Database queries, one request</td><td>a page</td><td>-</td><td>5</td><td>-</td>${QUERIES}<td>40</td><td>13% of poplin's own</td></tr>` +
+        `<tr><td>Bucket reads, one page view</td><td>a page</td><td>-</td><td>3</td><td>-</td>${SERVICE_CALLS}<td>3</td><td>3 of poplin's own 3 (allowed in full)</td></tr>` +
         "</table>\n" +
         `<details><summary>One page view of a site</summary><table>${GROUP}<tr><td>a page</td><td>13%</td><td>5</td><td>5</td><td>7</td><td>2</td><td>3</td><td>0</td><td>0</td><td>0</td><td>3</td><td>-</td></tr></table>\n</details>\n` +
         LEAD,
     );
+  });
+
+  // Drift: the column that held one number for both read a line of poplin's own as what Cloudflare allows, and a share of Cloudflare's limit as a share of poplin's.
+  // A ceiling added with no line of its own, or with no limit of Cloudflare's beside it, would show an empty cell.
+  test("every ceiling shows Cloudflare's limit as a link to the page that states it, poplin's own line or none where it draws none, and whose limit the share is of", () => {
+    const every = { ...PAGE, uses: Object.entries(OF_EACH).map(([ceiling, use]) => ({ ceiling, ...use })) };
+    const rows = [
+      ["Database queries, one request", "20", QUERIES, "40", "50% of poplin's own"],
+      ["Database queries, one scheduled run", "20", QUERIES, "40", "50% of poplin's own"],
+      ["Bucket calls, one request", "125", SERVICE_CALLS, "250", "50% of poplin's own"],
+      ["Every call, one scheduled run", "150", SERVICE_CALLS, "300", "50% of poplin's own"],
+      ["Rows read, of one day's", "2,500,000", ROWS_A_DAY.read, "none", "50% of Cloudflare's"],
+      ["Rows written, of one day's", "50,000", ROWS_A_DAY.written, "none", "50% of Cloudflare's"],
+      ["Bucket reads, one page view", "3", SERVICE_CALLS, "3", "3 of poplin's own 3 (allowed in full)"],
+    ].map(([ceiling, spent, cloudflare, own, used]) => `<tr><td>${ceiling}</td><td>a page</td><td>-</td><td>${spent}</td><td>-</td>${cloudflare}<td>${own}</td><td>${used}</td></tr>`);
+
+    expect(summaryOf({ now: run(every) })).toContain(`<table>${HEAD}${rows.join("")}</table>`);
   });
 });

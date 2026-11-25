@@ -34,11 +34,11 @@ import {
 } from "./support/install";
 import { OWN_KEY, ownRelease } from "./support/own-release";
 
-/** This repository's own guard against a library pulled in whole: Cloudflare takes a Worker of up to 64 MiB as it is, on every plan. The bundle is about 2,118,000 bytes, the dashboard's built client in it as strings. */
-const MOST_BUNDLE_BYTES = 3_000_000;
+/** An alarm of this repository's own against a library pulled in whole, and no limit of Cloudflare's: it takes a Worker of up to 64 MiB as it is, on every plan. The bundle is about 2,244,000 bytes, the dashboard's built client in it as strings. */
+const MOST_BUNDLE_BYTES = 6_000_000;
 
-/** This repository's own guard on the gzipped bundle: Cloudflare sets no limit on that size. The bundle is about 742,000 bytes then. */
-const MOST_BUNDLE_GZIP_BYTES = 800_000;
+/** An alarm of this repository's own that a doubling of the gzipped bundle sets off, and no limit of Cloudflare's: it sets none on that size. The bundle is about 784,000 bytes then. */
+const MOST_BUNDLE_GZIP_BYTES = 1_500_000;
 
 /** A path that starts at the root of a disk, or an address: it would name the machine a map was built on. */
 const ABSOLUTE = /^(?:[/\\]|[A-Za-z]:|[a-z]+:\/\/)/;

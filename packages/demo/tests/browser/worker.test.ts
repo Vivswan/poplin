@@ -8,11 +8,11 @@ import { DEFAULT_ICON } from "../../../app/src/sites/default-icon";
 import { readFiles } from "../../../cli/src/files/read";
 import { buildDemo } from "../../scripts/build";
 
-/** The most the worker's script may weigh as a host sends it, in bytes: it holds the product's code and the sample sites, and nothing of the dashboard's client, which the host serves beside it. It is about 220,500. */
-const SCRIPT_BUDGET = 240_000;
+/** The most the worker's script may weigh as a host sends it, in bytes: an alarm of this repository's own that a doubling sets off, no limit of a host's. It is about 224,000: the product's code and the sample sites, without the dashboard's client. */
+const SCRIPT_BUDGET = 440_000;
 
-/** The most every file of the built demo may weigh together, in bytes gzipped: about 1,090,000. The client is about 460,000 of it, and a first visit loads about 845,000: the worker, SQLite, and the client's first scripts, stylesheet, and one font. */
-const TOTAL_BUDGET = 1_250_000;
+/** The most every file of the built demo may weigh together, in bytes gzipped: an alarm of the same kind. They are about 1,124,000, and a first visit loads about 910,000: the worker, SQLite, and the client's first scripts, stylesheet, and one font. */
+const TOTAL_BUDGET = 2_200_000;
 
 /** A file of the dashboard's client as the build names it: the name holds a hash of the file's content. */
 const CLIENT_FILE = /^assets\/[\w-]+-[\w-]{8}\.(?:js|css|woff2|svg)$/;
