@@ -68,10 +68,11 @@ const OPEN: Readonly<Record<(typeof INSTALL_OBJECTS.openPaths)[number], (request
   "/api": async (request, instance, _ways, open) => instance.api.fetch(request, laterOf(open)),
 };
 
-/** What a request is answered through: the settings its instance holds, read no longer ago than `lifetime` milliseconds, and the same for a site request. */
+/** What a request is answered through: the settings its instance holds, read no longer ago than `lifetime` milliseconds, the same for a site request, and what asks the project's website which version is the newest. */
 interface Ways {
   readonly held: (lifetime: number) => Promise<Held>;
   readonly siteHeld: SiteHeld;
+  readonly latest: Outside["latest"];
 }
 
 /** What one Worker instance answers through: its two handlers, and `starting`, which answers the instance those two run on, for the steps of a job. */
@@ -111,8 +112,12 @@ function laterOf(open: ExecutionContext | undefined): ((work: Promise<unknown>) 
   return open === undefined ? undefined : (work) => open.waitUntil(work);
 }
 
-/** Where the dashboard answers: every path of the admin hostname that Access guards. Who asks is decided on each request, from its Access token and the users just read. */
-async function answerDashboard(request: Request, instance: Instance, held: Held, open: ExecutionContext | undefined): Promise<Response> {
+/**
+ * Where the dashboard answers: every path of the admin hostname that Access guards. Who asks is decided on each request, from its Access token and the users just read.
+ *
+ * @param latest - what asks the project's website which version is the newest, for a press of Check now
+ */
+async function answerDashboard(request: Request, instance: Instance, held: Held, latest: Outside["latest"], open: ExecutionContext | undefined): Promise<Response> {
   const now = instance.install.now();
   // As the API does: every listing of the bucket this request makes is counted against the day, and written down once. What goes wrong with the count is noted.
   const meter = meterNoted(instance.install);
@@ -145,6 +150,7 @@ async function answerDashboard(request: Request, instance: Instance, held: Held,
     freeLimits: FREE_LIMITS,
     usage: instance.usage,
     update: instance.updating.self,
+    latest,
     jobs: instance.jobs,
     counters: instance.counters,
     visitorOf: (asked) => visitorKey(clientAddress(asked.headers), held.visitorSecret, now),
@@ -167,7 +173,7 @@ async function answerAdmin(request: Request, instance: Instance, ways: Ways, ope
   const path = INSTALL_OBJECTS.openPaths.find((candidate) => pathname === candidate || pathname.startsWith(`${candidate}/`));
   if (path !== undefined) return OPEN[path](request, instance, ways, open);
 
-  return answerDashboard(request, instance, await ways.held(FRESH), open);
+  return answerDashboard(request, instance, await ways.held(FRESH), ways.latest, open);
 }
 
 /** Run the scheduled sweep of a started instance, and note a run that failed. A Worker with nothing set has no site to sweep; any other start that failed is logged by what stopped it, and thrown, after the install went back where it may. */
@@ -288,7 +294,7 @@ export function createWorker(given: Partial<Outside> = {}, starting: typeof star
     noting = instance.install;
     const { hostname } = new URL(request.url);
     const { database } = instance.install;
-    const ways: Ways = { held: (lifetime) => held(database, lifetime), siteHeld: ofSite(database) };
+    const ways: Ways = { held: (lifetime) => held(database, lifetime), siteHeld: ofSite(database), latest: outside.latest };
     const part = instance.hosts.partOf(hostname);
     if (part === "site") return answerSite(request, instance, ways.siteHeld);
 

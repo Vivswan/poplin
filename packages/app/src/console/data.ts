@@ -3,6 +3,7 @@
 import type { Install } from "@poplin/core/src/actions/records";
 import type { EndLogins } from "@poplin/core/src/actions/access/sign-out";
 import type { Updating } from "@poplin/core/src/actions/start-update";
+import type { Asking } from "@poplin/core/src/actions/update/check-update";
 import type { Login } from "@poplin/core/src/auth/logins";
 import type { Actor } from "@poplin/core/src/auth/scopes";
 import type { Jobs } from "@poplin/core/src/jobs/jobs";
@@ -20,10 +21,11 @@ import type { LogsFollow } from "./settings/logs-follow";
 import type { RulesFollow } from "./settings/rules-follow";
 
 /** The status of the refusals only the console answers. Every other code goes out with the status the API gives it. */
-const OWN_STATUSES: Readonly<Record<string, 404 | 415 | 429>> = {
+const OWN_STATUSES: Readonly<Record<string, 404 | 415 | 429 | 502>> = {
   no_page: 404,
   not_json: 415,
   too_many_tries: 429,
+  website_unreachable: 502,
 };
 
 /** Every HTTP status a refusal of the console goes out with, each once: the API's, the console's own, and 400 for a code neither names. */
@@ -45,6 +47,9 @@ interface Host {
 
   /** What updates the install, and where the starts of a minute are counted. */
   readonly updating: Updating;
+
+  /** What asks the project's website which version of poplin is the newest, for a person who asks now. */
+  readonly latest: Asking;
 
   /** The version of poplin the install runs. */
   readonly version: string;

@@ -15,6 +15,7 @@ import type { Install } from "@poplin/core/src/actions/records";
 import type { EndLogins } from "@poplin/core/src/actions/access/sign-out";
 import { wayBack } from "@poplin/core/src/actions/update/go-back";
 import type { SelfUpdate } from "@poplin/core/src/actions/start-update";
+import type { Asking } from "@poplin/core/src/actions/update/check-update";
 import { inlineJobs } from "@poplin/core/src/jobs/inline-jobs";
 import type { Jobs } from "@poplin/core/src/jobs/jobs";
 import type { AddressLayout } from "@poplin/core/src/sites/address-layout";
@@ -111,6 +112,9 @@ interface ConsoleParts extends CodeTries {
   /** What takes a release and puts it in place of the running code. The starts are counted in `counters`. */
   readonly update: SelfUpdate;
 
+  /** What asks the project's website which version of poplin is the newest: a person who asks now is answered through it. The askings are counted in `counters`. */
+  readonly latest: Asking;
+
   /** Set by a host that shows sample data: the path a POST resets the data at. */
   readonly demo?: { readonly reset: string };
 
@@ -155,7 +159,7 @@ function admitted(parts: ConsoleParts): MiddlewareHandler<Shared> {
       context.set("rules", parts.rules);
       context.set("logs", parts.logs);
       context.set("takesCode", () => takesCode(parts, context.req.raw, parts.install.now));
-      context.set("host", { freeLimits: parts.freeLimits, updating: { self: parts.update, counters: parts.counters }, version: parts.version, usage: parts.usage, jobs: parts.jobs ?? inlineJobs, layout: parts.layout });
+      context.set("host", { freeLimits: parts.freeLimits, updating: { self: parts.update, counters: parts.counters }, latest: parts.latest, version: parts.version, usage: parts.usage, jobs: parts.jobs ?? inlineJobs, layout: parts.layout });
 
       return next();
     }
@@ -252,7 +256,7 @@ export function createConsole(parts: ConsoleParts): Console {
     const asked = { version: parts.version, domain: parts.domain?.words.thing, selfCarried: parts.follow?.holdsKey() === true, keyed: parts.update.holdsKey(), back: wayBack(parts.update.last, parts.version) };
     const frame = await frameOf(install, actor, asked);
 
-    const boot = { ...frame, title: TITLE, base: parts.base, email: context.get("email"), version: parts.version, demo: parts.demo ?? null, domain: parts.domain !== undefined };
+    const boot = { ...frame, title: TITLE, base: parts.base, email: context.get("email"), demo: parts.demo ?? null, domain: parts.domain !== undefined };
 
     return context.html(shellPage(boot, await parts.client.entry()));
   });

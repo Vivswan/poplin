@@ -1,4 +1,5 @@
 // What a list says of itself to a screen reader each time it changes: how many rows it shows, or that it shows none. Nothing of it is seen.
+// The same line says what a press came to where the press moves no focus, such as a check that found nothing new.
 
 import type { ReactNode } from "react";
 
@@ -26,9 +27,9 @@ export function rowsSaid(rows: number, { one, many, paged, narrowed }: Counted):
 }
 
 /**
- * Draw the line a screen reader says when a list changes, without moving the focus.
+ * Draw the line a screen reader says when a list changes, or when a press has its result, without moving the focus. The line is on the page before its words are, so that a change of them is said.
  *
- * @param words - what the list shows now; `undefined` while it still shows the rows of the list before, when the line keeps what it said
+ * @param words - what the list shows now, or what the press came to, empty while there is nothing to say; `undefined` while a list still shows the rows of the list before, when the line keeps what it said
  */
 export function ResultLine({ words }: { readonly words: string | undefined }): ReactNode {
   const said = useShownPlace(words ?? "", words !== undefined);

@@ -139,6 +139,7 @@ async function openDesk(): Promise<Desk> {
       freeLimits: FREE_LIMITS,
       usage: USAGE_HOST,
       update: { holdsKey: () => false, ready: async () => ({ ok: false, code: "no_key" }) },
+      latest: { fetch: async () => new Response(null, { status: 503 }) },
       counters: install.counters,
       // Every request is its own visitor: the counts by address have their own test, and here they would only hide steps.
       visitorOf: async () => nextVisitor(desk),

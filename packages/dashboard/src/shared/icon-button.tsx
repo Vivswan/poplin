@@ -5,16 +5,13 @@ import type { Tooltip as TooltipPrimitive } from "@base-ui/react/tooltip";
 import type { UseQueryResult } from "@tanstack/react-query";
 import { cn } from "cn";
 import { RefreshCwIcon } from "lucide-react";
-import { type ComponentProps, type KeyboardEvent, type ReactElement, type ReactNode, useEffect, useRef, useState } from "react";
+import { type ComponentProps, type KeyboardEvent, type ReactElement, type ReactNode, useRef } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { FOCUS_HOME } from "@/lib/focus";
-import { agoWords } from "@/lib/timezone";
-
-/** How often the words that say how old the read is are written again, in milliseconds. */
-const TICK_MS = 10_000;
+import { useAgoWords } from "@/lib/timezone";
 
 /** What every icon button is drawn from. */
 interface Drawn {
@@ -124,27 +121,13 @@ export function IconButton(props: IconButtonProps): ReactNode {
   );
 }
 
-/** The moment it is now, told again every `every` milliseconds while the part that asks is drawn. */
-function useNow(every: number): number {
-  const [now, setNow] = useState(Date.now);
-  useEffect(() => {
-    const tick = window.setInterval(() => setNow(Date.now()), every);
-
-    return () => window.clearInterval(tick);
-  }, [every]);
-
-  return now;
-}
-
 /** Draw the button, and before it how long ago the read was made, where the screen is wide enough for the words. While the read is under way the button turns, and a press starts no second one. */
 export function RefreshButton({ label, read }: RefreshButtonProps): ReactNode {
-  const now = useNow(TICK_MS);
+  const ago = useAgoWords(read.dataUpdatedAt);
 
   return (
     <span className="flex shrink-0 items-center gap-1">
-      {read.dataUpdatedAt === 0 ? null : (
-        <span className="text-xs whitespace-nowrap text-faint max-md:hidden">Updated {agoWords(read.dataUpdatedAt, now)}</span>
-      )}
+      {read.dataUpdatedAt === 0 ? null : <span className="text-xs whitespace-nowrap text-faint max-md:hidden">Updated {ago}</span>}
       <IconButton label={label} onClick={() => void read.refetch({ cancelRefetch: false })}>
         {read.isFetching ? <Spinner /> : <RefreshCwIcon />}
       </IconButton>

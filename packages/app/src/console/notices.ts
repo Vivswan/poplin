@@ -16,6 +16,7 @@ import type { updateSite } from "@poplin/core/src/actions/sites/set";
 import type { getSite } from "@poplin/core/src/actions/sites/show";
 import type { signEveryoneOut } from "@poplin/core/src/actions/access/sign-out";
 import { type startUpdate, TAKEN_BY_REPAIR } from "@poplin/core/src/actions/start-update";
+import type { checkNow } from "@poplin/core/src/actions/update/check-update";
 import { MOST_ALERT_USERS, MOST_DAYS, MOST_OF_A_COUNT } from "@poplin/core/src/records/settings";
 
 import type { DomainReading } from "./domain/records";
@@ -76,9 +77,13 @@ const REFUSALS: Readonly<Record<ActionCode | OwnCode, string>> = {
   version_refused: "The provider refused the new version, so the install runs the version it ran before.",
   logins_not_ended: "This install has no way to sign users out, so nobody was signed out.",
   update_unreachable: "The provider did not answer. The update may be in all the same: reload in a minute.",
+  website_unreachable: "The project's website did not answer. Try again in a minute.",
 };
 
-/** What a code says when what it is about gives it another meaning: `too_large` about a limit is a copy that does not fit it, `not_found` about an upload a copy, `logins_not_ended` the reason. `other` stands for any limit not named. */
+/**
+ * What a code says when what it is about gives it another meaning: `too_large` about a limit is a copy that does not fit it, `not_found` about an upload a copy, `logins_not_ended` the reason,
+ * and `too_many_requests` about `check` an asking for a newer version. `other` stands for any limit not named.
+ */
 const ABOUT_REFUSALS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
   too_large: {
     max_total_size: "The copy does not fit under max_total_size, which bounds all sites together, the trash and unfinished copies included. No copy was made.",
@@ -141,6 +146,9 @@ const ABOUT_REFUSALS: Readonly<Record<string, Readonly<Record<string, string>>>>
   version_refused: {
     code: "The provider refused the new version: its code stops as it starts. The install runs the version it ran before. Tell the project.",
   },
+  too_many_requests: {
+    check: "A check was made in this minute already. Wait a minute.",
+  },
 };
 
 /** The sentence for a code this table does not hold. */
@@ -176,7 +184,8 @@ type ActionCode =
   | CodeOf<typeof showLogin>
   | CodeOf<typeof decideLogin>
   | CodeOf<typeof signEveryoneOut>
-  | CodeOf<typeof startUpdate>;
+  | CodeOf<typeof startUpdate>
+  | CodeOf<typeof checkNow>;
 
 /** Why a run of the domain plug read no table. */
 type RunRefusal = Extract<DomainReading, { readonly ok: false }>["refusal"];

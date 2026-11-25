@@ -456,6 +456,19 @@ describe("the local preview", () => {
     expect(((await who.json()) as { update?: unknown }).update).toEqual({ current: VERSION, newest: "1.1.0", released: "2026-12-01", notes: "https://github.com/Vivswan/poplin/releases", database: false });
   });
 
+  // Drift: Check now has no website to ask on this machine. With no stand-in behind it every press would be told the website did not answer, and neither of the button's two answers could be seen.
+  test("a press of Check now is answered both ways: the install that holds nothing learns of the release, and the seeded one, once it took that release, is told none is newer", async () => {
+    const preview = await openPreview(false);
+    const found = await (await change(preview, "/empty/data/update/check")).json();
+    await change(preview, "/data/update");
+    const none = await (await change(preview, "/data/update/check")).json();
+
+    expect([found, none]).toEqual([
+      { ok: true, version: VERSION, update: { current: VERSION, newest: "1.1.0", released: "2026-12-01", notes: "https://github.com/Vivswan/poplin/releases", database: false } },
+      { ok: true, version: "1.1.0", update: null },
+    ]);
+  });
+
   // Drift: an address that names no site under `/served/` was sent on to itself with one more slash, and a browser followed that until it gave up.
   test("the place of the served sites, asked with no site after it, is not found and sends the browser nowhere", async () => {
     const preview = await openPreview(false);

@@ -320,12 +320,13 @@ ok  problems  none in 7 days
 | -------------------- | -------------------------------------------------------------------------------------------------- |
 | What is checked      | one file on the project's website, `latest.json`, which names the newest release an install can take  |
 | How often            | once a UTC day, by the install itself; a day with no answer is tried again the next day            |
+| At once              | Check now, in the Version row of the dashboard's Settings while the install knows of no newer version: a press asks the website right away, once a minute at most, whether `update_check` is on or off |
 | What is sent         | a plain request for the file: no version, no id, and no address of the install is put in it        |
 | What Cloudflare adds | a `CF-Worker` header on every request a Worker sends. It names where the Worker runs: the account's `workers.dev` name, or the install's domain |
 | Where it shows       | the Version row of the dashboard's Settings, under Updates: `0.2.0 is out` and a link, What changed, with Update now after them where the install holds its key |
 | On every page        | a sign at Settings, at the side, named `update available`: a press on Settings then opens the Version row. A [problem's sign](../fix/problems.md#where-a-problem-shows) stands in its place while Settings holds a problem |
 | On a phone           | the same sign on the sections button, while no section holds a problem |
 | Where else           | the `update` row of `poplin doctor`, and `update` under `--json`; no row when nothing newer is out |
-| Switching it off     | `poplin config update_check off`: nothing is asked, and a release learned before is not shown      |
+| Switching it off     | `poplin config update_check off`: the install asks nothing by itself, and a release learned before is not shown. A press of Check now still asks, and its answer stays in the row until the page is loaded again, or the install runs another version |
 | With `auto_update` on | switching `update_check` off is refused with `needs_update_check`: switch `auto_update` off first  |
 | Updating to it       | `poplin update`, on an install that holds its key; [Update the install](#update-the-install) says what one without a key does first |

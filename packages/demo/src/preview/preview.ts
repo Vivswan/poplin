@@ -310,6 +310,8 @@ function dashboardMount(world: World, prefix: string, host: Host, running: Runni
       // The install that holds nothing stands for one that keeps no key, so both kinds of the Usage screen and of a saved setting can be seen.
       usage: keyed ? USAGE_HOST : OWN_USAGE_HOST,
       update: keyed ? sampleUpdate(world, running) : NO_KEY_UPDATE,
+      // Both installs ask the same stand-in for the project's website. The seeded one knows its release from the start; the one that holds nothing learns of it at the first press of Check now.
+      latest: { fetch: sampleLatest(host.version) },
       ...(keyed ? { rules: CARRIES, logs: CARRIES } : {}),
       demo: { reset: `${base}${RESET_PATH}` },
       signOut: `${base}${SIGNED_OUT_PATH}`,

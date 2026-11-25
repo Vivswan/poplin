@@ -161,6 +161,20 @@ export const CONSOLE_ROWS: readonly BudgetRow[] = [
   },
   {
     group,
+    name: "check for a newer version now",
+    route: "POST /data/update/check",
+    // Worst: the website names a release the install does not know of yet, so what is kept is read and the release written, one row. A second press in the minute, or a website that does not answer, reads and writes nothing.
+    arrange: async (stage) => {
+      stage.outside.latest = (await ownRelease(NEWER.version)).latest;
+      const session = await sessionOf(stage);
+
+      return (measured) => post(measured, "/data/update/check", {}, session);
+    },
+    status: 200,
+    budget: { queries: 3, written: 1, reads: 0, writes: 0 },
+  },
+  {
+    group,
     name: "Sites screen: a full page, searched and sorted",
     guide: "Open the Sites screen",
     route: "GET /data/sites",
