@@ -185,6 +185,8 @@ for (const size of FOLD_SCREENS) {
       await page.keyboard.press("Enter");
       await expect(first.getByRole("switch", { name: "Allow embedding", exact: true })).toBeVisible();
       for (const name of ["Files", "Versions"] as const) await foldOf(first, name).press("Enter");
+      // The tree is drawn once its code and its files have arrived, and moves the versions under it down: a press on one of them before that lets go of another spot than it pressed.
+      await expect(first.getByRole("tree", { name: "Files", exact: true })).toBeVisible();
 
       // Another version live is another tree of files: Files stays open over it, as Versions does over the button that was pressed.
       await makeLive(first);
