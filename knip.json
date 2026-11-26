@@ -3,9 +3,6 @@
   "ignore": ["demo/**"],
   "ignoreBinaries": ["lychee"],
   "workspaces": {
-    "packages/cli": {
-      "ignoreBinaries": ["mkfifo"]
-    },
     "packages/core": {
       "includeEntryExports": true,
       "ignoreIssues": { "src/actions.ts": ["exports"] }
@@ -17,9 +14,8 @@
       "entry": ["src/shared/worker/worker.ts", "src/shared/install/first/installer.ts", "tests/**/*.test.ts", "live/live.test.ts"]
     },
     "packages/dashboard": {
-      "entry": ["src/main.tsx", "tests/**/*.test.{ts,tsx}"],
-      "ignore": ["src/components/ui/**"],
-      "ignoreDependencies": ["@fontsource/noto-sans"]
+      "entry": ["tests/**/*.test.{ts,tsx}"],
+      "ignore": ["src/components/ui/**"]
     }
   }
 }
