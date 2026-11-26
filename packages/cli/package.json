@@ -68,7 +68,7 @@
     "consola": "3.4.2",
     "damerau-levenshtein": "1.0.8",
     "fast-string-width": "3.0.2",
-    "hono": "4.13.18",
+    "hono": "4.13.19",
     "htmlparser2": "12.0.0",
     "jsonpath-plus": "11.3.0",
     "mime": "4.1.2",
