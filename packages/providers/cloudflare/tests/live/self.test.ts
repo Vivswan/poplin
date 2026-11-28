@@ -81,7 +81,7 @@ const OPENED: (() => void)[] = [];
 const NO_LOGIN = { L1: "skipped", "dashboard-login": "skipped", "login-page": "skipped", "users-follow": "skipped" } as const;
 
 /** The checks a run on an install without a domain skips: each needs a rule or a switch of a zone. */
-const ZONE_CHECKS = { crawler: "skipped", "assistant-fetch": "skipped", "L8-method": "skipped", "L8-scanner": "skipped", "L8-http": "skipped" } as const;
+const ZONE_CHECKS = { crawler: "skipped", "assistant-fetch": "skipped", "api-rule": "skipped", "L8-method": "skipped", "L8-scanner": "skipped", "L8-http": "skipped" } as const;
 
 /** How the line of the assistants' check ends. */
 const UNVERIFIED = "a run is no verified bot, so the bot switches answered, and the bots rule's pass for a verified assistant is held by the test of its expression";
@@ -133,6 +133,7 @@ const CASES: readonly Case[] = [
       ...NO_LOGIN,
       crawler: "skipped",
       "assistant-fetch": "skipped",
+      "api-rule": "skipped",
       "L8-method": "skipped",
       "L8-scanner": "skipped",
       "L8-http": "skipped",
@@ -175,8 +176,9 @@ const CASES: readonly Case[] = [
     "a zone whose rules are gone, on a run not told so, fails the checks of those rules",
     { noGuards: true },
     {},
-    { ...NO_LOGIN, "L8-method": "failed", "L8-scanner": "failed", "L8-http": "failed" },
+    { ...NO_LOGIN, "api-rule": "failed", "L8-method": "failed", "L8-scanner": "failed", "L8-http": "failed" },
   ],
+  ["a zone whose API rule stands switched off fails the check that reads it back: a rule that is there but stops nothing is no pass", { apiRuleOff: true }, {}, { ...NO_LOGIN, "api-rule": "failed" }],
 ];
 
 /** One request a fake refuses in the install's place: the so-manieth of a method to a path. */
@@ -266,6 +268,7 @@ describe("the live checks, against a local fake", () => {
       manyFiles: MANY_FILES, largeCopy: LARGE_COPY,
       loginList: fake.loginList,
       logsKept: fake.logsKept,
+      apiRule: fake.apiRule,
       jobRun: fake.jobRun,
     });
     OPENED.push(close);
@@ -301,7 +304,7 @@ describe("the live checks, against a local fake", () => {
     const rows = meterRows(fake.fetch, ROW_CEILINGS.checks);
     const missing: Missing = {};
     const said: string[] = [];
-    const provider = { loginList: fake.loginList, logsKept: fake.logsKept, jobRun: fake.jobRun };
+    const provider = { loginList: fake.loginList, logsKept: fake.logsKept, apiRule: fake.apiRule, jobRun: fake.jobRun };
     const parts = { addresses: fake.addresses, token: fake.token, run: "selftest", missing, fetch: rows.fetch, pause: fake.pause, now: fake.now, manyFiles: MANY_FILES, largeCopy: LARGE_COPY, ...provider };
     const { bench, settle, sweep, close } = openBench({ ...parts, say: (line) => said.push(line) });
     OPENED.push(close);

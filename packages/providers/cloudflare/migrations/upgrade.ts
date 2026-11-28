@@ -59,7 +59,7 @@ const UNTOUCHED: ReadonlySet<string> = new Set(["leave", "leave-out"]);
 const REPAIR_WITHIN = { ms: 30_000, pause: 10_000 } as const;
 
 /** The pieces the install repairs by itself, with the key it keeps, on a scheduled run soon after an update: what a version expects of them may differ from the one before. */
-const OWN_REPAIR: ReadonlySet<string> = new Set(["Access application", "Access policy", "Access open paths", "Worker variable"]);
+const OWN_REPAIR: ReadonlySet<string> = new Set(["Access application", "Access policy", "Access open paths", "Worker variable", "WAF rule"]);
 
 /** How long a repair is asked while only such pieces are left, and the pause between two askings, in milliseconds: past the next scheduled run, which is a quarter of an hour away at most. */
 const OWN_REPAIR_WITHIN = { ms: 1_080_000, pause: 30_000 } as const;

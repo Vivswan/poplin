@@ -41,6 +41,7 @@ function table(states: Readonly<Record<string, string>>): string[] {
     `Upload key | ${state("upload", state("key", usual))} | poplin upload key`,
     `Worker logs | ${states.logs ?? "present"} | enabled`,
     `Redirect rule | ${state("https", usual)} | https redirect`,
+    `WAF rule | ${state("guards", usual)} | API rule`,
     `WAF rule | ${state("guards", usual)} | bots rule: also stops every method but GET and HEAD, and the paths *.php, /.env, /.env.*, /.git/, /wp-admin/, /cgi-bin/, /phpmyadmin`,
     `WAF rule | ${state("guards", usual)} | outside pages rule`,
     `Rate rule | ${state("rate", usual)} | rate rule`,
@@ -453,14 +454,14 @@ test.each(lacking)("a repair with a token without $name fails nothing: every oth
 });
 
 // Drift: a token may read the rules and not change them, so a rule never reached behind an optional refusal used to stay not run, with no word of the right, and count as work left over.
-test("a token that may read the guard rules and not make them leaves both rules optional, each naming the right, and the run goes on", async () => {
+test("a token that may read the guard rules and not make them leaves every rule optional, each naming the right, and the run goes on", async () => {
   const account = { ...emptyAccount(), refuse: "POST /zones/zone-1/rulesets" };
 
   await withAccount(account, async (plug) => {
     const rows = shown(await plug.repair(TOKEN, SETTINGS));
     const guards = rows.filter((row) => row.startsWith("WAF rule | ") || row.startsWith("Rate rule | ") || row.startsWith("Redirect rule | "));
 
-    expect(guards.map((row) => row.split(" | ")[1])).toEqual(["optional", "optional", "optional", "optional"]);
+    expect(guards.map((row) => row.split(" | ")[1])).toEqual(["optional", "optional", "optional", "optional", "optional"]);
     expect(guards.filter((row) => !row.includes("add this permission to the account token and press Repair: "))).toEqual([]);
     expect(rows.slice(-4)).toEqual([
       "D1 database | created | poplin",
@@ -1289,6 +1290,7 @@ describe("a check the install makes with the key it holds", () => {
         "Upload key | present | poplin upload key",
         "Worker logs | present | enabled",
         `Redirect rule | optional | https redirect: ${OPTIONAL.redirect}`,
+        `WAF rule | optional | API rule: ${OPTIONAL.waf}`,
         `WAF rule | optional | bots rule: ${OPTIONAL.waf}`,
         `WAF rule | optional | outside pages rule: ${OPTIONAL.waf}`,
         `Rate rule | optional | rate rule: ${OPTIONAL.waf}`,

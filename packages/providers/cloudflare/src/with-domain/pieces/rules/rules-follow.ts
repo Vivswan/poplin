@@ -1,8 +1,10 @@
 // The settings the zone's guard rules are written from, carried to Cloudflare with the key poplin keeps: the outside pages rule and the bots rule are made to match them, by the code a repair runs.
+// The API rule, which no setting shapes, is made to stand with them: a version may want a rule the one before did not make, and the run after an update carries the rules anew.
 //
 //   setting                   rule at Cloudflare                          written under
 //   outside_pages             the outside pages rule: there, or removed   "Zone WAF Write"
 //   search_engines_allowed    the bots rule: its expression               "Zone WAF Write"
+//   none                      the API rule: there                         "Zone WAF Write"
 //
 // The zone is found among the account's zones, under "Zone Read". No record, route, redirect, or bot switch is read or changed: the key holds no right to write those, and a repair does.
 // No answer carries the key or a text Cloudflare sent.
@@ -19,15 +21,15 @@ const ZONE_RIGHT = "Zone Read";
 /** Cloudflare's name of the right the rules are read and written under. */
 const RULES_RIGHT = "Zone WAF Write";
 
-/** The calls to Cloudflare one writing of the rules makes at most, before any the SDK sends again: the zones listed, which takes a second call for the page after the last, the rules read, and each of the two rules written. */
-export const RULES_PUSH_CALLS = 5;
+/** The calls to Cloudflare one writing of the rules makes at most, before any the SDK sends again: the zones listed, which takes a second call for the page after the last, the rules read, and each of the three rules written. */
+export const RULES_PUSH_CALLS = 6;
 
 /**
  * Make the install's way to carry its settings to the guard rules of its zone.
  *
  * @param key - the kept key, or `undefined` on an install that holds none, which answers every try `no_key` and calls nothing
  * @param place - the account the zone is in, and the install's hostnames, which the rules read
- * @returns the rules' side at Cloudflare. A try is done only when both rules stand as the settings ask: one that stopped after the first has written it. A rule the zone's plan has no room for is left out, as a repair leaves it.
+ * @returns the rules' side at Cloudflare. A try is done only when all three rules stand as the settings ask: one that stopped after the first has written it. A rule the zone's plan has no room for is left out, as a repair leaves it.
  *   The rules are planned from one read, which may trail a write: a try that wrote nothing says so, and the install trusts that only of a try made long after the last write
  */
 export function createRulesFollow(key: KeptKey | undefined, place: { readonly accountId: string; readonly layout: DomainLayout }): RulesFollow {

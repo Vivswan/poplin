@@ -1,7 +1,7 @@
 // Whether a new install answers yet: the command asks its address until it does, since a new name and its certificate can take minutes to be known.
 //
-//   GET <address>/api/whoami -> 401    the install is up, and takes nobody who is not logged in
-//   anything else, or no answer         asked again after 5 seconds, until 5 minutes have gone by
+//   GET <address>/api/whoami, with a token that is none -> 401    the install is up, and takes nobody who is not logged in
+//   anything else, or no answer                                    asked again after 5 seconds, until 5 minutes have gone by
 
 import pRetry from "p-retry";
 
@@ -10,7 +10,7 @@ import type { InstallEnds } from "../records";
 /** The path asked, which an install that is up answers for everybody. */
 const PATH = "/api/whoami";
 
-/** The status an install that is up answers a request with no login with. */
+/** The status an install that is up answers a request whose token is none with. */
 const UP = 401;
 
 /** How long the command rests between two questions, in milliseconds: 5 seconds. */
@@ -24,6 +24,9 @@ const QUESTION_MS = 10_000;
 
 /** How often the address is asked at most: as often as rests fit into the wait. */
 const TRIES = LIMIT_MS / REST_MS;
+
+/** A token header of the API's shape that holds no token. A rule in front of an install may turn away a call with no token header before the install answers, and the install answers this one itself, with the 401 of a token that is none. */
+export const NO_SUCH_TOKEN = { Authorization: "Bearer not-a-token" } as const;
 
 /** One question that got another answer than the one of an install that is up, or none. */
 class Silent extends Error {}
@@ -41,7 +44,7 @@ export async function installAnswers(address: string, ends: Pick<InstallEnds, "r
   const ask = async (): Promise<void> => {
     // A question ends with the wait at the latest, so no answer is taken after the 5 minutes.
     const left = Math.max(1, LIMIT_MS - (ends.reach.now() - started));
-    const answer = await ends.reach.fetch(`${address}${PATH}`, { redirect: "manual", signal: AbortSignal.timeout(Math.min(QUESTION_MS, left)) }).catch(() => undefined);
+    const answer = await ends.reach.fetch(`${address}${PATH}`, { headers: NO_SUCH_TOKEN, redirect: "manual", signal: AbortSignal.timeout(Math.min(QUESTION_MS, left)) }).catch(() => undefined);
     await answer?.body?.cancel().catch(() => undefined);
 
     if (answer?.status !== UP) throw new Silent();

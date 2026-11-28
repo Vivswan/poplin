@@ -150,7 +150,7 @@ you give one account token  ->  poplin install makes "poplin kept key" at Cloudf
 | Where it lives | on the Worker, as an encrypted secret. Not in the database, a backup, or an export. No screen and no answer of poplin shows it, and Cloudflare never shows it again |
 | What it reaches | your one account and your one domain; the account alone on an install without a domain |
 | What it may do | read the account's usage figures, the team's name, and the account's login methods; change Access applications and their policies, notifications, and the domain's WAF rules; replace the code and the settings of a Worker; read the domain, its settings, DNS records, Worker routes, redirect rules, and bot settings |
-| What it does by itself | once a day, and within half an hour of an update, it puts the login back: the two Access applications, their policies, and the Worker's `ACCESS` variable, where one is missing or differs. It names the three login methods on the application, and makes none: an account with no method that mails a code is noted as the problem `login_not_repaired`. Activity says what it wrote. It also makes the [budget alert](../dashboard/domain.md#optional-an-email-when-charges-reach-1-dollar), and under a domain the [certificate alert](../dashboard/domain.md#an-email-about-certificates), where the account has none |
+| What it does by itself | once a day, and within half an hour of an update, it puts the login back: the two Access applications, their policies, and the Worker's `ACCESS` variable, where one is missing or differs. It names the three login methods on the application, and makes none: an account with no method that mails a code is noted as the problem `login_not_repaired`. Activity says what it wrote. Within half an hour of an update it also writes the domain's [guard rules](#optional-edge-rules) anew, so a rule a version adds stands without a Repair. It also makes the [budget alert](../dashboard/domain.md#optional-an-email-when-charges-reach-1-dollar), and under a domain the [certificate alert](../dashboard/domain.md#an-email-about-certificates), where the account has none |
 | What it may not do | make or change a login method; change a DNS record, a Worker route, a redirect rule, or a bot setting; make or delete a bucket or a database; make another key |
 | How to end it | delete the token "poplin kept key" at Cloudflare, under Manage Account, Account API Tokens. Sites, logins, and publishing go on |
 | How to get a new one | once the token is deleted, press Repair on the Domain screen with an account token: it makes a new key and deletes every other token of that name |
@@ -168,7 +168,7 @@ What guards each address:
 | Address | Guarded by |
 | --- | --- |
 | the dashboard: every address of its hostname but `/api` | Cloudflare Access, before the Worker runs; then the Worker checks Access's token and the email on every request |
-| the API, `/api`, which the CLI and `poplin mcp` call | the token the Worker issued; Access lets everyone through to it, so a machine needs no browser after its login |
+| the API, `/api`, which the CLI and `poplin mcp` call | the token the Worker issued, checked on every call but the two a login goes through; Access lets everyone through to it, so a machine needs no browser after its login. Under a domain, the optional [API rule](#optional-edge-rules) turns away a call with no `Authorization` header at Cloudflare's edge, but for the two login routes: such a call meets Cloudflare's 403 page, not poplin's `not_logged_in` answer |
 | a private site, `-p-poplin` | Cloudflare Access, before the Worker runs; then the Worker checks Access's token and the email |
 | an unlisted site; a public site | nothing |
 | a Worker with no place to answer at yet: the moments between its first upload and the values `poplin install` writes | nothing to guard: it answers every address with two plain lines that name the command, opens no database and no bucket, and takes no token |
@@ -179,7 +179,7 @@ Two Access applications do this, made once at install, never per site:
 | Application | Covers | Lets in |
 | --- | --- | --- |
 | the login | the dashboard's whole hostname, and every address that ends in `-p-poplin.<domain>` | your users, after Cloudflare's login |
-| the open path | `/api` of the dashboard's hostname | everyone: the Worker asks its own token there |
+| the open path | `/api` of the dashboard's hostname | everyone: the Worker asks its own token there, and the API rule, where it stands, turns away a call with no token header before the Worker |
 
 One weakness is known. A page of a site of the same install can set a cookie for the whole domain, named like Cloudflare's login cookie. A browser that holds one before it logs in is sent back to the login each time, at the dashboard and at private sites, until its cookies for the domain are cleared.
 
@@ -258,6 +258,7 @@ Poplin's icon is answered only for a site the address may open. Every address ab
 | an address in the Worker's log | Cloudflare stores each line with the whole address of its request. So the address of a private or an unlisted site, which holds its id, is in the log for a request in which the Worker wrote a line, such as one that met an error. Whoever can read the account's logs can read it: [what Cloudflare stores with a line](../dashboard/activity.md#what-cloudflare-stores-with-a-line) |
 | the Worker's log, switched off | `poplin config provider_logs off`, or Keep logs on the Settings screen: Cloudflare keeps no line, so no address. It holds across updates. Problems and Activity go on, and a fault can no longer be read at Cloudflare: [switch the logs off](../dashboard/activity.md#switch-the-logs-off) |
 | junk requests | the optional bots rule at Cloudflare's edge blocks, on the site hostnames, every method but GET and HEAD and the paths scanners ask for: `*.php`, `/.env`, `/.env.*`, `/.git/`, `/wp-admin/`, `/cgi-bin/`, `/phpmyadmin` |
+| a call to the API with no token | the optional API rule at Cloudflare's edge turns away a call to `/api` of the dashboard's hostname with no `Authorization` header, but for `/api/logins` and `/api/logins/token`, with Cloudflare's 403 page; the Worker checks the token on every other call that reaches it |
 | a release an update deploys | an install that updates with its key uploads a release's built Worker only when the manifest's SHA-256 digest is the one poplin's website publishes for that version, and each built file's digest and size are the manifest's; any other file changes nothing. [Update](../upkeep/update.md#with-the-kept-key) has each refusal |
 | what a release rests on | a release publishes its built Worker, and the website publishes the manifest's digest only when GitHub attests every file was made by the project's release workflow from its main branch. What stays trusted: that branch, that workflow, GitHub's attestation, the website, and the packages the release's lockfile pins: [what a release publishes](../upkeep/update.md#what-a-release-publishes) |
 | junk hostnames | Cloudflare routes to the Worker only the hostnames that end in `-poplin` or the public word, so no other hostname under the domain reaches it; an optional rate rule limits each address to 300 requests per 10 seconds, [counted in each data center](../upkeep/cost/limits.md#where-a-limit-is-counted). The install and a Repair skip it when other rules hold every rate rule the plan allows, or when a Free plan zone has hostnames of its own |
@@ -268,15 +269,16 @@ The account token of an install under a domain needs ten permissions to install,
 
 | Permission | With it, Repair makes | Without it |
 | --- | --- | --- |
-| Zone WAF: Edit | the bots rule, the outside pages rule, and the rate rule | Repair makes none of the three. Requests no rule stops reach the Worker. It refuses a page of another domain while `outside_pages` is `blocked`, and sends `noindex` as the two switches say |
+| Zone WAF: Edit | the bots rule, the outside pages rule, the API rule, and the rate rule | Repair makes none of the four. Requests no rule stops reach the Worker. It refuses a page of another domain while `outside_pages` is `blocked` and a call to the API with no live token, and sends `noindex` as the two switches say |
 | Single Redirect: Edit | the redirect of plain http | the Worker sends the same redirect |
 | Bot Management: Edit | the block of AI crawlers that `block_bots` asks for | `block_bots` is stored and nothing applies it |
 
-Two of the rules need no added permission. On an install with a domain that holds [its key](#the-kept-key), saving `search_engines_allowed` or `outside_pages` makes both match the settings, with the key:
+Three of the rules need no added permission. On an install with a domain that holds [its key](#the-kept-key), saving `search_engines_allowed` or `outside_pages` makes all three match the settings, with the key, and the install does the same by itself within half an hour of an update:
 
 | Rule | After the save |
 | --- | --- |
 | the bots rule | there; an assistant that opens one page for a person and a chat app's fetch for a link preview pass it, and the crawlers of search engines pass it while `search_engines_allowed` is on |
 | the outside pages rule | there while `outside_pages` is `blocked`, and removed while it is `allowed` |
+| the API rule | there; a call to `/api` of the dashboard's hostname with no `Authorization` header meets Cloudflare's 403 page before the Worker, but for `/api/logins` and `/api/logins/token`. The edge reads only that the header is there, since the Worker reads the scheme and the token in any case, on every other call that reaches it |
 
 A rule the domain lacks is made, and one its plan has no room for is left out. [Domain](../dashboard/domain.md#optional-block-junk-traffic-and-crawlers) says which install holds a key.

@@ -1,7 +1,9 @@
 // The checks a stranger alone can make: what the install refuses without a token, what answers outside its hostnames, and what the rules in front of it stop.
 
 import { expect } from "bun:test";
+import diff from "microdiff";
 
+import { NO_SUCH_TOKEN } from "../../../../cli/src/install/first/answers";
 import type { Bench, Check, Missing } from "../records";
 import { expectRefused, GHOST_ID, shownInTime } from "../util";
 
@@ -105,13 +107,24 @@ function grantOf(response: Response): readonly [string | null, string | null] {
 export const EDGE_CHECKS: readonly Check[] = [
   {
     id: "api-token",
-    name: "the API answers a request with no token itself, with no login in front: its own refusal, which says nothing of the install",
+    name: "the API answers a call whose token is none itself, with no login in front: its own refusal, which says nothing of the install",
     needs: [],
     run: async (bench) => {
-      const response = await bench.visit(`${bench.admin}/api/sites`);
+      const response = await bench.visit(`${bench.admin}/api/sites`, { headers: NO_SUCH_TOKEN });
       expect(response.status).toBe(401);
       expect(response.headers.get("Cache-Control")).toBe("no-store");
       expect(await response.json()).toMatchObject({ error: { code: "not_logged_in" } });
+    },
+  },
+  {
+    id: "api-rule",
+    name: "the API rule stands in the zone's custom rules as poplin writes it: a call to the API with no token header is turned away at the edge, but for the two routes a login goes through",
+    needs: ["guard-rules", "rules-read"],
+    run: async (bench) => {
+      const { wanted, held } = await bench.apiRule();
+      // Compared here and told by the field's name: a failure prints no expression, which holds the admin hostname.
+      const differs = held === undefined ? ["no rule"] : diff(wanted, held).map((change) => change.path.join("."));
+      expect(differs).toEqual([]);
     },
   },
   {
@@ -238,8 +251,8 @@ export const EDGE_CHECKS: readonly Check[] = [
         expect([what, refused && response.ok, granted, DASHBOARD_DATA.test(text)]).toEqual([what, false, NO_GRANT, false]);
       }
 
-      // The login lets this path through on every install, so the answer is the install's own, on the hostname of the dashboard.
-      const open = await bench.visit(`${bench.admin}/api/sites`, { headers: origin });
+      // The login lets this path through on every install, and the API rule a call with the token header: the answer is the install's own, on the hostname of the dashboard.
+      const open = await bench.visit(`${bench.admin}/api/sites`, { headers: { ...origin, ...NO_SUCH_TOKEN } });
       expect([open.status, grantOf(open), DASHBOARD_DATA.test(await open.text())]).toEqual([401, NO_GRANT, false]);
     },
   },

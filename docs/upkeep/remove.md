@@ -269,7 +269,7 @@ Go from the top row down: what points at the Worker goes first, then the Worker,
 | Worker routes                         | every route that names the Worker `poplin`: `poplin.example.com/*`, `*-poplin.example.com/*`, `*-page.example.com/*` | the domain's Workers Routes                         |
 | DNS records                           | `poplin` and `*`, each with a comment that starts `poplin: `                                           | the domain's DNS records                            |
 | Redirect rule, if it is there         | `poplin: send http to https`                                                                          | the domain's redirect rules                         |
-| Guard rules, if they are there        | `poplin: stop pages of other domains`, `poplin: stop verified bots, other methods, and scanner paths` | the domain's custom rules, under its security rules |
+| Guard rules, if they are there        | `poplin: stop pages of other domains`, `poplin: stop verified bots, other methods, and scanner paths`, `poplin: stop API requests with no token` | the domain's custom rules, under its security rules |
 | Rate rule, if it is there             | `poplin: 300 requests per 10 seconds per address`                                                     | the domain's rate limiting rules                    |
 | the login applications                | `poplin` and "poplin open paths"                                                                      | Zero Trust, under Access, the applications          |
 | the login's policies                  | "poplin logins" and "poplin open paths policy"                                                        | Zero Trust, under Access, the policies              |
@@ -282,7 +282,7 @@ Go from the top row down: what points at the Worker goes first, then the Worker,
 | the two keys                          | "poplin kept key" and "poplin upload key"                                                             | Manage Account, then Account API Tokens             |
 | the account token of the install      | "poplin install", unless you named it otherwise: [the one of this account and domain alone](#which-token-to-delete) | My Profile, then API Tokens                         |
 
-- **The three rules** are there when the token of the install or of a Repair held an [optional permission](../dashboard/domain.md#optional-block-junk-traffic-and-crawlers). The guard rules can also be there once `search_engines_allowed` or `outside_pages` was saved on an install that holds its key.
+- **The redirect, guard, and rate rules** are there when the token of the install or of a Repair held an [optional permission](../dashboard/domain.md#optional-block-junk-traffic-and-crawlers). The guard rules can also be there once `search_engines_allowed` or `outside_pages` was saved on an install that holds its key, or once such an install took an update.
 - **A rule set** is poplin's where the domain had none before: "poplin redirect rule", "poplin guard rules", "poplin rate rule". Delete it once it is empty, after its rules. One of another name is the domain's own: leave it.
 - **The wildcard record** `*` is there only when the domain had none of its own. A `*` record with no `poplin: ` comment is yours: leave it.
 - **The second application** lets `/api` pass the login. It has a policy of its own.

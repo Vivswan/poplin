@@ -15,6 +15,7 @@ import { SETTINGS_ANSWER } from "../../../core/src/actions/install/store-setting
 import { parseLogins } from "../../../core/src/auth/logins";
 import { run } from "../../../cli/src/commands/run";
 import { openSession } from "../../../cli/tests/mcp/support/session";
+import type { ApiRuleReading } from "./api-rule";
 import type { JobRun } from "../scripts/live/job-run";
 import type { LiveAddresses } from "./addresses";
 import type { Bench, Draft, LiveSite, Met, Missing, Ran, Shared } from "./records";
@@ -102,6 +103,9 @@ interface BenchParts {
 
   /** Reads whether the provider keeps the lines the install writes, at the provider itself; absent on a run with no key of the provider. */
   readonly logsKept?: (() => Promise<boolean>) | undefined;
+
+  /** Reads the API rule of the install's zone beside the rule poplin wants, at the provider itself; absent on a run with no key of the provider, and on an install without a domain. */
+  readonly apiRule?: (() => Promise<ApiRuleReading>) | undefined;
 }
 
 /** A bench and the means to end it. */
@@ -359,6 +363,7 @@ export function openBench(parts: BenchParts): OpenBench {
       visit,
       loginList: parts.loginList ?? (async () => Promise.reject(new Error("the run holds no key to read the provider's login list with"))),
       logsKept: parts.logsKept ?? (async () => Promise.reject(new Error("the run holds no key to read the install's logs at the provider with"))),
+      apiRule: parts.apiRule ?? (async () => Promise.reject(new Error("the run holds no key to read the zone's rules at the provider with, or the install has no zone"))),
       cli,
       asked: () => asked,
       sentFiles: () => ({ ...files }),

@@ -5,9 +5,9 @@
 //   the day's first run   2: that, and the answer written                                        1: the website asked   3
 //   the login repaired    8: the users carried anew where their policy was written, an audit entry, a problem noted, on the run that begins a UTC day   31: 16, the 3 of the two alerts, and that carry's 12, and one for each further page of a list   39
 //   the logs stated       2: the setting read again after each of two writings, on the run that begins a UTC day   4: 2 x (the observability read, and written where it differs)   6
-//   either carried        5 for the users, 4 for the rules: 2 x (the mark set with what is stored read, the settling), a problem noted; 2 where a run only confirms   12 and 10: 2 x 6 and 2 x 5 to Cloudflare; 4 and 3 where nothing differs   17, 14
-//   an update             6: the try, the setting of the logs read, the audit entry, and the    11: the release read,   17
-//                            try taken back or a problem noted                                   fetched, and put in place
+//   either carried        5 for the users, 4 for the rules: 2 x (the mark set with what is stored read, the settling), a problem noted; 2 where a run only confirms   12 and 12: 2 x 6 to Cloudflare for each; 4 and 3 where nothing differs   17, 16
+//   an update behind it   5: the rules set to wait, and their carry's 4, on each run within half an hour of an update   12: the carry's; 3 where the rules stand   17
+//   an update             6: the try, the setting of the logs read, the audit entry, and the try taken back or a problem noted   11: the release read, fetched, and put in place   17
 //   one step over sites   4: a listing of what is due, its 5 sites changed in one call, their folders forgotten in one, the count of bucket writes   150: 5 x 30 to the bucket   154
 //   one step, at most    12: over the uploads: a listing, 5 x (an upload given up, its record removed), and the count of bucket writes            150: 5 x 30 to the bucket   162
 //   a step over uploads   1 more: a copy nobody finished, noted as a problem                     0                      1
@@ -36,7 +36,7 @@ import type { RememberedCheck } from "@poplin/core/src/records/domain-check";
 import { alertAddresses, type SettingValues } from "@poplin/core/src/records/settings";
 import { followUsers, type UsersFollow } from "@poplin/app/src/console/access/users-follow";
 import { followLogs, type LogsFollow } from "@poplin/app/src/console/settings/logs-follow";
-import { followRules, type RulesFollow } from "@poplin/app/src/console/settings/rules-follow";
+import { carryRulesAnew, followRules, type RulesFollow } from "@poplin/app/src/console/settings/rules-follow";
 
 import { LOGS_PUSH_CALLS } from "../install/pieces/worker-logs/logs-follow";
 import type { LoginRepair } from "../install/pieces/access/login-repair";
@@ -143,9 +143,14 @@ function beginsDay(now: number): boolean {
   return now % DAY_MS < RUN_EVERY_MS;
 }
 
-/** Whether a run repairs the login: the run that begins a UTC day, and each run soon after an update put the running code in place, since a version may expect another login than the one before. */
-function repairsLogin(now: number, updatedAt: number | undefined): boolean {
-  return beginsDay(now) || (updatedAt !== undefined && now >= updatedAt && now - updatedAt < AFTER_UPDATE_MS);
+/** Whether a run comes soon after an update put the running code in place: within two runs' time, so one run at least falls in it, however late a run starts. */
+function soonAfterUpdate(now: number, updatedAt: number | undefined): boolean {
+  return updatedAt !== undefined && now >= updatedAt && now - updatedAt < AFTER_UPDATE_MS;
+}
+
+/** Whether a run repairs the login: the run that begins a UTC day, and each run soon after an update, since a version may expect another login than the one before. */
+function repairsLogin(now: number, afterUpdate: boolean): boolean {
+  return beginsDay(now) || afterUpdate;
 }
 
 /**
@@ -200,11 +205,20 @@ function settledBy(mark: number | null, now: number): boolean {
 /**
  * Carry to Cloudflare what still waits there, and confirm what a try carried, where the install holds a key to do it with. A refusal leaves the change waiting for the next run.
  * A change of the users is carried at once. What a try compared, the guard rules and the alerts' address, is read again only once its mark is old enough, and the mark goes where that read found nothing to write.
+ * Each run soon after an update carries the guard rules anew, whether or not a change of them waits: a version may want a rule the one before did not make, and the run after confirms them.
  *
  * @param kept - the kept run of the domain with its marks, as the run's start read it; `undefined` on an install that keeps none, which remembers nothing to carry
+ * @param afterUpdate - whether the run comes soon after an update put the running code in place
  */
-async function carryWaiting(install: Install, running: Pick<Running, "follow" | "rules">, tally: Tally, kept: RememberedCheck | undefined): Promise<void> {
-  if (kept === undefined || !running.follow.holdsKey()) return;
+async function carryWaiting(install: Install, running: Pick<Running, "follow" | "rules">, tally: Tally, kept: RememberedCheck | undefined, afterUpdate: boolean): Promise<void> {
+  if (!running.follow.holdsKey()) return;
+
+  if (afterUpdate) {
+    tally.web += RULES_CALLS;
+    await carryRulesAnew(install, running.rules);
+  }
+
+  if (kept === undefined) return;
 
   // A change or a try that came after the run read the marks is later than this moment, and the try that meets it confirms nothing.
   const trusted = { quietSince: install.now() - SETTLED_AFTER_MS };
@@ -213,7 +227,8 @@ async function carryWaiting(install: Install, running: Pick<Running, "follow" | 
     await followUsers(install, running.follow, trusted);
   }
 
-  if (settledBy(kept.rules_changed_at, install.now())) {
+  // The rules were just written anew: a read now would trail that write, and confirm nothing.
+  if (!afterUpdate && settledBy(kept.rules_changed_at, install.now())) {
     tally.web += RULES_CALLS;
     await followRules(install, running.rules, trusted);
   }
@@ -248,13 +263,15 @@ export async function runSweep(install: Install, asking: Asking, running: Runnin
   const taking = running.updating.self;
   const self = { ...taking, ready: counted({ ready: taking.ready }, tally, "web", SELF_UPDATE_REQUESTS).ready };
   if (learned !== undefined) await startDueUpdate(watched, { ...learned, version: running.version }, { ...running.updating, self });
-  if (repairsLogin(install.now(), running.updatedAt) && start.settings !== undefined && (await repairLogin(watched, running, tally, start.settings))) {
+  // Decided once: a run that began inside the half hour does all of it, however long the login's repair takes.
+  const afterUpdate = soonAfterUpdate(install.now(), running.updatedAt);
+  if (repairsLogin(install.now(), afterUpdate) && start.settings !== undefined && (await repairLogin(watched, running, tally, start.settings))) {
     // What a broken login was noted as ends with a repair that came through. It is ended under the install's own database, which is what a request of this instance noted it under, so the call is counted here.
     tally.database += 1;
     await endProblems(install, ["login_stands"]);
   }
   if (beginsDay(install.now()) && start.settings !== undefined) await stateLogs(watched, running, tally, start.settings.provider_logs);
-  await carryWaiting(watched, running, tally, start.domainCheck);
+  await carryWaiting(watched, running, tally, start.domainCheck, afterUpdate);
 
   let place: Place = start.place ?? START;
   let changed = 0;

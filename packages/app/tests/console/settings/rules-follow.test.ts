@@ -6,7 +6,7 @@ import { describe, expect, test } from "bun:test";
 import type { RuleSettings, SettingValues } from "@poplin/core/src/records/settings";
 
 import type { FollowRefusal, FollowTry } from "../../../src/console/access/users-follow";
-import { followRules, type RulesFollow } from "../../../src/console/settings/rules-follow";
+import { carryRulesAnew, followRules, type RulesFollow } from "../../../src/console/settings/rules-follow";
 import { openConsole } from "../support/console";
 import { usualPlug } from "../support/fake-plug";
 import { ORIGIN, openOwned } from "../support/install";
@@ -211,6 +211,28 @@ describe("followRules", () => {
 
     expect([await followRules(taken.install, rules), rules.held?.outside_pages, await problems(taken)]).toEqual([{ carried: true }, "allowed", []]);
     expect([await followRules(unanswered.install, fakeRules(() => "unreachable")), await problems(unanswered)]).toEqual([{ carried: false, why: "forgotten" }, ["rules_not_carried"]]);
+  });
+});
+
+describe("carryRulesAnew", () => {
+  // Drift: a version may want a rule the one before did not make. A carry that wrote only where a change waits would leave such a rule to a repair nobody is told to press.
+  test("with no change waiting, the provider is handed the stored settings all the same, the change then waits, and a try a minute on that finds the rules standing ends it", async () => {
+    const opened = await openOwned();
+    const rules = fakeRules();
+    await opened.install.database.keepDomainCheck({ ran_at: opened.install.now(), by: opened.owner, run: "repair", pieces: [] }, {});
+
+    expect([await waits(opened), await carryRulesAnew(opened.install, rules), await waits(opened), rules.pushed]).toEqual([false, { carried: true }, true, [BLOCKED]]);
+    // A try at once reads the rules as they may have been before the write, and is trusted with nothing.
+    expect([await followRules(opened.install, rules, { quietSince: opened.install.now() - 30_000 }), await waits(opened)]).toEqual([{ carried: true }, true]);
+    expect([await followRules(opened.install, rules, aMinuteOn(opened)), await waits(opened), rules.held, await problems(opened)]).toEqual([{ carried: true }, false, BLOCKED, []]);
+  });
+
+  test("on an install that keeps no run of its domain the rules are written all the same, and nothing waits after; one with no key is asked nothing", async () => {
+    const opened = await openOwned();
+    const [rules, keyless] = [fakeRules(), fakeRules(() => undefined, false)];
+
+    expect([await carryRulesAnew(opened.install, rules), rules.held, await waits(opened)]).toEqual([{ carried: true }, BLOCKED, false]);
+    expect([await carryRulesAnew(opened.install, keyless), keyless.pushed]).toEqual([{ carried: false, why: "no_key" }, []]);
   });
 });
 

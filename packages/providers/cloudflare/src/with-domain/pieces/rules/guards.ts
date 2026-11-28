@@ -1,12 +1,13 @@
-// The two custom rules that stop a request before the Worker runs, so it costs the install nothing. Both read the site hostnames alone, never the admin hostname.
+// The three custom rules that stop a request before the Worker runs, so it costs the install nothing. The first two read the site hostnames alone, the third the admin hostname alone.
 // The bots rule stops a verified bot, but never an assistant that opens one page for a person or a chat app that fetches a shared link for its preview, nor a search engine's crawler where those are allowed.
 // It also stops what no static site answers: a method other than GET and HEAD, and the paths scanners ask every host for.
 // A browser calls every hostname under one domain the same site, so the outside pages rule stops pages of other domains and the Worker refuses the rest.
+// The API rule stops a call to the API that carries no `Authorization` header, but for the two routes a machine with no token calls to get one. The Worker checks the token itself on every other call.
 
 import type { Connection, ZonePlan } from "../../../shared/install/client";
 import { INSTALL_OBJECTS } from "../../../shared/install/install-objects";
 import { type DomainLayout, siteEndings } from "../../layout";
-import { type PhaseRules, planOwnRule, type RuleStep, removeOwnRule, sitesExpression, syncPhase } from "./rules";
+import { type PhaseRules, planOwnRule, quoted, type RuleBody, type RuleStep, removeOwnRule, sitesExpression, syncPhase } from "./rules";
 import type { Mode, Synced } from "../../../shared/install/sync";
 
 const CUSTOM_PHASE = "http_request_firewall_custom";
@@ -15,6 +16,8 @@ const OUTSIDE_REF = INSTALL_OBJECTS.outsideRef;
 const OUTSIDE_SUBJECT = "outside pages rule";
 const BOTS_REF = INSTALL_OBJECTS.botsRef;
 const BOTS_SUBJECT = "bots rule";
+const API_REF = INSTALL_OBJECTS.apiRef;
+const API_SUBJECT = "API rule";
 const SLOTS_FULL = "the zone's plan allows no further custom rule and other rules hold every slot";
 
 /** The guards an install wants. */
@@ -64,14 +67,38 @@ export function botsExpression(layout: DomainLayout, searchEnginesAllowed: boole
 }
 
 /**
+ * Write the expression of the API rule: true for a request to `/api` of the admin hostname that carries no `Authorization` header, but for the two routes a login goes through.
+ *
+ * The header map's keys are lowercased by Cloudflare, where the list of header names keeps a client's case. The Worker takes the scheme in any case, so the edge reads only that the header is there.
+ * The Worker refuses a header that holds no live token.
+ *
+ * @returns an expression false for every site hostname, for every path of the admin hostname outside `/api`, for `/api/logins` and `/api/logins/token`, and for a call that carries the header
+ * @throws {Error} a hostname that was cast instead of checked holds a character outside `a-z`, `0-9`, `.`, and `-`
+ */
+export function apiExpression(layout: DomainLayout): string {
+  return `http.host eq ${quoted(layout.adminHostname)} and ${INSTALL_OBJECTS.apiPaths} and ${INSTALL_OBJECTS.loginRoutesPass} and ${INSTALL_OBJECTS.noTokenHeader}`;
+}
+
+/**
+ * Write the API rule as poplin wants it in the zone.
+ *
+ * @throws {Error} a hostname that was cast instead of checked holds a character outside `a-z`, `0-9`, `.`, and `-`
+ */
+export function apiRule(layout: DomainLayout): RuleBody {
+  return { ref: API_REF, description: INSTALL_OBJECTS.apiDescription, expression: apiExpression(layout), action: "block", enabled: true };
+}
+
+/**
  * Compute the rule changes the guards need.
  *
  * @param current - the entry point ruleset of the custom rules phase as it is now
- * @returns the outside pages rule's step, if any, then the bots rule's; a rule the plan has no slot for is skipped with its reason, and no step names a rule poplin did not make
+ * @returns the outside pages rule's step, if any, then the bots rule's, then the API rule's; a rule the plan has no slot for is skipped with its reason, and no step names a rule poplin did not make
  */
 export function planGuards(desired: DesiredGuards, current: PhaseRules | undefined): RuleStep[] {
   const slots = CUSTOM_RULE_SLOTS[desired.plan];
   const taken = current?.rules.length ?? 0;
+  // Each rule's step has run by the time the next is sent, so its slot is counted.
+  const takenAfter = (steps: readonly RuleStep[]): number => taken + held(steps, "create") - held(steps, "remove");
   const outsideRule = {
     ref: OUTSIDE_REF,
     description: INSTALL_OBJECTS.outsideDescription,
@@ -91,11 +118,10 @@ export function planGuards(desired: DesiredGuards, current: PhaseRules | undefin
   if (desired.outsidePages === "blocked")
     outside = [planOwnRule({ subject: OUTSIDE_SUBJECT, rule: outsideRule, hasRoom: taken < slots, full: SLOTS_FULL }, current)];
 
-  // The first rule's step has run by the time the second is sent, so its slot is counted.
-  const takenThen = taken + held(outside, "create") - held(outside, "remove");
-  const bots = planOwnRule({ subject: BOTS_SUBJECT, rule: botsRule, hasRoom: takenThen < slots, full: SLOTS_FULL }, current);
+  const bots = planOwnRule({ subject: BOTS_SUBJECT, rule: botsRule, hasRoom: takenAfter(outside) < slots, full: SLOTS_FULL }, current);
+  const api = planOwnRule({ subject: API_SUBJECT, rule: apiRule(desired.layout), hasRoom: takenAfter([...outside, bots]) < slots, full: SLOTS_FULL }, current);
 
-  return [...outside, bots];
+  return [...outside, bots, api];
 }
 
 /**

@@ -30,6 +30,9 @@ import type { Job, Jobs } from "../../../../../core/src/jobs/jobs";
 import { runJob } from "../../../../../core/src/jobs/run-job";
 import { type Hostname, parseHostname } from "../../../../../core/src/names/hostname";
 import { type LiveAddresses, liveAddresses } from "../../../live/addresses";
+import type { ApiRuleReading } from "../../../live/api-rule";
+import { parseDomainLayout } from "../../../src/with-domain/layout";
+import { apiRule as wantedApiRule } from "../../../src/with-domain/pieces/rules/guards";
 
 /** The domain the fake answers under. */
 export const FAKE_DOMAIN = "example.com";
@@ -73,6 +76,9 @@ const SCANNER_PATHS = /\.php$/;
 
 /** The methods the fake's guard rule lets through. */
 const READS: ReadonlySet<string> = new Set(["GET", "HEAD"]);
+
+/** The two API routes the fake's API rule lets a call with no token header through to, as the zone's does: a machine calls them to get a token. */
+const LOGIN_ROUTES: ReadonlySet<string> = new Set(["/api/logins", "/api/logins/token"]);
 
 /** How the fake differs from an install with every rule in front and no login. Every switch is off unless said. */
 export interface FakeSwitches {
@@ -124,17 +130,21 @@ export interface FakeSwitches {
   /** A fault: the zone's bot block stops an assistant that opens one page for its user, as it stops a crawler. */
   readonly stopsAssistants?: boolean;
 
+  /** A fault: the zone's API rule stands switched off, so it stops nothing while it is there. */
+  readonly apiRuleOff?: boolean;
+
   /** The store fails on the first file it is sent, as a store that is busy for a moment does, and takes every one after it. */
   readonly storeStumbles?: boolean;
 }
 
-/** A fake install: what sends a request to it, its addresses as a stranger types them, an admin's token, the login list and the jobs its provider holds, whether that provider keeps its logs, and the pause that moves its time on. */
+/** A fake install: what sends a request to it, its addresses as a stranger types them, an admin's token, the login list, the API rule, and the jobs its provider holds, whether that provider keeps its logs, and the pause that moves its time on. */
 interface Fake {
   readonly fetch: Fetch;
   readonly addresses: LiveAddresses;
   readonly token: string;
   readonly loginList: () => Promise<readonly string[]>;
   readonly logsKept: () => Promise<boolean>;
+  readonly apiRule: () => Promise<ApiRuleReading>;
   readonly jobRun: (upload: string) => Promise<JobRun>;
   readonly pause: (ms: number) => Promise<void>;
   readonly now: () => number;
@@ -285,8 +295,9 @@ export async function openFake(switches: FakeSwitches = {}): Promise<Fake> {
     switches.noDomain === true
       ? freeAddressPlace(install, held)
       : { adminHost: `poplin.${FAKE_DOMAIN}`, sites: ADDRESSES, api: install.api, typed: liveAddresses({ kind: "domain", domain: FAKE_DOMAIN }), privateHost: undefined };
-  // The rules of a zone: an install without a domain has no zone, so none of them stands in front of it.
+  // The rules of a zone: an install without a domain has no zone, so none of them stands in front of it. The guard rules may be gone from a zone.
   const zone = switches.noDomain !== true;
+  const guarded = zone && switches.noGuards !== true;
   const loginPage = `${LOGIN_PAGE}${place.adminHost}`;
 
   // The fake's provider takes every change of the users, unless a fault says the install holds no key: its list is then the one of the first settings for good.
@@ -294,6 +305,17 @@ export async function openFake(switches: FakeSwitches = {}): Promise<Fake> {
   const loginList = async (): Promise<readonly string[]> => (install.users.takes ? (install.users.pushed.at(-1) ?? settings.users) : settings.users);
   // The fake's provider keeps the logs as the last change of their setting says, and on an install that holds no key as the first settings say, for good.
   const logsKept = async (): Promise<boolean> => (install.users.takes ? (install.logs.pushed.at(-1) ?? settings.provider_logs) : settings.provider_logs);
+
+  // The fake's zone holds the API rule as poplin writes it while its guard rules stand, switched off where a fault says so, and no rule once they are gone; without a domain there is no zone to read.
+  const apiRule = async (): Promise<ApiRuleReading> => {
+    const layout = parseDomainLayout({ domain: FAKE_DOMAIN });
+    if (!zone || !layout.ok) throw new Error("the fake has no zone to read a rule of");
+
+    const wanted = wantedApiRule(layout.value);
+    const held = switches.apiRuleOff === true ? { ...wanted, enabled: false } : wanted;
+
+    return { wanted, held: guarded ? held : undefined };
+  };
 
   // The fake's upload key: each ticket names the store, with the headers of the install's own route, which the store hands the file on to.
   if (switches.noUploadKey !== true) {
@@ -330,12 +352,18 @@ export async function openFake(switches: FakeSwitches = {}): Promise<Fake> {
 
   // The zone's rules on a site hostname: the guard rule and the bot block.
   const edge = (request: Request, url: URL): Response | undefined => {
-    const guarded = zone && switches.noGuards !== true;
     if (guarded && (!READS.has(request.method) || SCANNER_PATHS.test(url.pathname))) return new Response("blocked", { status: 403 });
 
     if (zone && stoppedAgents.some((agents) => agents.test(request.headers.get("User-Agent") ?? ""))) return new Response("blocked", { status: 403 });
 
     return undefined;
+  };
+
+  // The zone's API rule on the dashboard's hostname: a call to the API with no token header at all, whatever a header holds, is turned away before the install, but for the two login routes. A rule switched off stops nothing.
+  const apiEdge = (request: Request, url: URL): Response | undefined => {
+    const stopped = guarded && switches.apiRuleOff !== true && isApiPath(url.pathname) && !LOGIN_ROUTES.has(url.pathname) && !request.headers.has("Authorization");
+
+    return stopped ? new Response("blocked", { status: 403 }) : undefined;
   };
 
   // The login in front of every address of a private site: a stranger never reaches the install there. Without a domain that is one host, whatever the path.
@@ -388,8 +416,8 @@ export async function openFake(switches: FakeSwitches = {}): Promise<Fake> {
     const secured = redirects ? toHttps(url) : undefined;
     if (secured !== undefined) return secured;
 
-    // The fault of an install that lets an origin read its answers is in the install's own alone: the login's are none of its.
-    if (url.hostname === place.adminHost) return stoppedAtLogin(request, url) ?? granting(await answerAdmin(request, url), grantedOf(request));
+    // The fault of an install that lets an origin read its answers is in the install's own alone: the login's are none of its, nor the zone's.
+    if (url.hostname === place.adminHost) return apiEdge(request, url) ?? stoppedAtLogin(request, url) ?? granting(await answerAdmin(request, url), grantedOf(request));
 
     const outside = elsewhere[url.hostname];
     if (outside !== undefined) return outside(request, url);
@@ -418,5 +446,5 @@ export async function openFake(switches: FakeSwitches = {}): Promise<Fake> {
     return { state: run.state, steps: run.steps };
   };
 
-  return { fetch, addresses: place.typed, token: install.tokens.admin, loginList, logsKept, jobRun, pause, now: () => time };
+  return { fetch, addresses: place.typed, token: install.tokens.admin, loginList, logsKept, apiRule, jobRun, pause, now: () => time };
 }

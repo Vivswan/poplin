@@ -16,6 +16,7 @@
 // A read of the rules just after a write may still answer them as they were, so a try can leave out a write the rules need: no try after a change lets the mark go.
 // The scheduled run tries again once the mark is old enough, as a try that confirms, and that one lets the mark go: only where it wrote nothing, the stored values are the ones it compared, and no mark was set since the run saw it.
 // A try sets no mark of its own: one the provider refused leaves waiting exactly what waited.
+// A version may want a rule the one before did not make: the run after an update sets the change to wait and carries the rules anew, and the run after it confirms them as it confirms any change.
 
 import { noteProblem } from "@poplin/core/src/actions/install/problems";
 import type { Install } from "@poplin/core/src/actions/records";
@@ -79,12 +80,21 @@ export function namesRule(changes: unknown): boolean {
 }
 
 /**
+ * Set a change of the rules' settings to wait anew, whether or not one waited, so that only a try that confirms the rules ends it.
+ *
+ * @returns whether the install keeps a run of its domain, which is what remembers the change
+ */
+async function waitAnew(install: Pick<Install, "database" | "now">): Promise<boolean> {
+  return (await install.database.settleRules({ rules: null, since: 0 }, install.now())).waits;
+}
+
+/**
  * Leave a change waiting after a try the provider refused, and note the one no later try mends: a refusal a person must repair, and any refusal on an install that keeps no run of its domain to remember the change by.
  *
  * A refused try may have written a part of the rules, so what they hold is unknown: the change is set to wait anew, also where a newer try had settled it meanwhile.
  */
 async function refused(install: Pick<Install, "database" | "now">, refusal: FollowRefusal): Promise<Followed> {
-  const remembers = (await install.database.settleRules({ rules: null, since: 0 }, install.now())).waits;
+  const remembers = await waitAnew(install);
   if (!remembers || NOTED.includes(refusal)) await noteProblem(install, "rules_not_carried");
 
   return { carried: false, why: !remembers && refusal === "unreachable" ? "forgotten" : refusal };
@@ -128,6 +138,22 @@ export async function followRules(install: Pick<Install, "database" | "now">, fo
   await noteProblem(install, "rules_not_carried");
 
   return { carried: false, why: "forgotten" };
+}
+
+/**
+ * Carry the settings of the domain's rules to the provider whether or not a change of them waits: for the run after an update, since a version may want a rule the one before did not make.
+ *
+ * The change is set to wait first, so the rules are written as after a change, and the next try that confirms them ends the waiting. An install that keeps no run of its domain has nothing to wait in, and is written all the same.
+ *
+ * @returns what a try after a change answers: an install with no key is asked nothing, and a refusal is noted as a change's would be
+ * @throws {Error} the database failed: nothing was carried
+ */
+export async function carryRulesAnew(install: Pick<Install, "database" | "now">, follow: RulesFollow): Promise<Followed> {
+  if (!follow.holdsKey()) return { carried: false, why: "no_key" };
+
+  await waitAnew(install);
+
+  return followRules(install, follow);
 }
 
 /**

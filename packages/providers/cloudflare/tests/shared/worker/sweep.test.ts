@@ -14,9 +14,11 @@ import manifest from "../../../../../cli/package.json?raw";
 import { INSTALL_OBJECTS } from "../../../src/shared/install/install-objects";
 import { BUDGET_ALERT } from "../../../src/shared/install/pieces/alerts/budget-alert";
 import { CERTIFICATE_ALERT } from "../../../src/with-domain/pieces/alerts/certificate-alert";
+import { botsExpression, outsidePagesExpression } from "../../../src/with-domain/pieces/rules/guards";
 import type { Bindings } from "../../../src/shared/worker/bindings";
 import { runSweep } from "../../../src/shared/worker/sweep";
 import { ACCOUNT, emptyAccount, TEAM, TOKEN } from "../install/support/fake-install";
+import { LAYOUT } from "../install/support/layouts";
 import type { Asked } from "../install/support/replies";
 import { ADMIN, api, ask, BINDINGS, cloudflareOf, countedBindings, done, freePlanBindings, installOf, instance, logIn, OWNER, page, problemsOf } from "./support/install";
 import { publish, refusingDatabase, send, sendFile, shortPages, sweep, tokenOf, type World, wait, world } from "./support/install";
@@ -383,7 +385,7 @@ describe("the scheduled run", () => {
     await sweep(worker, w, keyed);
 
     expect(refused).toEqual([200, 0, 200, { ok: true, waits: { repair: [], update: [] }, carried: true }, true, [], [["rules_not_carried", 1, null]]]);
-    expect([tooSoon, carried, confirmed, asked.length - calls]).toEqual([[0, true], [true, [INSTALL_OBJECTS.botsRef]], [false, 0], 0]);
+    expect([tooSoon, carried, confirmed, asked.length - calls]).toEqual([[0, true], [true, [INSTALL_OBJECTS.botsRef, INSTALL_OBJECTS.apiRef]], [false, 0], 0]);
   });
 
   // Drift: a setting changed and put back within seconds. The carry of the put-back reads the rules as they were before the first carry's write, finds its rule standing, and writes nothing, so the rule stays removed while the setting says blocked.
@@ -399,9 +401,10 @@ describe("the scheduled run", () => {
     const waits = async (): Promise<boolean> => database.readDomainCheck().then((kept) => (kept?.rules_changed_at ?? null) !== null);
     const refs = (): unknown => (account.rulesets.http_request_firewall_custom?.rules ?? []).map((rule) => rule.ref).sort();
     const save = async (value: string): Promise<number> => (await send(worker, `${ADMIN}/data/settings`, { texts: { outside_pages: value } }, session, keyed)).status;
-    const both = [INSTALL_OBJECTS.botsRef, INSTALL_OBJECTS.outsideRef].sort();
+    const all = [INSTALL_OBJECTS.botsRef, INSTALL_OBJECTS.outsideRef, INSTALL_OBJECTS.apiRef].sort();
+    const butOutside = [INSTALL_OBJECTS.botsRef, INSTALL_OBJECTS.apiRef].sort();
 
-    // The rules as a repair leaves them for the first settings: both stand.
+    // The rules as a repair leaves them for the first settings: all three stand.
     await save("allowed");
     await save("blocked");
     const stood = structuredClone(account.rulesets.http_request_firewall_custom);
@@ -422,8 +425,70 @@ describe("the scheduled run", () => {
     wait(w, 0.25);
     await sweep(worker, w, keyed);
 
-    expect([start, lost]).toEqual([[both, false], [200, "blocked", [INSTALL_OBJECTS.botsRef], true]]);
-    expect([written, await waits(), asked.length - calls, await problemsOf(w)]).toEqual([[both, true], false, 0, []]);
+    expect([start, lost]).toEqual([[all, false], [200, "blocked", butOutside, true]]);
+    expect([written, await waits(), asked.length - calls, await problemsOf(w)]).toEqual([[all, true], false, 0, []]);
+  });
+
+  // Drift: a version may want a guard rule the one before did not make, as the one that added the API rule. With no carry on the runs after an update the rule would wait for a Repair nobody is told to press,
+  // and the gate that upgrades a live install would find a repair with work left. The carry is one try as after a change, so a read that trails the write never ends the waiting.
+  test.each([
+    ["keeps a run of its domain", true],
+    ["keeps no run", false],
+  ])("a run within half an hour of an update writes the guard rule the version before did not make, on an install that %s; the run past that half hour confirms the rules, and a run with no update behind it writes nothing", async (_kind, keeps) => {
+    const account = withMethods();
+    const asked: Asked[] = [];
+    const keyed = { ...BINDINGS, KEPT_KEY: TOKEN };
+    // An instance reads its bindings once, at its start: the runs with an update behind them are another instance's.
+    const [plainWorker, updatedWorker] = [instance(w, cloudflareOf(account, asked)), instance(w, cloudflareOf(account, asked))];
+    await ask(instance(w), `${ADMIN}/api/whoami`);
+    const { database } = await installOf(w);
+    if (keeps) await database.keepDomainCheck({ ran_at: w.clock.now, by: OWNER, run: "repair", pieces: [] }, {});
+    const waits = async (): Promise<number | null | "no run"> => database.readDomainCheck().then((kept) => (kept === undefined ? "no run" : kept.rules_changed_at));
+    const refs = (): unknown => (account.rulesets.http_request_firewall_custom?.rules ?? []).map((rule) => rule.ref).sort();
+    const two = [INSTALL_OBJECTS.botsRef, INSTALL_OBJECTS.outsideRef].sort();
+    const all = [...two, INSTALL_OBJECTS.apiRef].sort();
+    // The rules as the version before left them: the two site rules as the settings ask, and no API rule.
+    account.rulesets.http_request_firewall_custom = {
+      id: "set-custom",
+      name: INSTALL_OBJECTS.guardRuleset,
+      rules: [
+        { id: "o1", ref: INSTALL_OBJECTS.outsideRef, description: INSTALL_OBJECTS.outsideDescription, expression: outsidePagesExpression(LAYOUT), action: "block", enabled: true },
+        { id: "b1", ref: INSTALL_OBJECTS.botsRef, description: INSTALL_OBJECTS.botsDescription, expression: botsExpression(LAYOUT, false), action: "block", enabled: true },
+      ],
+    };
+    // An hour of the day no run begins, so the login's daily repair is in none of these runs.
+    const updatedAt = Math.ceil(w.clock.now / DAY_MS) * DAY_MS + 5 * 3_600_000;
+    const updated: Bindings = { ...keyed, LAST_UPDATE: { from: "0.1.0", to: OWN_VERSION, schema: 1, at: updatedAt } };
+    const ruleWrites = async (worker: typeof plainWorker, bindings: Bindings, minutes: number): Promise<string[]> => {
+      w.clock.now = updatedAt + minutes * 60_000;
+      const before = asked.length;
+      await sweep(worker, w, bindings);
+
+      return asked.slice(before).filter((entry) => entry.method !== "GET" && entry.path.includes("/rulesets")).map((entry) => `${entry.method} ${entry.path}`);
+    };
+
+    const plain = [await ruleWrites(plainWorker, keyed, 14), refs(), await waits()];
+    const soon = [await ruleWrites(updatedWorker, updated, 14), refs(), await waits()];
+    const second = [await ruleWrites(updatedWorker, updated, 29), refs(), await waits()];
+    const after = [await ruleWrites(updatedWorker, updated, 44), refs(), await waits()];
+    const quiet = [await ruleWrites(updatedWorker, updated, 59), refs(), await waits()];
+    // A mark is later than every mark before it: the second run in the window set the change to wait anew, so its mark is the later one.
+    const [soonMark = null, secondMark = null] = [soon[2], second[2]].map((mark) => (typeof mark === "number" ? mark : null));
+    const renewed = keeps ? soonMark !== null && secondMark !== null && secondMark > soonMark : soonMark === null && secondMark === null;
+
+    expect([plain, soon.slice(0, 2), typeof soon[2]]).toEqual([
+      [[], two, keeps ? null : "no run"],
+      [["POST /zones/zone-1/rulesets/set-custom/rules"], all],
+      keeps ? "number" : "string",
+    ]);
+    // The site rules were written anew with the settings' values, by their ids, and the API rule by nothing a second time.
+    expect([second.slice(0, 2), renewed, after, quiet, await problemsOf(w)]).toEqual([
+      [[], all],
+      true,
+      [[], all, keeps ? null : "no run"],
+      [[], all, keeps ? null : "no run"],
+      [],
+    ]);
   });
 
   // Drift: the first user changed to another person and back within seconds. The carry of the put-back reads the alerts as they were before the first carry's write and writes nothing, so they go on to the other person.
@@ -581,7 +646,7 @@ describe("the scheduled run", () => {
     const alertsStand = await run();
 
     expect([quiet, await run()]).toEqual([[6, 0], [6, 0]]);
-    expect([rulesWritten, rulesStand, alertsWritten, alertsStand]).toEqual([[8, 4], [8, 3], [8, 6], [8, 4]]);
+    expect([rulesWritten, rulesStand, alertsWritten, alertsStand]).toEqual([[8, 5], [8, 3], [8, 6], [8, 4]]);
   });
 
   // Drift: R2 bills every listing past a month's free million writes, and the sweep lists a folder to empty it. A run that listed uncounted would have no bound; one that shared the day's bound with every publish could be kept from removing files for good.

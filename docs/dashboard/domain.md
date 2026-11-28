@@ -140,12 +140,13 @@ ok  domain    The login for private sites is missing or changed, so private site
 
 ## Optional: block junk traffic and crawlers
 
-The install works without this part. Cloudflare can stop unwanted requests before they reach the Worker, with five rules:
+The install works without this part. Cloudflare can stop unwanted requests before they reach the Worker, with six rules:
 
 | Rule                     | Stops                                                         | Made                                                                                      |
 | ------------------------ | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
 | the bots rule            | verified bots, crawlers among them, and scanner paths         | by a Repair with Zone WAF: Edit, or when one of two settings is saved                     |
 | the outside pages rule   | pages of other domains, while `outside_pages` is `blocked`    | the same two ways                                                                         |
+| the API rule             | a call to the API with no token header, but for the two routes a login goes through | the same two ways, and by the install itself within half an hour of an update |
 | the rate rule            | floods                                                        | by a Repair with Zone WAF: Edit                                                           |
 | the redirect             | plain http, which it sends to https                           | by a Repair with Single Redirect: Edit                                                    |
 | the block of AI crawlers | AI crawlers on the whole domain, as `block_bots` says         | by a Repair with Bot Management: Edit                                                     |
@@ -161,9 +162,13 @@ The install works without this part. Cloudflare can stop unwanted requests befor
 
 A bot the rule lets through reaches the Worker as any visitor does: a private site still shows it the login page alone.
 
-**A saved setting makes two of them.** On an install that holds its key, saving `search_engines_allowed` or `outside_pages` writes the bots rule, and the outside pages rule while `outside_pages` is `blocked`. Saving `outside_pages` as `allowed` removes the outside pages rule and keeps the bots rule.
+**Where the API rule stands, a call to the API with no token meets Cloudflare's 403 page.** The rule turns away a call to `/api` of the dashboard's hostname that carries no `Authorization` header, before the Worker runs, so a scanner's hit costs the install nothing. The two routes a machine calls to get a token, `/api/logins` and `/api/logins/token`, pass it. The edge reads only that the header is there: the Worker reads the scheme and the token in any case.
 
-A rule the domain lacks is made, and one its plan has no room for is left out. No permission is added for it, and no Repair is pressed.
+The Worker still checks the token on every other call that reaches it. A call whose header holds no live token gets poplin's `not_logged_in` answer, and so does a call with no header on a domain where the rule was left out, such as a Free plan zone whose five slots are full. Only a call with no header on a domain whose zone holds the rule gets Cloudflare's 403 page.
+
+**A saved setting makes three of them.** On an install that holds its key, saving `search_engines_allowed` or `outside_pages` writes the bots rule, the API rule, and the outside pages rule while `outside_pages` is `blocked`. Saving `outside_pages` as `allowed` removes the outside pages rule and keeps the other two.
+
+A rule the domain lacks is made, and one its plan has no room for is left out. No permission is added for it, and no Repair is pressed. The install writes the same three rules by itself within half an hour of an update, so a rule a version adds stands without a Repair.
 
 An install holds its key from the run that made it: Account API Tokens: Edit is one of the ten permissions, and the key holds the permission to write WAF rules whatever else the token held.
 
@@ -173,7 +178,7 @@ Four permissions on the token are optional. Three of them let Repair make the ru
 
 | First box | Second box      | Third box | With it, Repair makes                                         | Without it                                                                                  |
 | --------- | --------------- | --------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| Zone      | Zone WAF        | Edit      | the bots rule, the outside pages rule, and the rate rule      | Repair makes none of the three. Requests no rule stops reach the Worker, which refuses pages of other domains while `outside_pages` is `blocked` |
+| Zone      | Zone WAF        | Edit      | the bots rule, the outside pages rule, the API rule, and the rate rule | Repair makes none of the four. Requests no rule stops reach the Worker, which refuses pages of other domains while `outside_pages` is `blocked`, and a call to the API with no live token |
 | Zone      | Single Redirect | Edit      | the redirect                                                  | the Worker sends the same redirect                                                          |
 | Zone      | Bot Management  | Edit      | the block of AI crawlers                                      | poplin switches no such block on                                                            |
 

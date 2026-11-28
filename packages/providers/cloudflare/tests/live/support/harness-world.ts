@@ -11,6 +11,7 @@ import { MemoryStore } from "../../../../../core/src/storage/memory";
 import { publish, reachOf } from "../../../scripts/live/commands";
 import type { World } from "../../../scripts/live/converge";
 import { type Found, openRun, type Run, TEST_MARK } from "../../../scripts/live/util";
+import { INSTALL_OBJECTS } from "../../../src/shared/install/install-objects";
 import { MAP_FILE, MODULE_FILE } from "../../../src/shared/release/publish/bundle-manifest";
 import { ACCOUNT, type Account, emptyAccount, TOKEN } from "../../shared/install/support/fake-install";
 import { worldOf } from "../../shared/install/support/fake-reach";
@@ -129,6 +130,10 @@ export async function harnessOf(account: Account, kind: Found["kind"]): Promise<
   let clock = 0;
   const install: World["fetch"] = async (input, init) => {
     sent.push(`${init.method ?? "GET"} ${new URL(input).pathname}`);
+    // The zone's API rule, once an install made it: a call to the API with no token header at all, whatever a header holds, is turned away before the Worker, as at Cloudflare's edge.
+    const guarded = kind === "domain" && (account.rulesets.http_request_firewall_custom?.rules ?? []).some((rule) => rule.ref === INSTALL_OBJECTS.apiRef);
+    if (guarded && !new Headers(init.headers).has("Authorization")) return new Response("blocked", { status: 403 });
+
     const standing = await standingOn(account, kind);
 
     return standing === undefined ? new Response("no Worker answers here", { status: 503 }) : standing.fetch(input, init);
