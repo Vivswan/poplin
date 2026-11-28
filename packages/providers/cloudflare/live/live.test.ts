@@ -21,6 +21,7 @@ import { writeFileSync } from "node:fs";
 import { BaseSettings } from "cloudflare/resources/workers/scripts/settings";
 
 import { CEILINGS, meterBucket } from "../scripts/live/budget";
+import { readApiRule } from "./api-rule";
 import { readJobRun } from "../scripts/live/job-run";
 import { readLoginList } from "../scripts/live/login-list";
 import { meterRows, ROW_CEILINGS } from "../scripts/live/rows";
@@ -68,6 +69,9 @@ const NO_PROVIDER_KEY = "CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID, to read
 
 /** Why the check of the logs is skipped on a run that cannot read the Worker's script settings. */
 const NO_LOGS_KEY = "CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID, to read the Worker's logs at Cloudflare";
+
+/** Why the check of the API rule is skipped on a run that cannot read the zone's custom rules. */
+const NO_RULES_KEY = "CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID, to read the zone's rules at Cloudflare";
 
 /** What a run that was told nothing of the install counts on no knowledge of: its upload key. */
 const NO_WORD_OF_KEY = "a run that says whether the install holds an upload key the bucket takes";
@@ -122,6 +126,8 @@ function knownMissing(): Missing {
 
   if (providerOf() === undefined) known["provider-logs"] = NO_LOGS_KEY;
 
+  if (providerOf() === undefined) known["rules-read"] = NO_RULES_KEY;
+
   if (providerOf() === undefined) known.jobs ??= NO_JOBS_KEY;
 
   return known;
@@ -165,6 +171,7 @@ describe.skipIf(!LIVE)("a deployed install", () => {
           largeCopy: LARGE_COPY,
           loginList: provider === undefined ? undefined : () => readLoginList({ key: provider.key }, provider.accountId),
           logsKept: provider === undefined ? undefined : () => readLogsKept(provider),
+          apiRule: provider === undefined || install.kind !== "domain" ? undefined : () => readApiRule({ key: provider.key }, provider.accountId, install.domain),
           jobRun: provider === undefined ? undefined : (upload) => readJobRun({ key: provider.key }, provider.accountId, upload),
         })
       : undefined;

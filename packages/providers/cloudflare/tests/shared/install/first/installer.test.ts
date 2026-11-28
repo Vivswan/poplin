@@ -104,6 +104,7 @@ function rowsOf(kind: keyof typeof KINDS, subdomain: { readonly name: string; re
       "Worker route | make | poplin.example.com/*",
       ...shared("poplin.example.com", "*-p-poplin.example.com"),
       "Redirect rule | make | https redirect",
+      "WAF rule | make | API rule",
       "WAF rule | make | bots rule: also stops every method but GET and HEAD, and the paths *.php, /.env, /.env.*, /.git/, /wp-admin/, /cgi-bin/, /phpmyadmin",
       "WAF rule | make | outside pages rule",
       "Rate rule | make | rate rule",

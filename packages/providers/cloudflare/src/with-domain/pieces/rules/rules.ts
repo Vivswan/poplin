@@ -21,7 +21,7 @@ export const NEW_RULESET_NAMES = {
 } as const;
 
 /** The phases poplin keeps a rule in: the rate limiting rules, the custom rules that run before them, and the redirects. */
-type Phase = keyof typeof NEW_RULESET_NAMES;
+export type Phase = keyof typeof NEW_RULESET_NAMES;
 
 /** How a rate rule counts and for how long it blocks. */
 interface RateLimit {
@@ -188,7 +188,12 @@ export function planOwnRule(wanted: OwnRule, current: PhaseRules | undefined): R
   return { kind: "change", subject: wanted.subject, rulesetId: current.id, ruleId: own.id, rule: wanted.rule };
 }
 
-async function readPhase(connection: Connection, zoneId: string, phase: Phase): Promise<CloudflareResult<NamedPhaseRules | undefined>> {
+/**
+ * Read a phase's entry point ruleset as the zone has it now.
+ *
+ * @returns the ruleset with its rules, or `undefined` for a phase that never had a rule
+ */
+export async function readPhase(connection: Connection, zoneId: string, phase: Phase): Promise<CloudflareResult<NamedPhaseRules | undefined>> {
   const ruleset = await callCloudflare(connection, (api) => new BasePhases(api).get(phase, { zone_id: zoneId }));
   if (ruleset.ok) return { ok: true, value: { id: ruleset.value.id, name: ruleset.value.name, rules: (ruleset.value.rules ?? []).map((rule) => ({ ...rule, id: rule.id ?? "" })) } };
 

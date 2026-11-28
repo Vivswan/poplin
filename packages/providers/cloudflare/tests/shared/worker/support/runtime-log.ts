@@ -17,11 +17,12 @@ const KNOWN: readonly Known[] = [
   // That is once in the test of hosts.test.ts that repairs from the Domain screen, in each of its two that repair where Cloudflare refuses, and in the row of request-budget.test.ts that repairs.
   // And once in each of the eight tests of sweep.test.ts that put the login back, and in the one test of start.test.ts that writes the key there.
   // And once wherever a release is uploaded: in the two tests of sweep.test.ts and the one of worker.test.ts, and in the three rows of request-budget.test.ts that take an update.
+  // And once in each of the two cases of the test of sweep.test.ts that writes the guard rules anew after an update, where the run's carry makes the API rule.
   {
     line:
       'console warning; message = Called .text() on an HTTP body which does not appear to be text. The body\'s Content-Type is "multipart/form-data; boundary=". ' +
       "The result will probably be corrupted. Consider checking the Content-Type header before interpreting entities as text.",
-    most: 19,
+    most: 21,
   },
 
   // A job that is stopped is terminated in the middle of a step, which the Workflow's local simulation logs as its engine aborting: up to twice for the one test of tests/shared/jobs/workflow.test.ts that cancels a copy.

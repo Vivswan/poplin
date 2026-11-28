@@ -431,9 +431,11 @@ export async function runLine(line: string, account: Account, options: Options =
     screen: screenOf(ran, typed, options.links ?? false),
     input: async () => options.stdin ?? "",
     reach: {
-      fetch: async (input) => {
+      // A rule in front of the install turns away a question with no token header at all, whatever a header holds, before the install answers: the stand-in has one, so the wait is seen to send a token that is none.
+      fetch: async (input, init) => {
         ran.reached.push(String(input));
         clock += options.questionMs ?? 0;
+        if (!new Headers(init?.headers).has("Authorization")) return new Response(null, { status: 403 });
 
         return new Response(null, { status: statuses.length > 1 ? statuses.shift() : statuses[0] });
       },

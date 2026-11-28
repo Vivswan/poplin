@@ -1,5 +1,6 @@
 // What the live checks share: a check, what an install may lack, and what a check came to.
 
+import type { ApiRuleReading } from "./api-rule";
 import type { JobRun } from "../scripts/live/job-run";
 import type { LiveAddresses } from "./addresses";
 
@@ -9,6 +10,7 @@ type Capability =
   | "letters"
   | "access"
   | "guard-rules"
+  | "rules-read"
   | "https-redirect"
   | "bot-block"
   | "many-files"
@@ -90,6 +92,9 @@ export interface Bench {
 
   /** Reads whether the provider keeps the lines the install writes, at the provider itself and with the run's own key there. A run with no such key rejects. */
   readonly logsKept: () => Promise<boolean>;
+
+  /** Reads the API rule of the install's zone, at the provider itself and with the run's own key there, beside the rule poplin wants. A run with no such key rejects, and so does one on an install without a domain. */
+  readonly apiRule: () => Promise<ApiRuleReading>;
 
   /** Runs one command line of the CLI, with `--json`, as the token holder. */
   readonly cli: (...words: readonly string[]) => Promise<Ran>;

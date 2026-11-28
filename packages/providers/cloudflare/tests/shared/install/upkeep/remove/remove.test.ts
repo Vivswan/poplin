@@ -47,7 +47,7 @@ const ROWS: Readonly<Record<Kind, readonly string[]>> = {
     "DNS record | remove | *.example.com, poplin.example.com",
     "Redirect rule | remove | poplin_https",
     "Redirect ruleset | remove | poplin redirect rule",
-    "WAF rule | remove | poplin_outside_pages, poplin_bots",
+    "WAF rule | remove | poplin_outside_pages, poplin_bots, poplin_api",
     "WAF ruleset | remove | poplin guard rules",
     "Rate rule | remove | poplin_rate",
     "Rate ruleset | remove | poplin rate rule",
@@ -62,7 +62,7 @@ const ROWS: Readonly<Record<Kind, readonly string[]>> = {
 
 /** The calls each kind sends, pinned: for a dry run, and for a run, with how many of the run's remove something. */
 const CALLS: Readonly<Record<Kind, { readonly dry: number; readonly run: number; readonly removals: number }>> = {
-  domain: { dry: 23, run: 49, removals: 26 },
+  domain: { dry: 23, run: 50, removals: 27 },
   "no-domain": { dry: 16, run: 31, removals: 15 },
 };
 
@@ -446,7 +446,7 @@ describe("what one kind alone has", () => {
     const run = await removed(account, "domain", applyOf(KINDS.domain.confirm));
     const stays = run.done.ok ? run.done.rows.filter((row) => row.right !== undefined).map((row) => `${row.object} | ${row.state} | ${row.detail} | ${row.right}`) : [];
 
-    expect([stays, run.done.ok && run.done.ready, run.done.ok && run.done.blocked, left(account)]).toEqual([["WAF rule | stay | needs Zone WAF: Edit | Zone WAF: Edit"], true, [], { ...NOTHING, rules: 2, rulesets: 1 }]);
+    expect([stays, run.done.ok && run.done.ready, run.done.ok && run.done.blocked, left(account)]).toEqual([["WAF rule | stay | needs Zone WAF: Edit | Zone WAF: Edit"], true, [], { ...NOTHING, rules: 3, rulesets: 1 }]);
   });
 
   // Drift: where the zone had rules of its own in a phase, poplin's rule went into the zone's ruleset. Only the name tells that ruleset from one poplin made, so one of another name must stay even when poplin's rule was the last in it.

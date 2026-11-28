@@ -29,6 +29,7 @@ import { isPlainVersion } from "@poplin/core/src/records/update";
 import pRetry from "p-retry";
 
 import type { Fetch } from "../../../../cli/src/client/client";
+import { NO_SUCH_TOKEN } from "../../../../cli/src/install/first/answers";
 import { failureWords } from "../../src/shared/install/first/rows";
 import { OUTLASTED } from "../../src/shared/install/first/waits";
 import { INSTALL_OBJECTS } from "../../src/shared/install/install-objects";
@@ -420,7 +421,7 @@ export async function answerOf(asking: Promise<Response>): Promise<{ readonly st
 }
 
 /**
- * Ask the install's API until it answers as a Worker that started, a 401 to a request with no token, and the database it is bound to holds this commit's schema.
+ * Ask the install's API until it answers as a Worker that started, a 401 to a request whose token is none, and the database it is bound to holds this commit's schema.
  *
  * An instance of the build before answers that 401 too. The schema is read through Cloudflare's API: a Worker that started on that database left it there, and only then does the database take a token's row.
  */
@@ -431,7 +432,7 @@ async function waitUntilReady(run: Run, found: Found, databaseId: string, world:
   let last = { status: 0, told: "0" };
 
   while (reach.now() < deadline) {
-    last = await answerOf(world.fetch(address, { redirect: "manual", signal: AbortSignal.timeout(READY.everyMs) }));
+    last = await answerOf(world.fetch(address, { headers: NO_SUCH_TOKEN, redirect: "manual", signal: AbortSignal.timeout(READY.everyMs) }));
     const holds = last.status === 401 ? await holdsOwnSchema(run, databaseId) : false;
     if (holds === true) return undefined;
 

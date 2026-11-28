@@ -423,7 +423,7 @@ Workflow: failed (refused with status 500): needs the Worker's Workflow, which C
 
 | Differs from the other install                                   | So                                                                              |
 | ---------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| no zone: no redirect rule, guard rule, rate rule, or bot switch  | `L8-method`, `L8-scanner`, `L8-http`, `crawler`, `assistant-fetch` are skipped: needs a domain |
+| no zone: no redirect rule, guard rule, rate rule, or bot switch  | `L8-method`, `L8-scanner`, `L8-http`, `api-rule`, `crawler`, `assistant-fetch` are skipped: needs a domain |
 | a site answers under a path                                      | `relative-file` also asks the address without its last slash, which moves to the one with it |
 | a site's address is no root of an origin                         | the demo gets no link to a sample site: `sites.json` is empty                   |
 | `poplin install` finds the account by the token                  | the token must show its account in the list of its accounts                     |
@@ -688,6 +688,18 @@ The list is read with `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`. The em
 
 The observability is read with `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`. The setting is put back whatever the check met.
 
+## The check of the API rule
+
+`api-rule` proves that the zone's custom rules hold the API rule as poplin writes it: the rule that turns away a call to `/api` of the dashboard's hostname with no `Authorization` header, before the Worker runs, but for `/api/logins` and `/api/logins/token`.
+
+| It reads, at Cloudflare                        | It compares                                                        | A failure says                   |
+| ---------------------------------------------- | ------------------------------------------------------------------ | -------------------------------- |
+| the zone's custom rules, by the install's domain | the rule of the ref `poplin_api` with the one poplin writes       | `no rule`, or the fields that differ by name: never an expression, which holds the hostname |
+
+The rules are read with `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`. The rule is made by `poplin install` and a Repair with Zone WAF: Edit, and by the install itself within half an hour of an update, with the key it keeps.
+
+No check sends a call with no header to see the block. `api-token` sends a token that is none, which passes the rule, so the install's own refusal is what it reads.
+
 ## The check of an assistant's page
 
 `crawler` sends the user agent of a crawler that reads sites in bulk, which the bot switches stop. `assistant-fetch` sends the user agents of two assistants that open one page when their user asks for it, which they do not stop.
@@ -734,7 +746,7 @@ A run that cannot make the install answer, or cannot start the checks, fails: th
 | ------------------------------------------------------------------- | ------------------------------------------------------------------------ |
 | a token permission for a rule, the bot settings, the login, or the key; an object `poplin install` or the repair left out | the piece of the install that permission makes, and the checks behind it |
 | the token permission Billing: Read                                  | the reading of the account's subscriptions, before anything is made      |
-| `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`                  | `users-follow`, `logs-follow`, `duplicate-job`                           |
+| `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`                  | `users-follow`, `logs-follow`, `api-rule`, `duplicate-job`               |
 | the Worker's Workflow, which Cloudflare did not make                | `duplicate-job`                                                          |
 | the midnight run, or a run started by hand with the many-files check | `duplicate-job`: a copy of 113 files, so once a day, and at no release |
 | Access switched on for the account                                  | `L1`, `dashboard-login`: the edge's own redirect to the team's login from every path of the dashboard, and its own 401 to a script's call; `login-page`: the team's login page offers the Cloudflare login, the email code, and passkeys, each where the account has the method; `users-follow`: no login list exists |
@@ -743,11 +755,11 @@ A run that cannot make the install answer, or cannot start the checks, fails: th
 | a Worker route for the public word's hostnames                      | `public-name`, `demo`                                                    |
 | a public site named `demo`, which the reset publishes               | `demo`                                                                   |
 | a plan whose bot settings the API can change                        | `crawler`, `assistant-fetch`                                             |
-| the guard rule or the redirect rule on the zone                     | `L8-method`, `L8-scanner`, `L8-http`                                     |
+| the guard rule or the redirect rule on the zone                     | `L8-method`, `L8-scanner`, `L8-http`, `api-rule`                         |
 | a run started by hand with the many-files check switched on         | `L10`: two thousand uploads, so on no run that starts by itself                    |
 | a run started by hand with the load switched on                     | `load`: it is no row of any other run's table                            |
 | a person in a browser                                               | `L2`, `L3`, `L4-in`, `L5b`, `L6`, `L7`, `L9`: the checklist below, which also holds `download` |
-| a domain                                                            | on the install without one: `L8-method`, `L8-scanner`, `L8-http`, `crawler`, `assistant-fetch` |
+| a domain                                                            | on the install without one: `L8-method`, `L8-scanner`, `L8-http`, `api-rule`, `crawler`, `assistant-fetch` |
 
 ## The token's permissions
 

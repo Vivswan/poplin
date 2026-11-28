@@ -56,7 +56,7 @@ const NOT_FOUND = 404;
 /** The phases poplin keeps a rule in, each with the row of its rules, the refs of its rules there, and the row of the ruleset poplin makes for them where the zone had none. */
 const OWN_RULES = [
   { object: "Redirect rule", holder: "Redirect ruleset", phase: "http_request_dynamic_redirect", refs: [INSTALL_OBJECTS.httpsRef] },
-  { object: "WAF rule", holder: "WAF ruleset", phase: "http_request_firewall_custom", refs: [INSTALL_OBJECTS.outsideRef, INSTALL_OBJECTS.botsRef] },
+  { object: "WAF rule", holder: "WAF ruleset", phase: "http_request_firewall_custom", refs: [INSTALL_OBJECTS.outsideRef, INSTALL_OBJECTS.botsRef, INSTALL_OBJECTS.apiRef] },
   { object: "Rate rule", holder: "Rate ruleset", phase: "http_ratelimit", refs: [INSTALL_OBJECTS.rateRef] },
 ] as const;
 

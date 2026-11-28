@@ -5,7 +5,7 @@ import { describe, expect, test } from "bun:test";
 import type { RulesFollow } from "@poplin/app/src/console/settings/rules-follow";
 import { readKeptKey } from "../../../../src/shared/install/key/kept-key";
 import { createRulesFollow, RULES_PUSH_CALLS } from "../../../../src/with-domain/pieces/rules/rules-follow";
-import { botsExpression, outsidePagesExpression } from "../../../../src/with-domain/pieces/rules/guards";
+import { apiExpression, botsExpression, outsidePagesExpression } from "../../../../src/with-domain/pieces/rules/guards";
 import { INSTALL_OBJECTS } from "../../../../src/shared/install/install-objects";
 import { withFake } from "../../../shared/install/support/fake-cloudflare";
 import { LAYOUT } from "../../../shared/install/support/layouts";
@@ -26,13 +26,17 @@ const ZONES = [
 /** Where the guard rules are read, and where one of them is written. */
 const PATHS = { zones: "/zones", phase: "/zones/zone-1/rulesets/phases/http_request_firewall_custom/entrypoint", rules: "/zones/zone-1/rulesets/set-custom/rules" } as const;
 
-/** The two rules as a repair left them, for pages of other domains blocked and search engines stopped, beside a rule of the owner's. */
+/** The API rule as a repair makes it. */
+const API_RULE = { id: "a1", ref: INSTALL_OBJECTS.apiRef, description: INSTALL_OBJECTS.apiDescription, expression: apiExpression(LAYOUT), action: "block", enabled: true };
+
+/** The three rules as a repair left them, for pages of other domains blocked and search engines stopped, beside a rule of the owner's. */
 const HELD = {
   id: "set-custom",
   rules: [
     { id: "theirs", expression: 'http.host eq "www.example.com"', action: "block" },
     { id: "o1", ref: INSTALL_OBJECTS.outsideRef, description: INSTALL_OBJECTS.outsideDescription, expression: outsidePagesExpression(LAYOUT), action: "block", enabled: true },
     { id: "b1", ref: INSTALL_OBJECTS.botsRef, description: INSTALL_OBJECTS.botsDescription, expression: botsExpression(LAYOUT, false), action: "block", enabled: true },
+    API_RULE,
   ],
 };
 
@@ -85,6 +89,17 @@ describe("createRulesFollow", () => {
   test("settings the rules already hold are written nowhere, and the try says that they stood", async () => {
     await withFake(zone({}), async (connection, asked) => {
       expect([await followOf(connection).push({ outside_pages: "blocked", search_engines_allowed: false }), writes(asked), asked.length]).toEqual([{ ok: true, rules: "stood" }, [], 3]);
+    });
+  });
+
+  // Drift: a version before this one made the two site rules alone. The run after an update carries the settings through this try, and a try that wrote the site rules alone would leave the API rule to a repair.
+  test("a zone with the two site rules of a version before gets the API rule made by a try, with one POST of that rule alone, and the try says that it wrote", async () => {
+    await withFake(zone({ phase: () => reply({ ...HELD, rules: HELD.rules.filter((rule) => rule.id !== API_RULE.id) }) }), async (connection, asked) => {
+      const pushed = await followOf(connection).push({ outside_pages: "blocked", search_engines_allowed: false });
+      const made = asked.find((entry) => entry.method === "POST");
+
+      expect([pushed, writes(asked)]).toEqual([{ ok: true, rules: "written" }, [`POST ${PATHS.rules}`]]);
+      expect(made?.body).toMatchObject({ ref: INSTALL_OBJECTS.apiRef, expression: apiExpression(LAYOUT), action: "block" });
     });
   });
 
