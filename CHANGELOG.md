@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.1.4](https://github.com/Vivswan/poplin/compare/v0.1.3...v0.1.4) (2026-11-28)
+
+
+### Features
+
+* **cloudflare:** turn away an API request with no token before the Worker runs ([#501](https://github.com/Vivswan/poplin/issues/501)) ([beea418](https://github.com/Vivswan/poplin/commit/beea41846d615b5d766f46c47fba79e979e9a8bc))
+* **dashboard:** check for a new version now, from Settings ([#494](https://github.com/Vivswan/poplin/issues/494)) ([6135a30](https://github.com/Vivswan/poplin/commit/6135a30b16599a8ddd0ee93c53cff0e7457b4c88))
+* **dashboard:** show a setting's key beside its name ([#492](https://github.com/Vivswan/poplin/issues/492)) ([2a73102](https://github.com/Vivswan/poplin/commit/2a73102acf90bee0cee81ca37b64b9d8cb4839fc))
+
 ## [0.1.3](https://github.com/Vivswan/poplin/compare/v0.1.2...v0.1.3) (2026-11-24)
 
 
